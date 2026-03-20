@@ -29,7 +29,7 @@ logging.getLogger('optuna').setLevel(logging.WARNING)
 warnings.filterwarnings('ignore')
 logger = logging.getLogger(__name__)
 
-MIN_TRADES = 3     # Mindestanzahl Trades für ein gültiges Ergebnis (1d-Timeframe hat wenige Signale)
+MIN_TRADES = 2     # Mindestanzahl Trades für ein gültiges Ergebnis (1d-Timeframe hat wenige Signale)
 CONFIGS_DIR = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
 
 
@@ -90,7 +90,11 @@ def _get_capital_ranges(capital: float) -> dict:
 # Objective für Optuna (Closure — thread-safe für n_jobs > 1)
 # ---------------------------------------------------------------------------
 
-def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr):
+def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats: list):
+    """
+    _stats: gemeinsame Liste [max_trades_seen, n_valid_eff_risk, n_too_few_trades, n_high_dd]
+    Wird von allen Trials aktualisiert — erlaubt Diagnose-Ausgabe nach Abschluss.
+    """
     ranges = _get_capital_ranges(capital)
     r_min,   r_max,   r_step   = ranges["risk_per_entry_pct"]
     atr_min, atr_max, atr_step = ranges["atr_sl_multiplier"]
@@ -101,10 +105,10 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr):
         config = {
             "market": {"symbol": symbol, "timeframe": timeframe},
             "strategy": {
-                "swing_lookback":               trial.suggest_int("swing_lookback", 50, 200, step=10),
-                "pivot_left":                   trial.suggest_int("pivot_left",  2, 8),
-                "pivot_right":                  trial.suggest_int("pivot_right", 2, 8),
-                "structure_lookback":           trial.suggest_int("structure_lookback", 30, 100, step=10),
+                "swing_lookback":               trial.suggest_int("swing_lookback", 20, 200, step=10),
+                "pivot_left":                   trial.suggest_int("pivot_left",  1, 8),
+                "pivot_right":                  trial.suggest_int("pivot_right", 1, 8),
+                "structure_lookback":           trial.suggest_int("structure_lookback", 20, 100, step=10),
                 "fib_entry_min":                0.382,
                 "fib_entry_max":                0.618,
                 "fib_sl_level":                 0.786,
@@ -115,11 +119,11 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr):
                 "rsi_period":                   14,
                 "rsi_oversold":                 trial.suggest_float("rsi_oversold",   30.0, 50.0, step=1.0),
                 "rsi_overbought":               trial.suggest_float("rsi_overbought", 50.0, 70.0, step=1.0),
-                "volume_ratio_min":             trial.suggest_float("volume_ratio_min", 0.5, 2.0, step=0.1),
+                "volume_ratio_min":             trial.suggest_float("volume_ratio_min", 0.1, 2.0, step=0.1),
                 "min_rr":                       trial.suggest_float("min_rr",           1.0, 3.0, step=0.1),
                 "atr_period":                   14,
                 "atr_sl_multiplier":            trial.suggest_float("atr_sl_multiplier", atr_min, atr_max, step=atr_step),
-                "min_signal_score":             trial.suggest_float("min_signal_score",  2.0, 7.0, step=0.5),
+                "min_signal_score":             trial.suggest_float("min_signal_score",  1.0, 7.0, step=0.5),
                 "candle_limit":                 500,
             },
             "risk": {
@@ -133,15 +137,23 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr):
         # Zu hoch → Konto geht bei 1-2 Verlust-Trades auf 0
         effective_risk = config["risk"]["risk_per_entry_pct"] * config["risk"]["leverage"]
         if effective_risk > max_eff_risk:
+            _stats[1] += 1   # eff-risk zu hoch
             return -999.0
 
         try:
             result = run_backtest(df, config, capital, symbol, timeframe)
         except Exception:
             return -999.0
+
+        # Diagnose: Maximum an Trades über alle Trials tracken
+        if result.total_trades > _stats[0]:
+            _stats[0] = result.total_trades
+
         if result.total_trades < MIN_TRADES:
+            _stats[2] += 1   # zu wenige Trades
             return -999.0
         if result.max_drawdown_pct > max_dd:
+            _stats[3] += 1   # DD zu hoch
             return -999.0
         if result.win_rate < min_wr:
             return -999.0
@@ -190,14 +202,26 @@ def optimize(symbol: str, timeframe: str,
         pruner=optuna.pruners.MedianPruner(),
     )
 
-    objective = _make_objective(df, symbol, timeframe, capital, max_dd, min_wr)
+    # _stats: [max_trades_seen, n_eff_risk_pruned, n_too_few_trades, n_high_dd]
+    _stats = [0, 0, 0, 0]
+    objective = _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats)
     cores_str = "alle Kerne" if n_jobs == -1 else f"{n_jobs} Kern(e)"
     print(f"  Optimiere {n_trials} Trials ({cores_str})...")
     study.optimize(objective, n_trials=n_trials, show_progress_bar=True, n_jobs=n_jobs)
 
     best = study.best_trial
     if best.value <= -999.0:
-        print(f"  WARNUNG: Kein gültiges Ergebnis gefunden (zu wenige Trades oder DD zu hoch).")
+        max_trades, n_pruned, n_few, n_dd = _stats
+        print(f"  WARNUNG: Kein gültiges Ergebnis gefunden.")
+        print(f"  Diagnose: max. Trades in einem Trial = {max_trades}  "
+              f"(Minimum: {MIN_TRADES})")
+        print(f"           eff-Risk-Pruning: {n_pruned}  |  "
+              f"zu wenige Trades: {n_few}  |  DD zu hoch: {n_dd}")
+        if max_trades < MIN_TRADES:
+            tf_map = {"1d": "4h", "4h": "1h", "1h": "30m", "6h": "2h"}
+            alt_tf  = tf_map.get(timeframe, "kleinerer Timeframe")
+            print(f"  TIPP: Strategie findet auf '{timeframe}' zu selten Signale.")
+            print(f"        Empfehlung: '{alt_tf}' verwenden (mehr Kerzen = mehr Setups).")
         return None
 
     print(f"  Bestes Ergebnis: Score={best.value:.2f}")
