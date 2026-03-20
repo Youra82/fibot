@@ -69,7 +69,7 @@ Der Bot erkennt genau diese Strukturen und handelt sie automatisch — auf Bitge
 ```
 fibot/
 ├── master_runner.py                   # Cronjob-Orchestrator für Live-Trading
-├── run_pipeline.sh                    # Backtest-Pipeline
+├── show_results.sh                    # Interaktives Analyse-Menü (Backtest, Signal-Check)
 ├── install.sh                         # Erstinstallation auf VPS
 ├── update.sh                          # Git-Update (sichert secret.json)
 ├── cron_setup.sh                      # Cron-Job einrichten
@@ -417,40 +417,60 @@ Dateinamen-Schema: `config_{SYMBOL ohne Sonderzeichen}_{TIMEFRAME}_fib.json`
 
 Die mitgelieferte BTC-Config kann als Vorlage kopiert und angepasst werden.
 
-#### 3. Backtest ausführen
+#### 3. Ergebnisse & Backtest — `show_results.sh`
 
 ```bash
-# Automatischer Zeitraum (empfohlen)
-./run_pipeline.sh BTC/USDT:USDT 4h
-#                 Symbol         TF
-
-# Fester Zeitraum: von–bis
-./run_pipeline.sh BTC/USDT:USDT 4h 2023-01-01 2024-01-01
-#                 Symbol         TF  Von         Bis
-
-# Von Datum bis heute
-./run_pipeline.sh BTC/USDT:USDT 4h 2024-01-01
-#                 Symbol         TF  Von         (Bis = heute)
-
-# Mit eigenem Kapital
-./run_pipeline.sh BTC/USDT:USDT 4h 2023-01-01 2024-12-31 500
-#                 Symbol         TF  Von         Bis         Kapital
+chmod +x show_results.sh
+./show_results.sh
 ```
 
-Der Backtester lädt historische Daten von Bitget **(kein API-Key nötig)** und legt
-einen lokalen CSV-Cache an (`data/cache/`) — wiederholte Läufe im selben Zeitraum
-sind sofort, ohne erneuten Download.
+Das Skript startet ein interaktives Menü:
 
-Zeitraum-Optionen:
+```
+╔══════════════════════════════════════════╗
+║        FiBot — Fibonacci Trading Bot     ║
+╚══════════════════════════════════════════╝
 
-| Aufruf | Erklärung |
-|---|---|
-| Kein Datum | Automatisch je nach Timeframe (siehe Tabelle) |
-| `--from 2023-01-01` | Von diesem Datum bis heute |
-| `--from 2023-01-01 --to 2024-01-01` | Fester Zeitraum |
-| `--days 365` | Letzte N Tage ab heute |
+Wähle einen Analyse-Modus:
+  1) Einzel-Backtest             (Symbol + Zeitraum frei wählen)
+  2) Alle aktiven Strategien     (backtestet alle aus settings.json)
+  3) Ergebnisse anzeigen         (gespeicherte Backtest-JSONs)
+  4) Live Signal-Check           (aktuelles Fib-Signal für ein Symbol)
+```
 
-Automatische Zeiträume:
+**Modus 1 — Einzel-Backtest:**
+Symbol + Timeframe eingeben, dann Zeitraum wählen:
+- `a` Automatisch (je nach Timeframe — 4h → 730 Tage, 1h → 365 Tage, …)
+- `b` Von–Bis Datum  (`2023-01-01` → `2024-01-01`)
+- `c` Von Datum bis heute (`2024-01-01` → heute)
+
+Daten werden von Bitget geladen **(kein API-Key nötig)** und lokal gecacht
+(`data/cache/`) — wiederholte Läufe im selben Zeitraum sind sofort.
+
+**Modus 2 — Alle aktiven Strategien:**
+Liest alle `"active": true` Einträge aus `settings.json` und backtestet
+sie in einem Durchlauf mit gleicher Zeitraum-Konfiguration. Am Ende erscheint
+eine Vergleichstabelle mit PnL, Win-Rate und Max-Drawdown.
+
+**Modus 3 — Ergebnisse anzeigen:**
+Zeigt alle gespeicherten Backtest-JSONs aus `artifacts/results/` als Liste.
+Nummer eingeben für Detailansicht mit den letzten 5 Trades.
+
+**Modus 4 — Live Signal-Check:**
+Lädt die aktuellen Kerzen und berechnet das aktuelle Fibonacci-Signal — ohne
+irgendetwas zu handeln. Nützlich zum Testen der Parameter vor dem Live-Start.
+
+```
+📈 FiBot Signal — BTC/USDT:USDT (4h)
+Richtung : LONG
+Entry    : 83.420,00  (38.2–61.8 Retracement)
+SL       : 81.950,00  (-1.76%)
+TP1      : 87.800,00  (+5.25%) [Fib 100%]
+R:R      : 1:2.98  |  Score: 7.0/10
+Struktur : wedge_down (bullish)
+```
+
+Automatische Zeiträume (Modus 1 + 2):
 
 | Timeframe | Tage | Kerzen (ca.) |
 |---|---|---|
@@ -459,16 +479,6 @@ Automatische Zeiträume:
 | **4h** | **730** | **~4.380** |
 | 12h / 1d | 1095 | ~1.095 |
 | 1w | 1460 | ~208 |
-
-**Ausgabe:**
-
-```
-=== FiBot Backtest: BTC/USDT:USDT (4h) ===
-Kapital    : 1000.00 → 1342.17 USDT (+34.22%)
-Trades     : 47 | W:29 L:18 | WR: 61.7%
-Max DD     : 12.45%
-Avg R:R    : 1:2.31
-```
 
 Ergebnisse werden gespeichert unter `artifacts/results/backtest_BTCUSDTUSDT_4h.json`.
 
@@ -539,32 +549,31 @@ cd ~/fibot
 .venv/bin/python3 src/fibot/strategy/run.py --symbol BTC/USDT:USDT --timeframe 4h
 ```
 
-#### Backtest direkt aufrufen
+#### Backtest / Signal-Check direkt aufrufen
 
 ```bash
+# Empfohlen: interaktives Menü
+./show_results.sh
+
+# Oder direkt per Python:
 # Automatischer Zeitraum (4h → 730 Tage)
-.venv/bin/python3 src/fibot/analysis/backtester.py \
-    --symbol BTC/USDT:USDT --timeframe 4h
+.venv/bin/python3 src/fibot/analysis/show_results.py \
+    --mode 1 --symbol BTC/USDT:USDT --timeframe 4h
 
 # Fester Zeitraum von–bis
-.venv/bin/python3 src/fibot/analysis/backtester.py \
-    --symbol BTC/USDT:USDT --timeframe 4h \
+.venv/bin/python3 src/fibot/analysis/show_results.py \
+    --mode 1 --symbol BTC/USDT:USDT --timeframe 4h \
     --from 2023-01-01 --to 2024-01-01
 
-# Von Datum bis heute
-.venv/bin/python3 src/fibot/analysis/backtester.py \
-    --symbol BTC/USDT:USDT --timeframe 4h \
-    --from 2024-06-01
+# Alle aktiven Strategien aus settings.json
+.venv/bin/python3 src/fibot/analysis/show_results.py --mode 2
 
-# Letzte N Tage
-.venv/bin/python3 src/fibot/analysis/backtester.py \
-    --symbol BTC/USDT:USDT --timeframe 4h --days 365
+# Gespeicherte Ergebnisse anzeigen
+.venv/bin/python3 src/fibot/analysis/show_results.py --mode 3
 
-# Mit eigener Config
-.venv/bin/python3 src/fibot/analysis/backtester.py \
-    --symbol ETH/USDT:USDT --timeframe 1h \
-    --from 2024-01-01 \
-    --config src/fibot/strategy/configs/config_ETHUSDT_1h_fib.json
+# Live Signal-Check
+.venv/bin/python3 src/fibot/analysis/show_results.py \
+    --mode 4 --symbol BTC/USDT:USDT --timeframe 4h
 ```
 
 #### Trade-Status prüfen
@@ -625,7 +634,7 @@ Der master_runner startet pro Symbol einen separaten Python-Prozess.
 
 - `secret.json` ist **nicht in Git** — wird von `update.sh` gesichert
 - `artifacts/tracker/` ist **nicht in Git** — enthält offene Trade-Zustände
-- Immer erst `./run_pipeline.sh` (Backtest) bevor Live-Trading aktiviert wird
+- Immer erst `./show_results.sh` → Modus 1 oder 2 (Backtest) bevor Live-Trading aktiviert wird
 - Für jeden Timeframe den passenden Cron-Interval wählen (1h → jede Stunde, 4h → alle 4h)
 - `min_signal_score ≥ 4.0` empfohlen — darunter zu viele Fehlsignale
 - Pivot-Parameter (`pivot_left`, `pivot_right`) auf 3–4 reduzieren für 1h-Charts
