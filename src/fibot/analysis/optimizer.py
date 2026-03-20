@@ -29,7 +29,7 @@ logging.getLogger('optuna').setLevel(logging.WARNING)
 warnings.filterwarnings('ignore')
 logger = logging.getLogger(__name__)
 
-MIN_TRADES = 5     # Mindestanzahl Trades für ein gültiges Ergebnis
+MIN_TRADES = 3     # Mindestanzahl Trades für ein gültiges Ergebnis (1d-Timeframe hat wenige Signale)
 CONFIGS_DIR = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
 
 
@@ -65,7 +65,7 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr):
             },
             "risk": {
                 "leverage":           trial.suggest_int("leverage", 3, 20),
-                "risk_per_entry_pct": trial.suggest_float("risk_per_entry_pct", 0.5, 2.0, step=0.1),
+                "risk_per_entry_pct": trial.suggest_float("risk_per_entry_pct", 1.0, 5.0, step=0.5),
                 "margin_mode":        "isolated",
             }
         }
