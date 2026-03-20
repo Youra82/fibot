@@ -436,6 +436,7 @@ Wähle einen Analyse-Modus:
   2) Alle aktiven Strategien     (backtestet alle aus settings.json)
   3) Ergebnisse anzeigen         (gespeicherte Backtest-JSONs)
   4) Live Signal-Check           (aktuelles Fib-Signal für ein Symbol)
+  5) Interaktive Charts          (Candlestick + Entry/Exit-Marker)
 ```
 
 **Modus 1 — Einzel-Backtest:**
@@ -459,6 +460,26 @@ Nummer eingeben für Detailansicht mit den letzten 5 Trades.
 **Modus 4 — Live Signal-Check:**
 Lädt die aktuellen Kerzen und berechnet das aktuelle Fibonacci-Signal — ohne
 irgendetwas zu handeln. Nützlich zum Testen der Parameter vor dem Live-Start.
+
+**Modus 5 — Interaktive Charts:**
+Zeigt eine Auswahl der gespeicherten Backtest-Ergebnisse. Nach der Wahl lädt
+der Bot die OHLCV-Daten erneut, führt den Backtest durch und erzeugt einen
+interaktiven Plotly-Chart als HTML-Datei (`artifacts/charts/fibot_*.html`).
+
+Der Chart enthält 5 Panels:
+- **Panel 1 — Candlestick + Equity:** Kerzen, Fibonacci-Levels (farbige
+  Horizontallinien), Struktur-Trendlinien (grün = bullish, rot = bearish),
+  ATR-Toleranzzonen (halbtransparente Bänder), Trade-Marker (▲ Long,
+  ▼ Short, ● Win, ✗ Loss), SL/TP-Linien und Equity-Kurve auf Y2
+- **Panel 2 — Volumen:** Balken (grün/rot je nach Kerzenrichtung)
+- **Panel 3 — RSI(14):** Überkauft-/Überverkauft-Grenzen aus Config,
+  Entry-Marker an Trade-Zeitpunkten
+- **Panel 4 — ATR(14):** ATR-Linie, ATR-MA sowie die aktive Toleranz-Linie
+  (`atr_mult × ATR`) zur Visualisierung der Strukturzonen-Breite
+- **Panel 5 — Signal-Score:** Balken 0–10, farbig nach Richtung (grün/rot),
+  Min-Score-Linie aus Config
+
+Optional: Chart per Telegram senden (falls `secret.json` konfiguriert).
 
 ```
 📈 FiBot Signal — BTC/USDT:USDT (4h)
@@ -574,6 +595,9 @@ cd ~/fibot
 # Live Signal-Check
 .venv/bin/python3 src/fibot/analysis/show_results.py \
     --mode 4 --symbol BTC/USDT:USDT --timeframe 4h
+
+# Interaktiver Chart (wählt aus gespeicherten Ergebnissen)
+.venv/bin/python3 src/fibot/analysis/show_results.py --mode 5
 ```
 
 #### Trade-Status prüfen

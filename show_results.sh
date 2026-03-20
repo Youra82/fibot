@@ -26,11 +26,12 @@ echo "  1) Einzel-Backtest             (Symbol + Zeitraum frei wählen)"
 echo "  2) Alle aktiven Strategien     (backtestet alle aus settings.json)"
 echo "  3) Ergebnisse anzeigen         (gespeicherte Backtest-JSONs)"
 echo "  4) Live Signal-Check           (aktuelles Fib-Signal für ein Symbol)"
+echo "  5) Interaktive Charts          (Candlestick + Entry/Exit-Marker)"
 echo ""
-read -p "Auswahl (1-4) [Standard: 3]: " MODE
+read -p "Auswahl (1-5) [Standard: 3]: " MODE
 MODE="${MODE//[$'\r\n ']/}"
 
-if [[ ! "$MODE" =~ ^[1-4]?$ ]]; then
+if [[ ! "$MODE" =~ ^[1-5]?$ ]]; then
     echo -e "${RED}Ungültige Eingabe. Verwende Standard (3).${NC}"
     MODE=3
 fi
@@ -153,6 +154,16 @@ elif [ "$MODE" == "4" ]; then
         --mode 4 \
         --symbol "$SYMBOL" \
         --timeframe "$TF"
+
+# ─────────────────────────────────────────
+# Modus 5: Interaktive Charts
+# ─────────────────────────────────────────
+elif [ "$MODE" == "5" ]; then
+    echo ""
+    echo -e "${CYAN}--- Interaktive Charts ---${NC}"
+    echo -e "${YELLOW}Wählt aus gespeicherten Backtest-Ergebnissen und öffnet einen interaktiven Chart.${NC}"
+    echo ""
+    $PYTHON src/fibot/analysis/show_results.py --mode 5
 fi
 
 deactivate

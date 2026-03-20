@@ -326,7 +326,7 @@ def _default_config(symbol: str, timeframe: str) -> dict:
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FiBot Show Results")
-    parser.add_argument('--mode',      type=int, required=True, help="1-4")
+    parser.add_argument('--mode',      type=int, required=True, help="1-5")
     parser.add_argument('--symbol',    default=None)
     parser.add_argument('--timeframe', default='4h')
     parser.add_argument('--from',      dest='date_from', default=None)
@@ -352,6 +352,14 @@ if __name__ == "__main__":
             print(f"{RED}--symbol erforderlich für Modus 4.{NC}")
             sys.exit(1)
         run_signal_check(args.symbol, args.timeframe)
+    elif args.mode == 5:
+        from fibot.analysis.interactive_chart import run_interactive_chart
+        secret_path = os.path.join(PROJECT_ROOT, 'secret.json')
+        secrets = {}
+        if os.path.exists(secret_path):
+            with open(secret_path) as f:
+                secrets = json.load(f)
+        run_interactive_chart(secrets)
     else:
         print(f"{RED}Ungültiger Modus.{NC}")
         sys.exit(1)
