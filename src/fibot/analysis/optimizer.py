@@ -51,18 +51,30 @@ def _get_capital_ranges(capital: float) -> dict:
     Zusätzlich: engere atr_sl_multiplier-Range bei kleinem Kapital,
     damit der SL nicht so weit weg liegt (kleineres price_risk → höheres notional).
     """
+    # Maximales effektives Risiko pro Trade: risk_pct × leverage
+    # Der Backtester berechnet PnL = price_diff × contracts × leverage.
+    # Bei SL-Hit: Verlust = risk_amount × leverage = capital × risk_pct/100 × leverage
+    # → effective_risk_pct = risk_pct × leverage muss begrenzt sein.
+    # Faustformel: nach 3 Verlust-Trades noch ≥ (1 − max_dd/100) Kapital übrig
+    #   → (1 − eff/100)^3 ≥ 0.7  →  eff ≤ ~11%
+    # Wir nutzen 15% als Obergrenze (etwas großzügiger für kleine Kapitalien).
+    # Das bestimmt: max_leverage = floor(15 / risk_pct_min)
     if capital < 50:
-        # Kleinstes Kapital: hoher risk_pct und engere SLs zwingend erforderlich
+        # Kleinstes Kapital: risk_pct muss hoch sein (Notional), Hebel daher begrenzt
+        # risk_pct_min=2% → max_leverage=7  (2×7=14 ≤ 15)
+        # risk_pct_max=8% → max_leverage=7  (8×7=56 → wird durch Constraint begrenzt)
         return {
-            "risk_per_entry_pct": (2.0, 10.0, 0.5),
+            "risk_per_entry_pct": (2.0,  8.0, 0.5),
             "atr_sl_multiplier":  (0.5,  2.0, 0.1),
-            "leverage":           (5,    20),
+            "leverage":           (3,     7),
+            "max_effective_risk": 15.0,   # risk_pct × leverage ≤ 15%
         }
     elif capital < 200:
         return {
             "risk_per_entry_pct": (1.0,  5.0, 0.5),
             "atr_sl_multiplier":  (0.5,  3.0, 0.1),
-            "leverage":           (3,    20),
+            "leverage":           (3,    15),
+            "max_effective_risk": 20.0,
         }
     else:
         # Standard-Ranges für ausreichend Kapital
@@ -70,6 +82,7 @@ def _get_capital_ranges(capital: float) -> dict:
             "risk_per_entry_pct": (0.5,  3.0, 0.1),
             "atr_sl_multiplier":  (0.5,  3.0, 0.1),
             "leverage":           (3,    20),
+            "max_effective_risk": 30.0,
         }
 
 
@@ -82,6 +95,7 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr):
     r_min,   r_max,   r_step   = ranges["risk_per_entry_pct"]
     atr_min, atr_max, atr_step = ranges["atr_sl_multiplier"]
     lev_min, lev_max            = ranges["leverage"]
+    max_eff_risk                = ranges["max_effective_risk"]
 
     def _objective(trial: optuna.Trial) -> float:
         config = {
@@ -114,6 +128,13 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr):
                 "margin_mode":        "isolated",
             }
         }
+        # Effektives Risiko pro Trade: risk_pct × leverage
+        # Bei SL-Hit verliert man: capital × risk_pct/100 × leverage
+        # Zu hoch → Konto geht bei 1-2 Verlust-Trades auf 0
+        effective_risk = config["risk"]["risk_per_entry_pct"] * config["risk"]["leverage"]
+        if effective_risk > max_eff_risk:
+            return -999.0
+
         try:
             result = run_backtest(df, config, capital, symbol, timeframe)
         except Exception:
@@ -149,10 +170,12 @@ def optimize(symbol: str, timeframe: str,
         r = ranges["risk_per_entry_pct"]
         a = ranges["atr_sl_multiplier"]
         l = ranges["leverage"]
+        m = ranges["max_effective_risk"]
         print(f"\n  HINWEIS: Kleines Kapital ({capital:.1f} USDT) — Parameter-Ranges automatisch angepasst:")
         print(f"    risk_per_entry_pct : {r[0]:.1f} – {r[1]:.1f}%  (Standard: 0.5–3.0%)")
         print(f"    atr_sl_multiplier  : {a[0]:.1f} – {a[1]:.1f}   (Standard: 0.5–3.0)")
         print(f"    leverage           : {l[0]} – {l[1]}x      (Standard: 3–20x)")
+        print(f"    max effective risk : {m:.0f}%  (risk_pct × leverage ≤ {m:.0f}%)")
 
     print(f"\n  Lade Daten: {symbol} ({timeframe}) [{start_date} → {end_date}]")
     df = load_ohlcv(symbol, timeframe, start_date, end_date)
