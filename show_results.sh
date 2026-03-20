@@ -16,6 +16,32 @@ fi
 
 source "$VENV_PATH"
 
+# ─────────────────────────────────────────
+# Hilfsfunktionen
+# ─────────────────────────────────────────
+VALID_TFS="1m 3m 5m 15m 30m 1h 2h 4h 6h 8h 12h 1d 3d 1w"
+
+validate_symbol() {
+    local sym="$1"
+    # Nur erstes Token (kein Leerzeichen), Format: XXX/YYY:ZZZ oder XXX/YYY
+    sym="${sym%% *}"
+    if [[ ! "$sym" =~ ^[A-Za-z0-9]+/[A-Za-z0-9]+(:[A-Za-z0-9]+)?$ ]]; then
+        echo -e "${RED}Ungültiges Symbol-Format. Erwartet z.B. BTC/USDT:USDT${NC}"
+        return 1
+    fi
+    echo "$sym"
+}
+
+validate_tf() {
+    local tf="$1"
+    tf="${tf%% *}"
+    for v in $VALID_TFS; do
+        [ "$tf" == "$v" ] && echo "$tf" && return 0
+    done
+    echo -e "${RED}Ungültiger Timeframe '$tf'. Erlaubt: $VALID_TFS${NC}"
+    return 1
+}
+
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════╗${NC}"
 echo -e "${BOLD}║        FiBot — Fibonacci Trading Bot     ║${NC}"
@@ -47,10 +73,12 @@ if [ "$MODE" == "1" ]; then
     read -p "Symbol (z.B. BTC/USDT:USDT) [Standard: BTC/USDT:USDT]: " SYMBOL
     SYMBOL="${SYMBOL//[$'\r\n']/}"
     [ -z "$SYMBOL" ] && SYMBOL="BTC/USDT:USDT"
+    SYMBOL=$(validate_symbol "$SYMBOL") || exit 1
 
     read -p "Timeframe (z.B. 4h, 1h, 1d) [Standard: 4h]: " TF
     TF="${TF//[$'\r\n ']/}"
     [ -z "$TF" ] && TF="4h"
+    TF=$(validate_tf "$TF") || exit 1
 
     echo ""
     echo -e "${YELLOW}Zeitraum wählen:${NC}"
@@ -144,10 +172,12 @@ elif [ "$MODE" == "4" ]; then
     read -p "Symbol (z.B. BTC/USDT:USDT) [Standard: BTC/USDT:USDT]: " SYMBOL
     SYMBOL="${SYMBOL//[$'\r\n']/}"
     [ -z "$SYMBOL" ] && SYMBOL="BTC/USDT:USDT"
+    SYMBOL=$(validate_symbol "$SYMBOL") || exit 1
 
     read -p "Timeframe (z.B. 4h, 1h) [Standard: 4h]: " TF
     TF="${TF//[$'\r\n ']/}"
     [ -z "$TF" ] && TF="4h"
+    TF=$(validate_tf "$TF") || exit 1
 
     echo ""
     $PYTHON src/fibot/analysis/show_results.py \
