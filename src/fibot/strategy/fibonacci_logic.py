@@ -7,6 +7,7 @@ import numpy as np
 import logging
 from dataclasses import dataclass, field
 from typing import Optional, Tuple, Dict, List
+from scipy.signal import argrelmax, argrelmin
 
 logger = logging.getLogger(__name__)
 
@@ -139,26 +140,22 @@ class FibSignal:
 # 1. Pivot / Swing Detection
 # ---------------------------------------------------------------------------
 def find_pivot_highs(df: pd.DataFrame, left: int = 5, right: int = 5) -> pd.Series:
-    """ZigZag-style pivot high detection. Returns boolean Series."""
-    highs = df['high'].values  # numpy array — faster random access
-    n = len(highs)
-    pivot = np.zeros(n, dtype=bool)
-    for i in range(left, n - right):
-        w = highs[i - left:i + right + 1]
-        if highs[i] == w.max():
-            pivot[i] = True
+    """Pivot high detection via scipy argrelmax — vectorized C code, kein Python-Loop."""
+    highs = df['high'].values
+    order = max(left, right, 1)
+    idx = argrelmax(highs, order=order)[0]
+    pivot = np.zeros(len(highs), dtype=bool)
+    pivot[idx] = True
     return pd.Series(pivot, index=df.index)
 
 
 def find_pivot_lows(df: pd.DataFrame, left: int = 5, right: int = 5) -> pd.Series:
-    """ZigZag-style pivot low detection. Returns boolean Series."""
+    """Pivot low detection via scipy argrelmin — vectorized C code, kein Python-Loop."""
     lows = df['low'].values
-    n = len(lows)
-    pivot = np.zeros(n, dtype=bool)
-    for i in range(left, n - right):
-        w = lows[i - left:i + right + 1]
-        if lows[i] == w.min():
-            pivot[i] = True
+    order = max(left, right, 1)
+    idx = argrelmin(lows, order=order)[0]
+    pivot = np.zeros(len(lows), dtype=bool)
+    pivot[idx] = True
     return pd.Series(pivot, index=df.index)
 
 
