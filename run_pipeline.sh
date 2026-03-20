@@ -55,8 +55,8 @@ read -p "Startkapital in USDT [Standard: 1000]: " START_CAPITAL
 START_CAPITAL="${START_CAPITAL:-1000}"
 read -p "Anzahl Trials [Standard: 200]: " N_TRIALS
 N_TRIALS="${N_TRIALS:-200}"
-read -p "CPU-Kerne [Standard: -1 für alle]: " N_JOBS
-N_JOBS="${N_JOBS:--1}"
+read -p "CPU-Kerne [Standard: 1]: " N_JOBS
+N_JOBS="${N_JOBS:-1}"
 
 echo -e "\n${YELLOW}Wähle einen Optimierungs-Modus:${NC}"
 echo "  1) Strenger Modus (Profitabel & Sicher)"

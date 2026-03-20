@@ -93,7 +93,7 @@ def optimize(symbol: str, timeframe: str,
              n_trials: int = 200,
              max_dd: float = 30.0,
              min_wr: float = 0.0,
-             n_jobs: int = -1) -> dict | None:
+             n_jobs: int = 1) -> dict | None:
     """
     Lädt Daten, optimiert Parameter mit Optuna und gibt die beste Config zurück.
     Gibt None zurück wenn kein gültiges Ergebnis gefunden wurde.
@@ -203,8 +203,8 @@ if __name__ == "__main__":
                         help="Max erlaubter Drawdown %% (Standard: 30)")
     parser.add_argument('--min-wr',   type=float, default=0.0,
                         help="Min Win-Rate %% (Standard: 0)")
-    parser.add_argument('--jobs',     type=int,   default=-1,
-                        help="CPU-Kerne für Parallelisierung (-1 = alle, Standard: -1)")
+    parser.add_argument('--jobs',     type=int,   default=1,
+                        help="CPU-Kerne für Parallelisierung (Standard: 1, Python GIL limitiert Threading)")
     args = parser.parse_args()
 
     today = date.today().isoformat()
