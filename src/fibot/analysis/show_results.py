@@ -312,7 +312,7 @@ def _default_config(symbol: str, timeframe: str) -> dict:
             "swing_lookback": 100, "pivot_left": 5, "pivot_right": 5,
             "structure_lookback": 60, "fib_entry_min": 0.382, "fib_entry_max": 0.618,
             "fib_sl_level": 0.786, "fib_tp1_level": 1.000, "fib_tp2_level": 1.272,
-            "proximity_pct": 0.5, "structure_tolerance_atr_mult": 0.3,
+            "fib_tolerance_atr_mult": 0.5, "structure_tolerance_atr_mult": 0.3,
             "rsi_period": 14, "rsi_oversold": 45, "rsi_overbought": 55,
             "volume_ratio_min": 1.0, "min_rr": 1.5, "atr_period": 14,
             "atr_sl_multiplier": 1.5, "min_signal_score": 4.0, "candle_limit": 500,

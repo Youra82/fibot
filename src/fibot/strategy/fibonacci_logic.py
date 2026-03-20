@@ -412,7 +412,6 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
       fib_sl_level         float (default 0.786) — SL at this Fib level
       fib_tp1_level        float (default 1.000) — TP1 at this Fib level
       fib_tp2_level        float (default 1.272) — TP2 at this Fib level
-      proximity_pct        float (default 0.5)   — % distance to Fib level for "touching"
       rsi_period           int   (default 14)
       rsi_oversold         float (default 45)   — LONG only if RSI < this
       rsi_overbought       float (default 55)   — SHORT only if RSI > this
@@ -420,7 +419,11 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
       min_rr               float (default 1.5)  — minimum R:R ratio
       atr_period                    int   (default 14)
       atr_sl_multiplier             float (default 1.5)  — SL = ATR * this (cap)
-      structure_tolerance_atr_mult  float (default 0.3)  — Toleranzzone = ATR * this
+      fib_tolerance_atr_mult        float (default 0.5)  — Fib-Zonen-Toleranz = ATR * this
+                                                            Erweitert die Entry-Zone (38.2%–61.8%)
+                                                            um ± fib_tolerance_atr_mult * ATR
+                                                            (wie Struktur-Toleranzzone, aber für Fib)
+      structure_tolerance_atr_mult  float (default 0.3)  — Struktur-Toleranzzone = ATR * this
     """
     cfg = config.get("strategy", {})
 
@@ -433,7 +436,6 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
     fib_sl_level            = float(cfg.get("fib_sl_level",            0.786))
     fib_tp1_level           = float(cfg.get("fib_tp1_level",           1.000))
     fib_tp2_level           = float(cfg.get("fib_tp2_level",           1.272))
-    proximity_pct           = float(cfg.get("proximity_pct",           0.5))
     rsi_period              = int(cfg.get("rsi_period",                  14))
     rsi_oversold            = float(cfg.get("rsi_oversold",             45))
     rsi_overbought          = float(cfg.get("rsi_overbought",           55))
@@ -441,6 +443,7 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
     min_rr                  = float(cfg.get("min_rr",                   1.5))
     atr_period              = int(cfg.get("atr_period",                  14))
     atr_sl_mult             = float(cfg.get("atr_sl_multiplier",        1.5))
+    fib_tol_mult            = float(cfg.get("fib_tolerance_atr_mult",  0.5))
     struct_tol_mult         = float(cfg.get("structure_tolerance_atr_mult", 0.3))
 
     no_signal = FibSignal(
@@ -483,18 +486,19 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
     score = 0.0
     reason_parts = []
 
+    # ATR-basierte Fib-Toleranzzone (konsistent mit Struktur-Toleranzzone)
+    fib_tolerance = fib_tol_mult * atr
+
     # LONG: swings.direction == "down" (price dropped → we look for bounce)
     if swings.direction == "down":
         entry_low  = fibs.levels["38.2"]
         entry_high = fibs.levels["61.8"]
 
+        # Entry-Zone mit ATR-Puffer: (38.2% - tol) bis (61.8% + tol)
+        zone_low  = entry_low  - fib_tolerance
+        zone_high = entry_high + fib_tolerance
+        near_zone = zone_low <= current_price <= zone_high
         price_in_zone = entry_low <= current_price <= entry_high
-        # Preis kommt von oben in die Zone → prüfe Nähe zu BEIDEN Zonengrenzen
-        near_zone = (
-            price_in_zone or
-            abs(current_price - entry_low)  / entry_low  * 100 <= proximity_pct or
-            abs(current_price - entry_high) / entry_high * 100 <= proximity_pct
-        )
 
         if not near_zone:
             return no_signal
@@ -521,14 +525,20 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
         if structure.breakout == "up":
             score += 2.0
             reason_parts.append(f"Breakout UP (Stärke {structure.breakout_strength:.2f})")
-        elif structure.breakout == "none" and price_in_zone:
-            score += 1.0
 
-        # Support confluence: Preis in der Toleranzzone der Support-Trendlinie
+        # Fib-Zonen-Scoring: Kernzone (38.2–61.8) > Toleranzzone
+        if price_in_zone:
+            score += 1.5
+            reason_parts.append(f"Preis in Fib-Kernzone (38.2–61.8%)")
+        else:
+            score += 0.5   # Preis in Toleranzzone (außerhalb Kernzone)
+            reason_parts.append(f"Preis in Fib-Toleranzzone (±{fib_tolerance:.2f})")
+
+        # Support confluence: Preis in der ATR-Toleranzzone der Struktur-Trendlinie
         if structure.support_zone_low <= current_price <= structure.support_zone_high:
             score += 1.5
             reason_parts.append(
-                f"Preis in Struktur-Support-Zone "
+                f"Fib+Struktur-Confluence: Support-Zone "
                 f"({structure.support_zone_low:.2f}–{structure.support_zone_high:.2f})"
             )
 
@@ -569,16 +579,14 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
 
     # SHORT: swings.direction == "up" (price rose → we look for rejection)
     elif swings.direction == "up":
-        entry_low  = fibs.levels["61.8"]   # remember: for UP-direction, 61.8 is LOWER (closer to swing_high)
-        entry_high = fibs.levels["38.2"]
+        entry_low  = fibs.levels["61.8"]   # for UP-direction: 61.8 is the LOWER price
+        entry_high = fibs.levels["38.2"]   # for UP-direction: 38.2 is the HIGHER price
 
+        # Entry-Zone mit ATR-Puffer: (61.8% - tol) bis (38.2% + tol)
+        zone_low  = entry_low  - fib_tolerance
+        zone_high = entry_high + fib_tolerance
+        near_zone = zone_low <= current_price <= zone_high
         price_in_zone = entry_low <= current_price <= entry_high
-        # Preis kommt von oben in die Zone → prüfe Nähe zu BEIDEN Zonengrenzen
-        near_zone = (
-            price_in_zone or
-            abs(current_price - entry_low)  / entry_low  * 100 <= proximity_pct or
-            abs(current_price - entry_high) / entry_high * 100 <= proximity_pct
-        )
 
         if not near_zone:
             return no_signal
@@ -605,14 +613,20 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
         if structure.breakout == "down":
             score += 2.0
             reason_parts.append(f"Breakout DOWN (Stärke {structure.breakout_strength:.2f})")
-        elif structure.breakout == "none" and price_in_zone:
-            score += 1.0
 
-        # Resistance confluence: Preis in der Toleranzzone der Resistance-Trendlinie
+        # Fib-Zonen-Scoring: Kernzone (38.2–61.8) > Toleranzzone
+        if price_in_zone:
+            score += 1.5
+            reason_parts.append(f"Preis in Fib-Kernzone (38.2–61.8%)")
+        else:
+            score += 0.5   # Preis in Toleranzzone (außerhalb Kernzone)
+            reason_parts.append(f"Preis in Fib-Toleranzzone (±{fib_tolerance:.2f})")
+
+        # Resistance confluence: Preis in der ATR-Toleranzzone der Struktur-Trendlinie
         if structure.resistance_zone_low <= current_price <= structure.resistance_zone_high:
             score += 1.5
             reason_parts.append(
-                f"Preis in Struktur-Resistance-Zone "
+                f"Fib+Struktur-Confluence: Resistance-Zone "
                 f"({structure.resistance_zone_low:.2f}–{structure.resistance_zone_high:.2f})"
             )
 

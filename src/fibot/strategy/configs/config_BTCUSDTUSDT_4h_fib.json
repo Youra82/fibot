@@ -17,12 +17,14 @@
     "fib_tp1_level": 1.000,
     "fib_tp2_level": 1.272,
 
-    "_comment3": "Toleranz: wie nah muss Preis an Fib-Level sein (in %)",
-    "proximity_pct": 0.5,
+    "_comment3": "Fib-Toleranzzone: Puffer um Entry-Zone (38.2–61.8%) = ATR × dieser Faktor",
+    "_comment3a": "0.5 = 50% eines ATR als Zone außerhalb 38.2% und 61.8%",
+    "_comment3b": "Erhöhen (1.0+) für frühere Entries, verringern (0.2) für präzise Levels",
+    "fib_tolerance_atr_mult": 0.5,
 
-    "_comment3b": "Struktur-Toleranzzone: Puffer um Trendlinie = ATR × dieser Faktor",
-    "_comment3c": "0.3 = 30% eines ATR-Schritts als Zone (empfohlen für 4h)",
-    "_comment3d": "Erhöhen (0.5) für volatilere Assets, verringern (0.2) für enge Strukturen",
+    "_comment3c": "Struktur-Toleranzzone: Puffer um Trendlinie = ATR × dieser Faktor",
+    "_comment3d": "0.3 = 30% eines ATR-Schritts als Zone (empfohlen für 4h)",
+    "_comment3e": "Erhöhen (0.5) für volatilere Assets, verringern (0.2) für enge Strukturen",
     "structure_tolerance_atr_mult": 0.3,
 
     "_comment4": "Indikatoren-Filter",
