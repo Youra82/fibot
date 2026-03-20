@@ -21,24 +21,22 @@ source "$VENV_PATH"
 # ─────────────────────────────────────────
 VALID_TFS="1m 3m 5m 15m 30m 1h 2h 4h 6h 8h 12h 1d 3d 1w"
 
-validate_symbol() {
-    local sym="$1"
-    # Nur erstes Token (kein Leerzeichen), Format: XXX/YYY:ZZZ oder XXX/YYY
-    sym="${sym%% *}"
-    if [[ ! "$sym" =~ ^[A-Za-z0-9]+/[A-Za-z0-9]+(:[A-Za-z0-9]+)?$ ]]; then
-        echo -e "${RED}Ungültiges Symbol-Format. Erwartet z.B. BTC/USDT:USDT${NC}"
-        return 1
+# "BTC" → "BTC/USDT:USDT", "BTC/USDT:USDT" bleibt unverändert
+expand_symbol() {
+    local s="$1"
+    if [[ "$s" != */* ]]; then
+        echo "${s^^}/USDT:USDT"
+    else
+        echo "$s"
     fi
-    echo "$sym"
 }
 
 validate_tf() {
     local tf="$1"
-    tf="${tf%% *}"
     for v in $VALID_TFS; do
         [ "$tf" == "$v" ] && echo "$tf" && return 0
     done
-    echo -e "${RED}Ungültiger Timeframe '$tf'. Erlaubt: $VALID_TFS${NC}"
+    echo -e "${RED}Ungültiger Timeframe '$tf'. Erlaubt: $VALID_TFS${NC}" >&2
     return 1
 }
 
@@ -70,15 +68,13 @@ if [ "$MODE" == "1" ]; then
     echo ""
     echo -e "${CYAN}--- Einzel-Backtest ---${NC}"
 
-    read -p "Symbol (z.B. BTC/USDT:USDT) [Standard: BTC/USDT:USDT]: " SYMBOL
-    SYMBOL="${SYMBOL//[$'\r\n']/}"
-    [ -z "$SYMBOL" ] && SYMBOL="BTC/USDT:USDT"
-    SYMBOL=$(validate_symbol "$SYMBOL") || exit 1
+    read -p "Symbol(e) (z.B. BTC ETH oder BTC/USDT:USDT) [Standard: BTC]: " SYMBOLS_INPUT
+    SYMBOLS_INPUT="${SYMBOLS_INPUT//[$'\r\n']/}"
+    [ -z "$SYMBOLS_INPUT" ] && SYMBOLS_INPUT="BTC"
 
-    read -p "Timeframe (z.B. 4h, 1h, 1d) [Standard: 4h]: " TF
-    TF="${TF//[$'\r\n ']/}"
-    [ -z "$TF" ] && TF="4h"
-    TF=$(validate_tf "$TF") || exit 1
+    read -p "Timeframe(s) (z.B. 4h oder 1h 4h 1d) [Standard: 4h]: " TFS_INPUT
+    TFS_INPUT="${TFS_INPUT//[$'\r\n']/}"
+    [ -z "$TFS_INPUT" ] && TFS_INPUT="4h"
 
     echo ""
     echo -e "${YELLOW}Zeitraum wählen:${NC}"
@@ -107,13 +103,19 @@ if [ "$MODE" == "1" ]; then
     CAPITAL="${CAPITAL//[$'\r\n ']/}"
     [[ ! "$CAPITAL" =~ ^[0-9]+(\.[0-9]+)?$ ]] && CAPITAL=1000
 
-    echo ""
-    $PYTHON src/fibot/analysis/show_results.py \
-        --mode 1 \
-        --symbol "$SYMBOL" \
-        --timeframe "$TF" \
-        --capital "$CAPITAL" \
-        $DATE_ARGS
+    for RAW_SYM in $SYMBOLS_INPUT; do
+        SYMBOL=$(expand_symbol "$RAW_SYM")
+        for TF in $TFS_INPUT; do
+            if ! validate_tf "$TF" > /dev/null; then continue; fi
+            echo ""
+            $PYTHON src/fibot/analysis/show_results.py \
+                --mode 1 \
+                --symbol "$SYMBOL" \
+                --timeframe "$TF" \
+                --capital "$CAPITAL" \
+                $DATE_ARGS
+        done
+    done
 
 # ─────────────────────────────────────────
 # Modus 2: Alle aktiven Strategien
@@ -169,21 +171,25 @@ elif [ "$MODE" == "4" ]; then
     echo ""
     echo -e "${CYAN}--- Live Signal-Check ---${NC}"
 
-    read -p "Symbol (z.B. BTC/USDT:USDT) [Standard: BTC/USDT:USDT]: " SYMBOL
-    SYMBOL="${SYMBOL//[$'\r\n']/}"
-    [ -z "$SYMBOL" ] && SYMBOL="BTC/USDT:USDT"
-    SYMBOL=$(validate_symbol "$SYMBOL") || exit 1
+    read -p "Symbol(e) (z.B. BTC ETH oder BTC/USDT:USDT) [Standard: BTC]: " SYMBOLS_INPUT
+    SYMBOLS_INPUT="${SYMBOLS_INPUT//[$'\r\n']/}"
+    [ -z "$SYMBOLS_INPUT" ] && SYMBOLS_INPUT="BTC"
 
-    read -p "Timeframe (z.B. 4h, 1h) [Standard: 4h]: " TF
-    TF="${TF//[$'\r\n ']/}"
-    [ -z "$TF" ] && TF="4h"
-    TF=$(validate_tf "$TF") || exit 1
+    read -p "Timeframe(s) (z.B. 4h oder 1h 4h) [Standard: 4h]: " TFS_INPUT
+    TFS_INPUT="${TFS_INPUT//[$'\r\n']/}"
+    [ -z "$TFS_INPUT" ] && TFS_INPUT="4h"
 
-    echo ""
-    $PYTHON src/fibot/analysis/show_results.py \
-        --mode 4 \
-        --symbol "$SYMBOL" \
-        --timeframe "$TF"
+    for RAW_SYM in $SYMBOLS_INPUT; do
+        SYMBOL=$(expand_symbol "$RAW_SYM")
+        for TF in $TFS_INPUT; do
+            if ! validate_tf "$TF" > /dev/null; then continue; fi
+            echo ""
+            $PYTHON src/fibot/analysis/show_results.py \
+                --mode 4 \
+                --symbol "$SYMBOL" \
+                --timeframe "$TF"
+        done
+    done
 
 # ─────────────────────────────────────────
 # Modus 5: Interaktive Charts
