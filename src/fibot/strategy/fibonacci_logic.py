@@ -489,16 +489,21 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
         entry_high = fibs.levels["61.8"]
 
         price_in_zone = entry_low <= current_price <= entry_high
-        near_zone = abs(current_price - entry_low) / entry_low * 100 <= proximity_pct or price_in_zone
+        # Preis kommt von oben in die Zone → prüfe Nähe zu BEIDEN Zonengrenzen
+        near_zone = (
+            price_in_zone or
+            abs(current_price - entry_low)  / entry_low  * 100 <= proximity_pct or
+            abs(current_price - entry_high) / entry_high * 100 <= proximity_pct
+        )
 
         if not near_zone:
             return no_signal
 
-        # RSI filter
+        # RSI filter: nur blocken wenn klar überkauft (RSI >= rsi_overbought)
         if rsi < rsi_oversold:
             score += 2.0
             reason_parts.append(f"RSI überverkauft ({rsi:.1f})")
-        elif rsi < 50:
+        elif rsi < rsi_overbought:
             score += 1.0
         else:
             return no_signal
@@ -568,16 +573,21 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
         entry_high = fibs.levels["38.2"]
 
         price_in_zone = entry_low <= current_price <= entry_high
-        near_zone = abs(current_price - entry_high) / entry_high * 100 <= proximity_pct or price_in_zone
+        # Preis kommt von oben in die Zone → prüfe Nähe zu BEIDEN Zonengrenzen
+        near_zone = (
+            price_in_zone or
+            abs(current_price - entry_low)  / entry_low  * 100 <= proximity_pct or
+            abs(current_price - entry_high) / entry_high * 100 <= proximity_pct
+        )
 
         if not near_zone:
             return no_signal
 
-        # RSI filter
+        # RSI filter: nur blocken wenn klar überverkauft (RSI <= rsi_oversold)
         if rsi > rsi_overbought:
             score += 2.0
             reason_parts.append(f"RSI überkauft ({rsi:.1f})")
-        elif rsi > 50:
+        elif rsi > rsi_oversold:
             score += 1.0
         else:
             return no_signal

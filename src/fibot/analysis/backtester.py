@@ -383,6 +383,7 @@ def load_ohlcv(symbol: str, timeframe: str,
     end_ms    = int(exchange.parse8601(end_date   + 'T23:59:59Z'))
     all_ohlcv = []
 
+    retries = 0
     while since_ms < end_ms:
         try:
             ohlcv = exchange.fetch_ohlcv(symbol, timeframe, since_ms, 200)
@@ -393,10 +394,19 @@ def load_ohlcv(symbol: str, timeframe: str,
                 break
             all_ohlcv.extend(ohlcv)
             since_ms = ohlcv[-1][0] + tf_ms
+            retries = 0
             time_mod.sleep(exchange.rateLimit / 1000)
         except Exception as e:
-            logger.error(f"Download-Fehler: {e}")
-            break
+            err_str = str(e)
+            # Bitget 40017: startTime zu weit zurück → 30 Tage nach vorne springen
+            if '40017' in err_str and retries < 3:
+                skip_ms = 30 * 24 * 3600 * 1000
+                logger.warning(f"Bitget startTime-Fehler — überspringe 30 Tage vorwärts. ({retries+1}/3)")
+                since_ms += skip_ms
+                retries += 1
+            else:
+                logger.warning(f"Download-Fehler: {e}")
+                break
 
     if not all_ohlcv:
         logger.error("Keine Daten heruntergeladen.")

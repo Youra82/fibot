@@ -404,18 +404,41 @@ nano settings.json
 { "symbol": "BTC/USDT:USDT", "timeframe": "4h", "active": true }
 ```
 
-#### 2. Config-Datei erstellen
+#### 2. Parameter optimieren — `run_pipeline.sh`
 
-Für jedes aktive Symbol muss eine Config-Datei existieren:
+Die Pipeline findet automatisch die besten Strategie-Parameter für jedes Symbol
+und jeden Timeframe per **Optuna-Optimierung** und speichert sie als Config-JSON.
+
+```bash
+chmod +x run_pipeline.sh
+./run_pipeline.sh
+```
 
 ```
-src/fibot/strategy/configs/config_BTCUSDTUSDT_4h_fib.json
-src/fibot/strategy/configs/config_ETHUSDT_4h_fib.json
+Symbol(e) (z.B. BTC ETH): BTC ETH SOL
+Timeframe(s) (z.B. 4h oder 1h 4h): 4h
+Startkapital: 1000
+Trials: 200        ← mehr = besser, aber langsamer
+Max Drawdown: 30
 ```
 
-Dateinamen-Schema: `config_{SYMBOL ohne Sonderzeichen}_{TIMEFRAME}_fib.json`
+Was optimiert wird:
 
-Die mitgelieferte BTC-Config kann als Vorlage kopiert und angepasst werden.
+| Parameter               | Bereich            | Bedeutung                              |
+|-------------------------|--------------------|----------------------------------------|
+| `swing_lookback`        | 50–200 Kerzen      | Wie weit zurück nach Swings suchen     |
+| `pivot_left/right`      | 2–8 Kerzen         | Pivot-Bestätigung (schärfer = weniger) |
+| `proximity_pct`         | 0.3–3.0 %          | Wie nah am Fib-Level für Entry         |
+| `rsi_oversold/bought`   | 30–70              | RSI-Filter-Grenzen                     |
+| `volume_ratio_min`      | 0.5–2.0×           | Volumen-Bestätigung                    |
+| `min_signal_score`      | 2.0–7.0            | Mindest-Score für Entry                |
+| `min_rr`                | 1.0–3.0            | Minimales Risk/Reward                  |
+| `leverage`              | 3–20×              | Hebelwirkung                           |
+
+Ergebnis: `src/fibot/strategy/configs/config_BTCUSDTUSDT_4h_fib.json`
+
+> **Tipp:** Zuerst 200 Trials laufen lassen. Wenn das Ergebnis unbefriedigend ist,
+> Trials auf 500 erhöhen oder den Zeitraum anpassen.
 
 #### 3. Ergebnisse & Backtest — `show_results.sh`
 
