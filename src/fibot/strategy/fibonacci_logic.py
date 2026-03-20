@@ -508,31 +508,43 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
     # -- Step 2: Fib levels --
     fibs = compute_fib_levels(swings)
 
-    # -- Step 3: Structure (mit ATR-basierter Toleranzzone) --
+    # -- Step 3: ATR (vorberechnet, O(1)) für frühe Zonen-Prüfung --
+    atr = float(df['_atr'].iloc[-1]) if '_atr' in df.columns else calc_atr(df, atr_period)
+    fib_tolerance = fib_tol_mult * atr
+
+    # -- Step 4: Frühe Zonen-Prüfung VOR detect_structure --
+    # detect_structure ist teuer (argrelmax + polyfit). Nur aufrufen wenn
+    # der Preis tatsächlich in der Fibonacci-Zone liegt.
+    if swings.direction == "down":
+        _z_low  = fibs.levels["38.2"] - fib_tolerance
+        _z_high = fibs.levels["61.8"] + fib_tolerance
+    else:  # "up"
+        _z_low  = fibs.levels["61.8"] - fib_tolerance
+        _z_high = fibs.levels["38.2"] + fib_tolerance
+    if not (_z_low <= current_price <= _z_high):
+        return no_signal
+
+    # -- Step 5: Structure (mit ATR-basierter Toleranzzone) --
+    # Nur erreicht wenn Preis in der Fib-Zone liegt (~1-5% aller Bars)
     structure = detect_structure(df, structure_lookback, pivot_left, pivot_right,
                                  tolerance_atr_mult=struct_tol_mult)
 
-    # -- Step 4: Indicators (vorberechnet wenn verfügbar) --
-    rsi       = float(df['_rsi'].iloc[-1])      if '_rsi'      in df.columns else calc_rsi(df['close'], rsi_period)
-    atr       = float(df['_atr'].iloc[-1])      if '_atr'      in df.columns else calc_atr(df, atr_period)
-    vol_ratio = float(df['_vol_ratio'].iloc[-1]) if '_vol_ratio' in df.columns else calc_volume_ratio(df)
+    # -- Step 6: Restliche Indikatoren (vorberechnet, O(1)) --
+    rsi       = float(df['_rsi'].iloc[-1])       if '_rsi'       in df.columns else calc_rsi(df['close'], rsi_period)
+    vol_ratio = float(df['_vol_ratio'].iloc[-1])  if '_vol_ratio'  in df.columns else calc_volume_ratio(df)
 
-    # -- Step 5: Determine entry zone --
+    # -- Step 7: Entry zone (Scoring) --
     score = 0.0
     reason_parts = []
-
-    # ATR-basierte Fib-Toleranzzone (konsistent mit Struktur-Toleranzzone)
-    fib_tolerance = fib_tol_mult * atr
 
     # LONG: swings.direction == "down" (price dropped → we look for bounce)
     if swings.direction == "down":
         entry_low  = fibs.levels["38.2"]
         entry_high = fibs.levels["61.8"]
 
-        # Entry-Zone mit ATR-Puffer: (38.2% - tol) bis (61.8% + tol)
-        zone_low  = entry_low  - fib_tolerance
-        zone_high = entry_high + fib_tolerance
-        near_zone = zone_low <= current_price <= zone_high
+        zone_low      = _z_low
+        zone_high     = _z_high
+        near_zone     = True   # bereits geprüft oben
         price_in_zone = entry_low <= current_price <= entry_high
 
         if not near_zone:
@@ -617,14 +629,10 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
         entry_low  = fibs.levels["61.8"]   # for UP-direction: 61.8 is the LOWER price
         entry_high = fibs.levels["38.2"]   # for UP-direction: 38.2 is the HIGHER price
 
-        # Entry-Zone mit ATR-Puffer: (61.8% - tol) bis (38.2% + tol)
-        zone_low  = entry_low  - fib_tolerance
-        zone_high = entry_high + fib_tolerance
-        near_zone = zone_low <= current_price <= zone_high
+        zone_low      = _z_low
+        zone_high     = _z_high
+        near_zone     = True   # bereits geprüft oben
         price_in_zone = entry_low <= current_price <= entry_high
-
-        if not near_zone:
-            return no_signal
 
         # RSI filter: nur blocken wenn klar überverkauft (RSI <= rsi_oversold)
         if rsi > rsi_overbought:
