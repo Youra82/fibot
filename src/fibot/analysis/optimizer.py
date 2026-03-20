@@ -34,74 +34,53 @@ CONFIGS_DIR = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
 
 
 # ---------------------------------------------------------------------------
-# Objective für Optuna
+# Objective für Optuna (Closure — thread-safe für n_jobs > 1)
 # ---------------------------------------------------------------------------
 
-_df_global: pd.DataFrame = None
-_symbol_global: str = ""
-_timeframe_global: str = ""
-_capital_global: float = 1000.0
-_max_dd_global: float = 30.0
-_min_wr_global: float = 0.0
-
-
-def _objective(trial: optuna.Trial) -> float:
-    global _df_global, _symbol_global, _timeframe_global, _capital_global
-    global _max_dd_global, _min_wr_global
-
-    # --- Parameter vorschlagen ---
-    config = {
-        "market": {
-            "symbol":    _symbol_global,
-            "timeframe": _timeframe_global,
-        },
-        "strategy": {
-            "swing_lookback":              trial.suggest_int("swing_lookback", 50, 200, step=10),
-            "pivot_left":                  trial.suggest_int("pivot_left",  2, 8),
-            "pivot_right":                 trial.suggest_int("pivot_right", 2, 8),
-            "structure_lookback":          trial.suggest_int("structure_lookback", 30, 100, step=10),
-            "fib_entry_min":               0.382,
-            "fib_entry_max":               0.618,
-            "fib_sl_level":                0.786,
-            "fib_tp1_level":               1.000,
-            "fib_tp2_level":               1.272,
-            "fib_tolerance_atr_mult":       trial.suggest_float("fib_tolerance_atr_mult",       0.2, 2.0, step=0.1),
-            "structure_tolerance_atr_mult": trial.suggest_float("structure_tolerance_atr_mult", 0.1, 1.0, step=0.1),
-            "rsi_period":                  14,
-            "rsi_oversold":                trial.suggest_float("rsi_oversold",   30.0, 50.0, step=1.0),
-            "rsi_overbought":              trial.suggest_float("rsi_overbought", 50.0, 70.0, step=1.0),
-            "volume_ratio_min":            trial.suggest_float("volume_ratio_min", 0.5, 2.0, step=0.1),
-            "min_rr":                      trial.suggest_float("min_rr",           1.0, 3.0, step=0.1),
-            "atr_period":                  14,
-            "atr_sl_multiplier":           trial.suggest_float("atr_sl_multiplier", 0.5, 3.0, step=0.1),
-            "min_signal_score":            trial.suggest_float("min_signal_score",  2.0, 7.0, step=0.5),
-            "candle_limit":                500,
-        },
-        "risk": {
-            "leverage":           trial.suggest_int("leverage", 3, 20),
-            "risk_per_entry_pct": trial.suggest_float("risk_per_entry_pct", 0.5, 2.0, step=0.1),
-            "margin_mode":        "isolated",
+def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr):
+    def _objective(trial: optuna.Trial) -> float:
+        config = {
+            "market": {"symbol": symbol, "timeframe": timeframe},
+            "strategy": {
+                "swing_lookback":               trial.suggest_int("swing_lookback", 50, 200, step=10),
+                "pivot_left":                   trial.suggest_int("pivot_left",  2, 8),
+                "pivot_right":                  trial.suggest_int("pivot_right", 2, 8),
+                "structure_lookback":           trial.suggest_int("structure_lookback", 30, 100, step=10),
+                "fib_entry_min":                0.382,
+                "fib_entry_max":                0.618,
+                "fib_sl_level":                 0.786,
+                "fib_tp1_level":                1.000,
+                "fib_tp2_level":                1.272,
+                "fib_tolerance_atr_mult":       trial.suggest_float("fib_tolerance_atr_mult",       0.2, 2.0, step=0.1),
+                "structure_tolerance_atr_mult": trial.suggest_float("structure_tolerance_atr_mult", 0.1, 1.0, step=0.1),
+                "rsi_period":                   14,
+                "rsi_oversold":                 trial.suggest_float("rsi_oversold",   30.0, 50.0, step=1.0),
+                "rsi_overbought":               trial.suggest_float("rsi_overbought", 50.0, 70.0, step=1.0),
+                "volume_ratio_min":             trial.suggest_float("volume_ratio_min", 0.5, 2.0, step=0.1),
+                "min_rr":                       trial.suggest_float("min_rr",           1.0, 3.0, step=0.1),
+                "atr_period":                   14,
+                "atr_sl_multiplier":            trial.suggest_float("atr_sl_multiplier", 0.5, 3.0, step=0.1),
+                "min_signal_score":             trial.suggest_float("min_signal_score",  2.0, 7.0, step=0.5),
+                "candle_limit":                 500,
+            },
+            "risk": {
+                "leverage":           trial.suggest_int("leverage", 3, 20),
+                "risk_per_entry_pct": trial.suggest_float("risk_per_entry_pct", 0.5, 2.0, step=0.1),
+                "margin_mode":        "isolated",
+            }
         }
-    }
-
-    try:
-        result = run_backtest(_df_global, config, _capital_global,
-                              _symbol_global, _timeframe_global)
-    except Exception:
-        return -999.0
-
-    if result.total_trades < MIN_TRADES:
-        return -999.0
-
-    if result.max_drawdown_pct > _max_dd_global:
-        return -999.0
-
-    if result.win_rate < _min_wr_global:
-        return -999.0
-
-    # Ziel: PnL optimieren, RR als Bonus
-    score = result.pnl_pct + result.avg_rr * 5.0
-    return score
+        try:
+            result = run_backtest(df, config, capital, symbol, timeframe)
+        except Exception:
+            return -999.0
+        if result.total_trades < MIN_TRADES:
+            return -999.0
+        if result.max_drawdown_pct > max_dd:
+            return -999.0
+        if result.win_rate < min_wr:
+            return -999.0
+        return result.pnl_pct + result.avg_rr * 5.0
+    return _objective
 
 
 # ---------------------------------------------------------------------------
@@ -113,14 +92,12 @@ def optimize(symbol: str, timeframe: str,
              capital: float = 1000.0,
              n_trials: int = 200,
              max_dd: float = 30.0,
-             min_wr: float = 0.0) -> dict | None:
+             min_wr: float = 0.0,
+             n_jobs: int = -1) -> dict | None:
     """
     Lädt Daten, optimiert Parameter mit Optuna und gibt die beste Config zurück.
     Gibt None zurück wenn kein gültiges Ergebnis gefunden wurde.
     """
-    global _df_global, _symbol_global, _timeframe_global, _capital_global
-    global _max_dd_global, _min_wr_global
-
     print(f"\n  Lade Daten: {symbol} ({timeframe}) [{start_date} → {end_date}]")
     df = load_ohlcv(symbol, timeframe, start_date, end_date)
     if df.empty or len(df) < 150:
@@ -128,21 +105,16 @@ def optimize(symbol: str, timeframe: str,
         return None
     print(f"  {len(df)} Kerzen geladen.")
 
-    _df_global        = df
-    _symbol_global    = symbol
-    _timeframe_global = timeframe
-    _capital_global   = capital
-    _max_dd_global    = max_dd
-    _min_wr_global    = min_wr
-
     study = optuna.create_study(
         direction="maximize",
         sampler=optuna.samplers.TPESampler(seed=42),
         pruner=optuna.pruners.MedianPruner(),
     )
 
-    print(f"  Optimiere {n_trials} Trials...")
-    study.optimize(_objective, n_trials=n_trials, show_progress_bar=True, n_jobs=1)
+    objective = _make_objective(df, symbol, timeframe, capital, max_dd, min_wr)
+    cores_str = "alle Kerne" if n_jobs == -1 else f"{n_jobs} Kern(e)"
+    print(f"  Optimiere {n_trials} Trials ({cores_str})...")
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=True, n_jobs=n_jobs)
 
     best = study.best_trial
     if best.value <= -999.0:
@@ -231,6 +203,8 @@ if __name__ == "__main__":
                         help="Max erlaubter Drawdown %% (Standard: 30)")
     parser.add_argument('--min-wr',   type=float, default=0.0,
                         help="Min Win-Rate %% (Standard: 0)")
+    parser.add_argument('--jobs',     type=int,   default=-1,
+                        help="CPU-Kerne für Parallelisierung (-1 = alle, Standard: -1)")
     args = parser.parse_args()
 
     today = date.today().isoformat()
@@ -268,7 +242,8 @@ if __name__ == "__main__":
             best_config = optimize(
                 symbol, timeframe, start_date, end_date,
                 capital=args.capital, n_trials=args.trials,
-                max_dd=args.max_dd, min_wr=args.min_wr
+                max_dd=args.max_dd, min_wr=args.min_wr,
+                n_jobs=args.jobs
             )
 
             if best_config is None:
