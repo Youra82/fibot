@@ -34,10 +34,55 @@ CONFIGS_DIR = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
 
 
 # ---------------------------------------------------------------------------
+# Kapital-adaptive Parameter-Ranges
+# ---------------------------------------------------------------------------
+
+def _get_capital_ranges(capital: float) -> dict:
+    """
+    Passt Optimierungs-Ranges automatisch ans Startkapital an.
+
+    Hintergrund: notional = (capital × risk_pct/100) ÷ sl_pct_of_price
+    Damit notional ≥ MIN_NOTIONAL_USDT (5 USDT):
+      risk_pct_min = MIN_NOTIONAL_USDT × sl_pct × 100 / capital
+
+    Beispiel (capital=15, sl_pct≈3% auf 1d):
+      risk_pct_min = 5 × 0.03 × 100 / 15 = 1.0%
+
+    Zusätzlich: engere atr_sl_multiplier-Range bei kleinem Kapital,
+    damit der SL nicht so weit weg liegt (kleineres price_risk → höheres notional).
+    """
+    if capital < 50:
+        # Kleinstes Kapital: hoher risk_pct und engere SLs zwingend erforderlich
+        return {
+            "risk_per_entry_pct": (2.0, 10.0, 0.5),
+            "atr_sl_multiplier":  (0.5,  2.0, 0.1),
+            "leverage":           (5,    20),
+        }
+    elif capital < 200:
+        return {
+            "risk_per_entry_pct": (1.0,  5.0, 0.5),
+            "atr_sl_multiplier":  (0.5,  3.0, 0.1),
+            "leverage":           (3,    20),
+        }
+    else:
+        # Standard-Ranges für ausreichend Kapital
+        return {
+            "risk_per_entry_pct": (0.5,  3.0, 0.1),
+            "atr_sl_multiplier":  (0.5,  3.0, 0.1),
+            "leverage":           (3,    20),
+        }
+
+
+# ---------------------------------------------------------------------------
 # Objective für Optuna (Closure — thread-safe für n_jobs > 1)
 # ---------------------------------------------------------------------------
 
 def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr):
+    ranges = _get_capital_ranges(capital)
+    r_min,   r_max,   r_step   = ranges["risk_per_entry_pct"]
+    atr_min, atr_max, atr_step = ranges["atr_sl_multiplier"]
+    lev_min, lev_max            = ranges["leverage"]
+
     def _objective(trial: optuna.Trial) -> float:
         config = {
             "market": {"symbol": symbol, "timeframe": timeframe},
@@ -59,13 +104,13 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr):
                 "volume_ratio_min":             trial.suggest_float("volume_ratio_min", 0.5, 2.0, step=0.1),
                 "min_rr":                       trial.suggest_float("min_rr",           1.0, 3.0, step=0.1),
                 "atr_period":                   14,
-                "atr_sl_multiplier":            trial.suggest_float("atr_sl_multiplier", 0.5, 3.0, step=0.1),
+                "atr_sl_multiplier":            trial.suggest_float("atr_sl_multiplier", atr_min, atr_max, step=atr_step),
                 "min_signal_score":             trial.suggest_float("min_signal_score",  2.0, 7.0, step=0.5),
                 "candle_limit":                 500,
             },
             "risk": {
-                "leverage":           trial.suggest_int("leverage", 3, 20),
-                "risk_per_entry_pct": trial.suggest_float("risk_per_entry_pct", 1.0, 5.0, step=0.5),
+                "leverage":           trial.suggest_int("leverage", lev_min, lev_max),
+                "risk_per_entry_pct": trial.suggest_float("risk_per_entry_pct", r_min, r_max, step=r_step),
                 "margin_mode":        "isolated",
             }
         }
@@ -98,6 +143,17 @@ def optimize(symbol: str, timeframe: str,
     Lädt Daten, optimiert Parameter mit Optuna und gibt die beste Config zurück.
     Gibt None zurück wenn kein gültiges Ergebnis gefunden wurde.
     """
+    # Kapital-adaptive Ranges anzeigen wenn nötig
+    if capital < 200:
+        ranges = _get_capital_ranges(capital)
+        r = ranges["risk_per_entry_pct"]
+        a = ranges["atr_sl_multiplier"]
+        l = ranges["leverage"]
+        print(f"\n  HINWEIS: Kleines Kapital ({capital:.1f} USDT) — Parameter-Ranges automatisch angepasst:")
+        print(f"    risk_per_entry_pct : {r[0]:.1f} – {r[1]:.1f}%  (Standard: 0.5–3.0%)")
+        print(f"    atr_sl_multiplier  : {a[0]:.1f} – {a[1]:.1f}   (Standard: 0.5–3.0)")
+        print(f"    leverage           : {l[0]} – {l[1]}x      (Standard: 3–20x)")
+
     print(f"\n  Lade Daten: {symbol} ({timeframe}) [{start_date} → {end_date}]")
     df = load_ohlcv(symbol, timeframe, start_date, end_date)
     if df.empty or len(df) < 150:
