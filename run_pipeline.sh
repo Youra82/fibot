@@ -18,6 +18,20 @@ fi
 
 source "$VENV_PATH"
 
+# --- Aufräum-Assistent ---
+echo ""
+echo -e "${YELLOW}Möchtest du alle alten, generierten Configs vor dem Start löschen?${NC}"
+read -p "Dies wird für einen kompletten Neustart empfohlen. (j/n) [Standard: n]: " CLEANUP_CHOICE
+CLEANUP_CHOICE="${CLEANUP_CHOICE//[$'\r\n ']/}"
+CLEANUP_CHOICE="${CLEANUP_CHOICE:-n}"
+if [[ "$CLEANUP_CHOICE" == "j" || "$CLEANUP_CHOICE" == "J" ]]; then
+    echo -e "${YELLOW}Lösche alte Konfigurationen...${NC}"
+    rm -f src/fibot/strategy/configs/config_*.json
+    echo -e "${GREEN}✔ Aufräumen abgeschlossen.${NC}"
+else
+    echo -e "${GREEN}✔ Alte Ergebnisse werden beibehalten.${NC}"
+fi
+
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════╗${NC}"
 echo -e "${BOLD}║     FiBot — Parameter-Optimierung        ║${NC}"
