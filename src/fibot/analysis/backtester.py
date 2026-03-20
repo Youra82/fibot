@@ -327,91 +327,203 @@ def auto_days_for_timeframe(timeframe: str) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Data loading with cache
+# ---------------------------------------------------------------------------
+
+def load_ohlcv(symbol: str, timeframe: str,
+               start_date: str, end_date: str) -> pd.DataFrame:
+    """
+    Lädt OHLCV-Daten für einen Datumsbereich.
+    Nutzt einen lokalen CSV-Cache (data/cache/) um wiederholte Downloads zu vermeiden.
+    Cache wird automatisch ergänzt wenn der angefragte Zeitraum nicht abgedeckt ist.
+
+    Args:
+        symbol:     z.B. "BTC/USDT:USDT"
+        timeframe:  z.B. "4h"
+        start_date: "YYYY-MM-DD"
+        end_date:   "YYYY-MM-DD"  (inklusiv)
+    """
+    import ccxt
+    import time as time_mod
+
+    cache_dir = os.path.join(PROJECT_ROOT, 'data', 'cache')
+    os.makedirs(cache_dir, exist_ok=True)
+    safe_symbol = symbol.replace('/', '-').replace(':', '-')
+    cache_file  = os.path.join(cache_dir, f"{safe_symbol}_{timeframe}.csv")
+
+    req_start = pd.to_datetime(start_date, utc=True)
+    req_end   = pd.to_datetime(end_date + 'T23:59:59Z', utc=True)
+
+    cached = pd.DataFrame()
+
+    # --- Versuch 1: Cache lesen ---
+    if os.path.exists(cache_file):
+        try:
+            cached = pd.read_csv(cache_file, index_col='timestamp', parse_dates=True)
+            cached.index = cached.index.tz_localize('UTC') if cached.index.tz is None \
+                           else cached.index.tz_convert('UTC')
+            cached.sort_index(inplace=True)
+            cached = cached[~cached.index.duplicated(keep='last')]
+
+            if cached.index.min() <= req_start and cached.index.max() >= req_end:
+                logger.info(f"Cache-Hit: {symbol} ({timeframe}) [{start_date} → {end_date}]")
+                return cached.loc[req_start:req_end].copy()
+            else:
+                logger.info(f"Cache unvollständig — lade fehlende Daten nach.")
+        except Exception as e:
+            logger.warning(f"Cache-Lesefehler ({cache_file}): {e} — lade neu.")
+            cached = pd.DataFrame()
+
+    # --- Versuch 2: Von Bitget herunterladen (kein API-Key nötig für OHLCV) ---
+    logger.info(f"Download: {symbol} ({timeframe}) [{start_date} → {end_date}] ...")
+    exchange = ccxt.bitget({'enableRateLimit': True, 'options': {'defaultType': 'swap'}})
+    exchange.load_markets()
+    tf_ms     = exchange.parse_timeframe(timeframe) * 1000
+    since_ms  = int(exchange.parse8601(start_date + 'T00:00:00Z'))
+    end_ms    = int(exchange.parse8601(end_date   + 'T23:59:59Z'))
+    all_ohlcv = []
+
+    while since_ms < end_ms:
+        try:
+            ohlcv = exchange.fetch_ohlcv(symbol, timeframe, since_ms, 200)
+            if not ohlcv:
+                break
+            ohlcv = [c for c in ohlcv if c[0] <= end_ms]
+            if not ohlcv:
+                break
+            all_ohlcv.extend(ohlcv)
+            since_ms = ohlcv[-1][0] + tf_ms
+            time_mod.sleep(exchange.rateLimit / 1000)
+        except Exception as e:
+            logger.error(f"Download-Fehler: {e}")
+            break
+
+    if not all_ohlcv:
+        logger.error("Keine Daten heruntergeladen.")
+        return pd.DataFrame()
+
+    new_df = pd.DataFrame(all_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+    new_df['timestamp'] = pd.to_datetime(new_df['timestamp'], unit='ms', utc=True)
+    new_df.set_index('timestamp', inplace=True)
+    new_df.sort_index(inplace=True)
+    new_df = new_df[~new_df.index.duplicated(keep='last')]
+
+    # Cache aktualisieren (merge mit vorhandenem Cache)
+    if not cached.empty:
+        merged = pd.concat([cached, new_df])
+        merged = merged[~merged.index.duplicated(keep='last')]
+        merged.sort_index(inplace=True)
+    else:
+        merged = new_df
+
+    try:
+        merged.to_csv(cache_file)
+        logger.info(f"Cache gespeichert: {cache_file} ({len(merged)} Kerzen gesamt)")
+    except Exception as e:
+        logger.warning(f"Cache-Schreibfehler: {e}")
+
+    return new_df.loc[req_start:req_end].copy()
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
-    import ccxt
-    import time as time_mod
+    from datetime import date as date_type
 
     logging.basicConfig(level=logging.INFO,
                          format='%(asctime)s %(levelname)s %(message)s')
 
-    parser = argparse.ArgumentParser(description="FiBot Backtester")
-    parser.add_argument('--symbol',    default='BTC/USDT:USDT')
-    parser.add_argument('--timeframe', default='4h')
+    parser = argparse.ArgumentParser(
+        description="FiBot Backtester",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog="""
+Beispiele:
+  # Automatischer Zeitraum (empfohlen)
+  python backtester.py --symbol BTC/USDT:USDT --timeframe 4h
+
+  # Fester Zeitraum
+  python backtester.py --symbol BTC/USDT:USDT --timeframe 4h --from 2023-01-01 --to 2024-01-01
+
+  # Von Datum bis heute
+  python backtester.py --symbol BTC/USDT:USDT --timeframe 4h --from 2023-06-01
+
+  # Letzten N Tage
+  python backtester.py --symbol BTC/USDT:USDT --timeframe 4h --days 365
+        """
+    )
+    parser.add_argument('--symbol',    default='BTC/USDT:USDT', help="Handelspaar (z.B. BTC/USDT:USDT)")
+    parser.add_argument('--timeframe', default='4h',            help="Zeitrahmen (z.B. 4h, 1h, 1d)")
+    parser.add_argument('--from',      dest='date_from', default=None, metavar='YYYY-MM-DD',
+                        help="Startdatum (hat Vorrang vor --days)")
+    parser.add_argument('--to',        dest='date_to',   default=None, metavar='YYYY-MM-DD',
+                        help="Enddatum (Standard: heute)")
     parser.add_argument('--days',      type=int, default=None,
-                        help="Historische Tage (Standard: automatisch je nach Timeframe)")
-    parser.add_argument('--capital',   type=float, default=1000.0)
-    parser.add_argument('--config',    type=str, default=None, help="Pfad zur config_*.json")
+                        help="Alternativ zu --from/--to: letzte N Tage (Standard: auto)")
+    parser.add_argument('--capital',   type=float, default=1000.0, help="Startkapital in USDT")
+    parser.add_argument('--config',    type=str,   default=None,   help="Pfad zur config_*.json")
     args = parser.parse_args()
 
-    # Tage automatisch ableiten wenn nicht angegeben
-    days = args.days if args.days is not None else auto_days_for_timeframe(args.timeframe)
-    logger.info(f"Backtest-Zeitraum: {days} Tage (Timeframe: {args.timeframe})")
+    # --- Zeitraum auflösen ---
+    today = date_type.today().isoformat()
 
-    # Load config
+    if args.date_from:
+        # Modus: --from [--to]
+        start_date = args.date_from
+        end_date   = args.date_to if args.date_to else today
+        logger.info(f"Zeitraum: {start_date} → {end_date}")
+    else:
+        # Modus: --days oder auto
+        days = args.days if args.days is not None else auto_days_for_timeframe(args.timeframe)
+        end_date   = today
+        start_date = (pd.Timestamp(today, tz='UTC') - pd.Timedelta(days=days)).strftime('%Y-%m-%d')
+        logger.info(f"Zeitraum: letzte {days} Tage ({start_date} → {end_date})")
+
+    # --- Config laden ---
     if args.config:
         with open(args.config) as f:
             config = json.load(f)
     else:
-        # Default config for quick testing
         config = {
             "market":   {"symbol": args.symbol, "timeframe": args.timeframe},
             "strategy": {
-                "swing_lookback":    100,
-                "pivot_left":        5,
-                "pivot_right":       5,
-                "structure_lookback": 60,
-                "fib_entry_min":     0.382,
-                "fib_entry_max":     0.618,
-                "fib_sl_level":      0.786,
-                "fib_tp1_level":     1.000,
-                "fib_tp2_level":     1.272,
-                "proximity_pct":     0.5,
-                "rsi_period":        14,
-                "rsi_oversold":      45,
-                "rsi_overbought":    55,
-                "volume_ratio_min":  1.0,
-                "min_rr":            1.5,
-                "atr_period":        14,
-                "atr_sl_multiplier": 1.5,
-                "min_signal_score":  4.0,
-                "candle_limit":      500,
+                "swing_lookback":              100,
+                "pivot_left":                  5,
+                "pivot_right":                 5,
+                "structure_lookback":          60,
+                "fib_entry_min":               0.382,
+                "fib_entry_max":               0.618,
+                "fib_sl_level":                0.786,
+                "fib_tp1_level":               1.000,
+                "fib_tp2_level":               1.272,
+                "proximity_pct":               0.5,
+                "structure_tolerance_atr_mult": 0.3,
+                "rsi_period":                  14,
+                "rsi_oversold":                45,
+                "rsi_overbought":              55,
+                "volume_ratio_min":            1.0,
+                "min_rr":                      1.5,
+                "atr_period":                  14,
+                "atr_sl_multiplier":           1.5,
+                "min_signal_score":            4.0,
+                "candle_limit":                500,
             },
             "risk": {
-                "leverage":          10,
+                "leverage":           10,
                 "risk_per_entry_pct": 1.0,
-                "margin_mode":       "isolated",
+                "margin_mode":        "isolated",
             }
         }
 
-    # Fetch data
-    logger.info(f"Lade historische Daten: {args.symbol} ({args.timeframe}) ...")
-    exchange = ccxt.bitget({'enableRateLimit': True, 'options': {'defaultType': 'swap'}})
-    exchange.load_markets()
-    tf_ms = exchange.parse_timeframe(args.timeframe) * 1000
-    since = exchange.milliseconds() - days * 24 * 60 * 60 * 1000
-    all_ohlcv = []
-    while since < exchange.milliseconds():
-        try:
-            ohlcv = exchange.fetch_ohlcv(args.symbol, args.timeframe, since, 200)
-            if not ohlcv:
-                break
-            all_ohlcv.extend(ohlcv)
-            since = ohlcv[-1][0] + tf_ms
-            time_mod.sleep(exchange.rateLimit / 1000)
-        except Exception as e:
-            logger.error(f"Fehler beim Laden: {e}")
-            break
+    # --- Daten laden (mit Cache) ---
+    df = load_ohlcv(args.symbol, args.timeframe, start_date, end_date)
+    if df.empty:
+        logger.error("Keine Daten geladen. Abbruch.")
+        sys.exit(1)
+    logger.info(f"Kerzen geladen: {len(df)} ({df.index[0]} → {df.index[-1]})")
 
-    df = pd.DataFrame(all_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
-    df.set_index('timestamp', inplace=True)
-    df.sort_index(inplace=True)
-    df = df[~df.index.duplicated(keep='last')]
-    logger.info(f"Geladen: {len(df)} Kerzen")
-
+    # --- Backtest ---
     result = run_backtest(df, config, args.capital, args.symbol, args.timeframe)
     print("\n" + result.summary())
 

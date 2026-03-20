@@ -420,26 +420,45 @@ Die mitgelieferte BTC-Config kann als Vorlage kopiert und angepasst werden.
 #### 3. Backtest ausführen
 
 ```bash
+# Automatischer Zeitraum (empfohlen)
 ./run_pipeline.sh BTC/USDT:USDT 4h
-#                 Symbol         TF   (Tage automatisch, Kapital default 1000)
+#                 Symbol         TF
 
-# Oder mit eigenen Werten:
-./run_pipeline.sh BTC/USDT:USDT 4h 730 1000
-#                 Symbol         TF  Tage Kapital
+# Fester Zeitraum: von–bis
+./run_pipeline.sh BTC/USDT:USDT 4h 2023-01-01 2024-01-01
+#                 Symbol         TF  Von         Bis
+
+# Von Datum bis heute
+./run_pipeline.sh BTC/USDT:USDT 4h 2024-01-01
+#                 Symbol         TF  Von         (Bis = heute)
+
+# Mit eigenem Kapital
+./run_pipeline.sh BTC/USDT:USDT 4h 2023-01-01 2024-12-31 500
+#                 Symbol         TF  Von         Bis         Kapital
 ```
 
-Der Backtester lädt historische Daten von Bitget (ohne API-Key) und wählt
-den Zeitraum automatisch passend zum Timeframe:
+Der Backtester lädt historische Daten von Bitget **(kein API-Key nötig)** und legt
+einen lokalen CSV-Cache an (`data/cache/`) — wiederholte Läufe im selben Zeitraum
+sind sofort, ohne erneuten Download.
 
-| Timeframe | Historische Tage | Kerzen |
+Zeitraum-Optionen:
+
+| Aufruf | Erklärung |
+|---|---|
+| Kein Datum | Automatisch je nach Timeframe (siehe Tabelle) |
+| `--from 2023-01-01` | Von diesem Datum bis heute |
+| `--from 2023-01-01 --to 2024-01-01` | Fester Zeitraum |
+| `--days 365` | Letzte N Tage ab heute |
+
+Automatische Zeiträume:
+
+| Timeframe | Tage | Kerzen (ca.) |
 |---|---|---|
-| 15m / 30m | 180 Tage | ~17.000 |
-| 1h / 2h | 365 Tage | ~8.700 |
-| **4h** | **730 Tage** | **~4.380** |
-| 12h / 1d | 1095 Tage | ~1.095 |
-| 1w | 1460 Tage | ~208 |
-
-Der Zeitraum kann mit `--days` manuell überschrieben werden.
+| 15m / 30m | 180 | ~17.000 |
+| 1h / 2h | 365 | ~8.700 |
+| **4h** | **730** | **~4.380** |
+| 12h / 1d | 1095 | ~1.095 |
+| 1w | 1460 | ~208 |
 
 **Ausgabe:**
 
@@ -523,19 +542,28 @@ cd ~/fibot
 #### Backtest direkt aufrufen
 
 ```bash
-# Tage automatisch (empfohlen) — 4h → 730 Tage
+# Automatischer Zeitraum (4h → 730 Tage)
 .venv/bin/python3 src/fibot/analysis/backtester.py \
-    --symbol BTC/USDT:USDT \
-    --timeframe 4h \
-    --capital 1000
+    --symbol BTC/USDT:USDT --timeframe 4h
 
-# Tage manuell überschreiben
+# Fester Zeitraum von–bis
 .venv/bin/python3 src/fibot/analysis/backtester.py \
-    --symbol BTC/USDT:USDT --timeframe 4h --days 365 --capital 1000
+    --symbol BTC/USDT:USDT --timeframe 4h \
+    --from 2023-01-01 --to 2024-01-01
+
+# Von Datum bis heute
+.venv/bin/python3 src/fibot/analysis/backtester.py \
+    --symbol BTC/USDT:USDT --timeframe 4h \
+    --from 2024-06-01
+
+# Letzte N Tage
+.venv/bin/python3 src/fibot/analysis/backtester.py \
+    --symbol BTC/USDT:USDT --timeframe 4h --days 365
 
 # Mit eigener Config
 .venv/bin/python3 src/fibot/analysis/backtester.py \
     --symbol ETH/USDT:USDT --timeframe 1h \
+    --from 2024-01-01 \
     --config src/fibot/strategy/configs/config_ETHUSDT_1h_fib.json
 ```
 

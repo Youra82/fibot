@@ -15,32 +15,34 @@ fi
 
 SYMBOL="${1:-BTC/USDT:USDT}"
 TIMEFRAME="${2:-4h}"
-DAYS="${3:-}"        # leer = auto (Backtester leitet aus Timeframe ab)
-CAPITAL="${4:-1000}"
+DATE_FROM="${3:-}"   # YYYY-MM-DD oder leer
+DATE_TO="${4:-}"     # YYYY-MM-DD oder leer (= heute)
+CAPITAL="${5:-1000}"
 
 echo "=================================================="
 echo "FiBot Pipeline"
 echo "Symbol    : $SYMBOL"
 echo "Timeframe : $TIMEFRAME"
-echo "Tage      : ${DAYS:-auto (je nach Timeframe)}"
+if [ -n "$DATE_FROM" ]; then
+    echo "Von       : $DATE_FROM"
+    echo "Bis       : ${DATE_TO:-heute}"
+else
+    echo "Zeitraum  : auto (je nach Timeframe)"
+fi
 echo "Kapital   : $CAPITAL USDT"
 echo "=================================================="
 
 echo ""
 echo ">>> Starte Backtest..."
-if [ -n "$DAYS" ]; then
-    $PYTHON src/fibot/analysis/backtester.py \
-        --symbol "$SYMBOL" \
-        --timeframe "$TIMEFRAME" \
-        --days "$DAYS" \
-        --capital "$CAPITAL"
-else
-    # Kein --days → Backtester wählt automatisch passende Tage für den Timeframe
-    $PYTHON src/fibot/analysis/backtester.py \
-        --symbol "$SYMBOL" \
-        --timeframe "$TIMEFRAME" \
-        --capital "$CAPITAL"
+
+ARGS="--symbol $SYMBOL --timeframe $TIMEFRAME --capital $CAPITAL"
+
+if [ -n "$DATE_FROM" ]; then
+    ARGS="$ARGS --from $DATE_FROM"
+    [ -n "$DATE_TO" ] && ARGS="$ARGS --to $DATE_TO"
 fi
+
+$PYTHON src/fibot/analysis/backtester.py $ARGS
 
 echo ""
 echo ">>> Pipeline abgeschlossen."
