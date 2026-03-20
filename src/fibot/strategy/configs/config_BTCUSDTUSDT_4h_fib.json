@@ -20,6 +20,11 @@
     "_comment3": "Toleranz: wie nah muss Preis an Fib-Level sein (in %)",
     "proximity_pct": 0.5,
 
+    "_comment3b": "Struktur-Toleranzzone: Puffer um Trendlinie = ATR × dieser Faktor",
+    "_comment3c": "0.3 = 30% eines ATR-Schritts als Zone (empfohlen für 4h)",
+    "_comment3d": "Erhöhen (0.5) für volatilere Assets, verringern (0.2) für enge Strukturen",
+    "structure_tolerance_atr_mult": 0.3,
+
     "_comment4": "Indikatoren-Filter",
     "rsi_period": 14,
     "rsi_oversold": 45,

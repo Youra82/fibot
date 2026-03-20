@@ -136,10 +136,36 @@ Für SHORT-Setup (Preis ist gestiegen, sucht Widerstand):
 
 ---
 
-### Phase 3 — Strukturerkennung
+### Phase 3 — Strukturerkennung + Toleranzzone
 
 Der Bot legt automatisch Trendlinien durch die Pivot-Hochs und Pivot-Tiefs
-(lineare Regression) und klassifiziert das Ergebnis:
+(lineare Regression) und klassifiziert das Ergebnis.
+
+**Wichtig:** Eine Trendlinie ist keine exakte Linie — Preise testen sie immer
+mit etwas Abstand. Deshalb berechnet der Bot eine **ATR-basierte Toleranzzone**
+um jede Trendlinie:
+
+```
+Toleranzzone = Trendlinie ± (structure_tolerance_atr_mult × ATR)
+
+Beispiel (BTC/USDT 4H, ATR = 800 USDT, Mult = 0.3):
+
+  Trendlinie (Support) = 83.200
+  Toleranz             = 0.3 × 800 = 240 USDT
+
+  Support-Zone:  82.960 ──────── 83.200 ──────── 83.440
+                 (Untergrenze)  (Linie)  (Obergrenze)
+
+  → Preis zwischen 82.960 und 83.440 = "testet die Unterstützung" → Confluence-Bonus
+  → Preis unter 82.960               = echter Breakdown (kein False-Breakout)
+  → Preis über 83.440                = oberhalb der Struktur (kein Support-Kontakt)
+```
+
+Die Zone verhindert zwei häufige Fehler:
+- **False Breakout:** Preis schießt kurz über die Linie, kehrt dann um → ohne Zone
+  würde das als Breakout gewertet. Mit Zone muss der Preis die Zone komplett verlassen.
+- **Missed Confluence:** Preis berührt die Linie nicht exakt, ist aber klar in der
+  "Reaktionszone" → wird ohne Toleranz als "kein Kontakt" gezählt.
 
 | Strukturtyp | Beschreibung | Bias |
 |---|---|---|
@@ -149,8 +175,8 @@ Der Bot legt automatisch Trendlinien durch die Pivot-Hochs und Pivot-Tiefs
 | `channel_down` | Absteigender Kanal (parallele fallende Linien) | Bärisch |
 | `channel_up` | Aufsteigender Kanal (parallele steigende Linien) | Bullisch |
 
-**Breakout-Erkennung:** Schließt der Preis außerhalb der Struktur, wird ein
-Breakout registriert und fließt als Bonus-Score in die Signalqualität ein.
+**Breakout-Erkennung:** Ein Breakout wird nur registriert wenn der letzte Close
+**außerhalb der Toleranzzone** schließt — nicht nur über/unter der nackten Trendlinie.
 
 ---
 
@@ -309,6 +335,7 @@ Grund    : LONG | RSI überverkauft (41.2) | Volumen 1.43x
 | `fib_tp1_level` | 1.000 | TP1 (100% = zurück zum Swing) |
 | `fib_tp2_level` | 1.272 | TP2 (127.2% Extension) |
 | `proximity_pct` | 0.5 | Toleranz in %: wie nah muss Preis am Fib-Level sein |
+| `structure_tolerance_atr_mult` | 0.3 | Struktur-Toleranzzone: Puffer um Trendlinie = ATR × Faktor. 0.3 = eng (ruhige Märkte), 0.5 = weit (volatile Märkte) |
 | `rsi_oversold` | 45 | RSI-Schwelle für LONG (unter = Einstieg erlaubt) |
 | `rsi_overbought` | 55 | RSI-Schwelle für SHORT (über = Einstieg erlaubt) |
 | `volume_ratio_min` | 1.0 | Volumen muss ≥ MA × dieser Faktor sein |

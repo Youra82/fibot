@@ -108,8 +108,14 @@ class StructureInfo:
     upper_intercept: float
     lower_intercept: float
     n_bars: int         # lookback bars used
-    support_at: float   # current lower trendline value (support)
-    resistance_at: float  # current upper trendline value (resistance)
+    support_at: float   # current lower trendline value (center)
+    resistance_at: float  # current upper trendline value (center)
+    # Toleranzzone: ATR-basierter Puffer um die Trendlinie
+    # Preis gilt als "an der Struktur" wenn er in dieser Zone liegt
+    support_zone_low: float   # support_at - atr_mult * ATR
+    support_zone_high: float  # support_at + atr_mult * ATR
+    resistance_zone_low: float   # resistance_at - atr_mult * ATR
+    resistance_zone_high: float  # resistance_at + atr_mult * ATR
     breakout: str       # "none", "up", "down"
     breakout_strength: float  # 0–1
 
@@ -223,14 +229,28 @@ def _fit_line(x: np.ndarray, y: np.ndarray) -> Tuple[float, float]:
 
 
 def detect_structure(df: pd.DataFrame, lookback: int = 60,
-                     pivot_left: int = 3, pivot_right: int = 3) -> StructureInfo:
+                     pivot_left: int = 3, pivot_right: int = 3,
+                     tolerance_atr_mult: float = 0.3) -> StructureInfo:
     """
     Fits linear regression lines through pivot highs and pivot lows.
     Classifies the resulting shape as wedge/triangle/channel.
-    Also checks for recent breakouts.
+
+    Toleranzzone:
+      Jede Trendlinie hat eine ATR-basierte Pufferzone (± tolerance_atr_mult × ATR).
+      - Preis IN der Zone → "testet die Struktur" → Confluence-Bonus
+      - Preis AUSSERHALB der Zone → echter Breakout (kein falscher Ausbruch)
+
+      Beispiel (BTC, ATR=800, mult=0.3):
+        support_at       = 83.200
+        support_zone_low = 83.200 - 0.3*800 = 82.960  ← Untergrenze
+        support_zone_high= 83.200 + 0.3*800 = 83.440  ← Obergrenze
+        → Preis zwischen 82.960–83.440 = "an der Unterstützung"
     """
     recent = df.iloc[-lookback:].copy().reset_index(drop=True)
     n = len(recent)
+
+    # ATR für Toleranzzone berechnen (über gesamten lookback)
+    atr = calc_atr(recent, period=min(14, n - 1))
 
     ph = find_pivot_highs(recent, pivot_left, pivot_right)
     pl = find_pivot_lows(recent, pivot_left, pivot_right)
@@ -238,16 +258,21 @@ def detect_structure(df: pd.DataFrame, lookback: int = 60,
     ph_idx = np.array(ph[ph].index.tolist(), dtype=float)
     pl_idx = np.array(pl[pl].index.tolist(), dtype=float)
 
+    tolerance = tolerance_atr_mult * atr
+
     # Need at least 2 pivot highs and 2 pivot lows for meaningful lines
     if len(ph_idx) < 2 or len(pl_idx) < 2:
         logger.debug("Nicht genug Pivots für Strukturerkennung.")
+        s = float(recent['low'].iloc[-1])
+        r = float(recent['high'].iloc[-1])
         return StructureInfo(
             type="none", bias="neutral",
             upper_slope=0, lower_slope=0,
-            upper_intercept=recent['high'].mean(), lower_intercept=recent['low'].mean(),
+            upper_intercept=r, lower_intercept=s,
             n_bars=n,
-            support_at=recent['low'].iloc[-1],
-            resistance_at=recent['high'].iloc[-1],
+            support_at=s, resistance_at=r,
+            support_zone_low=s - tolerance,   support_zone_high=s + tolerance,
+            resistance_zone_low=r - tolerance, resistance_zone_high=r + tolerance,
             breakout="none", breakout_strength=0.0
         )
 
@@ -262,17 +287,22 @@ def detect_structure(df: pd.DataFrame, lookback: int = 60,
     resistance_at = up_slope * cur + up_intercept
     support_at    = lo_slope * cur + lo_intercept
 
+    # Toleranzzonen um die Trendlinien
+    support_zone_low    = support_at    - tolerance
+    support_zone_high   = support_at    + tolerance
+    resistance_zone_low = resistance_at - tolerance
+    resistance_zone_high= resistance_at + tolerance
+
     # Classify
     up_dir = "up"   if up_slope > 0 else "down"
     lo_dir = "up"   if lo_slope > 0 else "down"
 
     if up_dir == "down" and lo_dir == "down":
-        # Both declining
         spread_start = (up_slope * 0 + up_intercept) - (lo_slope * 0 + lo_intercept)
         spread_end   = resistance_at - support_at
         if spread_end < spread_start * 0.85:
             structure_type = "wedge_down"
-            bias = "bullish"  # descending wedge → bullish breakout expected
+            bias = "bullish"
         else:
             structure_type = "channel_down"
             bias = "bearish"
@@ -281,32 +311,36 @@ def detect_structure(df: pd.DataFrame, lookback: int = 60,
         spread_end   = resistance_at - support_at
         if spread_end < spread_start * 0.85:
             structure_type = "wedge_up"
-            bias = "bearish"  # ascending wedge → bearish breakout expected
+            bias = "bearish"
         else:
             structure_type = "channel_up"
             bias = "bullish"
     else:
-        # Lines converging from opposite sides
         structure_type = "triangle"
-        if abs(up_slope) > abs(lo_slope):
-            bias = "bearish"
-        else:
-            bias = "bullish"
+        bias = "bearish" if abs(up_slope) > abs(lo_slope) else "bullish"
 
-    # Breakout detection (last 3 bars outside trendlines)
-    close_recent = recent['close'].iloc[-3:].values
+    # Breakout detection:
+    # Echter Breakout = letzter Close AUSSERHALB der Toleranzzone (nicht nur über der Linie)
+    last_close = float(recent['close'].iloc[-1])
     breakout = "none"
     breakout_strength = 0.0
-    last_close = recent['close'].iloc[-1]
-    last_resistance = up_slope * cur + up_intercept
-    last_support    = lo_slope * cur + lo_intercept
 
-    if last_close > last_resistance:
+    if last_close > resistance_zone_high:
+        # Klar oberhalb der Resistance-Zone → Breakout UP
         breakout = "up"
-        breakout_strength = min(1.0, (last_close - last_resistance) / last_resistance * 100)
-    elif last_close < last_support:
+        breakout_strength = min(1.0, (last_close - resistance_zone_high) / resistance_zone_high * 100)
+        logger.debug(f"Breakout UP: close={last_close:.2f} > resistance_zone_high={resistance_zone_high:.2f} "
+                     f"(Trendlinie={resistance_at:.2f} ± {tolerance:.2f})")
+    elif last_close < support_zone_low:
+        # Klar unterhalb der Support-Zone → Breakout DOWN
         breakout = "down"
-        breakout_strength = min(1.0, (last_support - last_close) / last_support * 100)
+        breakout_strength = min(1.0, (support_zone_low - last_close) / support_zone_low * 100)
+        logger.debug(f"Breakout DOWN: close={last_close:.2f} < support_zone_low={support_zone_low:.2f} "
+                     f"(Trendlinie={support_at:.2f} ± {tolerance:.2f})")
+    elif support_zone_low <= last_close <= support_zone_high:
+        logger.debug(f"Preis testet Support-Zone: {support_zone_low:.2f}–{support_zone_high:.2f}")
+    elif resistance_zone_low <= last_close <= resistance_zone_high:
+        logger.debug(f"Preis testet Resistance-Zone: {resistance_zone_low:.2f}–{resistance_zone_high:.2f}")
 
     return StructureInfo(
         type=structure_type,
@@ -318,6 +352,10 @@ def detect_structure(df: pd.DataFrame, lookback: int = 60,
         n_bars=n,
         support_at=support_at,
         resistance_at=resistance_at,
+        support_zone_low=support_zone_low,
+        support_zone_high=support_zone_high,
+        resistance_zone_low=resistance_zone_low,
+        resistance_zone_high=resistance_zone_high,
         breakout=breakout,
         breakout_strength=breakout_strength,
     )
@@ -380,34 +418,36 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
       rsi_overbought       float (default 55)   — SHORT only if RSI > this
       volume_ratio_min     float (default 1.0)  — volume must be > mean * this
       min_rr               float (default 1.5)  — minimum R:R ratio
-      atr_period           int   (default 14)
-      atr_sl_multiplier    float (default 1.5)  — SL = ATR * this (cap)
+      atr_period                    int   (default 14)
+      atr_sl_multiplier             float (default 1.5)  — SL = ATR * this (cap)
+      structure_tolerance_atr_mult  float (default 0.3)  — Toleranzzone = ATR * this
     """
     cfg = config.get("strategy", {})
 
-    swing_lookback     = int(cfg.get("swing_lookback",     100))
-    pivot_left         = int(cfg.get("pivot_left",          5))
-    pivot_right        = int(cfg.get("pivot_right",         5))
-    structure_lookback = int(cfg.get("structure_lookback",  60))
-    fib_entry_min      = float(cfg.get("fib_entry_min",    0.382))
-    fib_entry_max      = float(cfg.get("fib_entry_max",    0.618))
-    fib_sl_level       = float(cfg.get("fib_sl_level",     0.786))
-    fib_tp1_level      = float(cfg.get("fib_tp1_level",    1.000))
-    fib_tp2_level      = float(cfg.get("fib_tp2_level",    1.272))
-    proximity_pct      = float(cfg.get("proximity_pct",    0.5))
-    rsi_period         = int(cfg.get("rsi_period",          14))
-    rsi_oversold       = float(cfg.get("rsi_oversold",      45))
-    rsi_overbought     = float(cfg.get("rsi_overbought",    55))
-    volume_ratio_min   = float(cfg.get("volume_ratio_min",  1.0))
-    min_rr             = float(cfg.get("min_rr",            1.5))
-    atr_period         = int(cfg.get("atr_period",          14))
-    atr_sl_mult        = float(cfg.get("atr_sl_multiplier", 1.5))
+    swing_lookback          = int(cfg.get("swing_lookback",             100))
+    pivot_left              = int(cfg.get("pivot_left",                   5))
+    pivot_right             = int(cfg.get("pivot_right",                  5))
+    structure_lookback      = int(cfg.get("structure_lookback",          60))
+    fib_entry_min           = float(cfg.get("fib_entry_min",           0.382))
+    fib_entry_max           = float(cfg.get("fib_entry_max",           0.618))
+    fib_sl_level            = float(cfg.get("fib_sl_level",            0.786))
+    fib_tp1_level           = float(cfg.get("fib_tp1_level",           1.000))
+    fib_tp2_level           = float(cfg.get("fib_tp2_level",           1.272))
+    proximity_pct           = float(cfg.get("proximity_pct",           0.5))
+    rsi_period              = int(cfg.get("rsi_period",                  14))
+    rsi_oversold            = float(cfg.get("rsi_oversold",             45))
+    rsi_overbought          = float(cfg.get("rsi_overbought",           55))
+    volume_ratio_min        = float(cfg.get("volume_ratio_min",         1.0))
+    min_rr                  = float(cfg.get("min_rr",                   1.5))
+    atr_period              = int(cfg.get("atr_period",                  14))
+    atr_sl_mult             = float(cfg.get("atr_sl_multiplier",        1.5))
+    struct_tol_mult         = float(cfg.get("structure_tolerance_atr_mult", 0.3))
 
     no_signal = FibSignal(
         direction="none", entry_price=0.0, sl_price=0.0,
         tp1_price=0.0, tp2_price=0.0,
         fib_levels=FibLevels(0.0, 0.0, "none"),
-        structure=StructureInfo("none","neutral",0,0,0,0,0,0,0,"none",0),
+        structure=StructureInfo("none","neutral",0,0,0,0,0,0,0,0,0,0,0,"none",0),
         entry_fib_name="", rr_ratio=0.0, reason="Kein Signal", score=0.0
     )
 
@@ -430,8 +470,9 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
     # -- Step 2: Fib levels --
     fibs = compute_fib_levels(swings)
 
-    # -- Step 3: Structure --
-    structure = detect_structure(df, structure_lookback, pivot_left, pivot_right)
+    # -- Step 3: Structure (mit ATR-basierter Toleranzzone) --
+    structure = detect_structure(df, structure_lookback, pivot_left, pivot_right,
+                                 tolerance_atr_mult=struct_tol_mult)
 
     # -- Step 4: Indicators --
     rsi = calc_rsi(df['close'], rsi_period)
@@ -478,10 +519,13 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
         elif structure.breakout == "none" and price_in_zone:
             score += 1.0
 
-        # Support confluence: near structure support
-        if abs(current_price - structure.support_at) / current_price * 100 < 0.8:
+        # Support confluence: Preis in der Toleranzzone der Support-Trendlinie
+        if structure.support_zone_low <= current_price <= structure.support_zone_high:
             score += 1.5
-            reason_parts.append(f"Preis nahe Struktur-Support ({structure.support_at:.2f})")
+            reason_parts.append(
+                f"Preis in Struktur-Support-Zone "
+                f"({structure.support_zone_low:.2f}–{structure.support_zone_high:.2f})"
+            )
 
         # ATR-based SL
         sl_atr  = current_price - atr * atr_sl_mult
@@ -554,10 +598,13 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
         elif structure.breakout == "none" and price_in_zone:
             score += 1.0
 
-        # Resistance confluence
-        if abs(current_price - structure.resistance_at) / current_price * 100 < 0.8:
+        # Resistance confluence: Preis in der Toleranzzone der Resistance-Trendlinie
+        if structure.resistance_zone_low <= current_price <= structure.resistance_zone_high:
             score += 1.5
-            reason_parts.append(f"Preis nahe Struktur-Resistance ({structure.resistance_at:.2f})")
+            reason_parts.append(
+                f"Preis in Struktur-Resistance-Zone "
+                f"({structure.resistance_zone_low:.2f}–{structure.resistance_zone_high:.2f})"
+            )
 
         sl_atr   = current_price + atr * atr_sl_mult
         sl_fib   = fibs.levels["78.6"]
