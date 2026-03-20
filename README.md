@@ -44,19 +44,20 @@ Schritt 4: Confluence prüfen
    → LONG oder SHORT
 ```
 
-**Aus einem DAX 4H Chart:**
+**Beispiel: BTC/USDT 4H**
 
 ```
-Swing High: 25.402  (100%)
-Swing Low:  22.707  (0%)
+Swing High: 87.800  (100%)
+Swing Low:  80.600  (0%)
 
 Retracement-Levels:
-  38.2%  →  23.737
-  50.0%  →  24.055
-  61.8%  →  24.373
-  78.6%  →  24.826  ← Stop-Loss
- 100.0%  →  25.402  ← Take-Profit 1
- 161.8%  →  27.067  ← Take-Profit 2 (Extension)
+  38.2%  →  83.551  ← Entry-Zone Anfang
+  50.0%  →  84.200  ← Entry-Zone Mitte
+  61.8%  →  85.050  ← Entry-Zone Ende
+  78.6%  →  86.457  ← Stop-Loss
+ 100.0%  →  87.800  ← Take-Profit 1
+ 127.2%  →  89.958  ← Take-Profit 2 (Extension)
+ 161.8%  →  92.443  ← Take-Profit 3 (goldene Extension)
 ```
 
 Der Bot erkennt genau diese Strukturen und handelt sie automatisch — auf Bitget Futures.
