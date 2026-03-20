@@ -126,12 +126,19 @@ def run_backtest(df: pd.DataFrame, config: dict,
     For each bar (after warm-up), generate a signal on df[:i].
     If a trade is open, check if SL or TP was hit in the current bar.
     """
-    strategy_cfg  = config.get('strategy', {})
-    risk_cfg      = config.get('risk', {})
-    leverage      = int(risk_cfg.get('leverage', 10))
-    risk_pct      = float(risk_cfg.get('risk_per_entry_pct', 1.0))
-    min_score     = float(strategy_cfg.get('min_signal_score', 4.0))
-    candle_warmup = int(strategy_cfg.get('swing_lookback', 100)) + 20
+    strategy_cfg    = config.get('strategy', {})
+    risk_cfg        = config.get('risk', {})
+    leverage        = int(risk_cfg.get('leverage', 10))
+    risk_pct        = float(risk_cfg.get('risk_per_entry_pct', 1.0))
+    min_score       = float(strategy_cfg.get('min_signal_score', 4.0))
+    swing_lookback  = int(strategy_cfg.get('swing_lookback', 100))
+    struct_lookback = int(strategy_cfg.get('structure_lookback', 60))
+    candle_warmup   = swing_lookback + 20
+
+    # Fenstergröße für den Signal-Slice: Strategie braucht nur die letzten
+    # max(swing_lookback, structure_lookback) + Puffer Bars — nicht den
+    # gesamten Verlauf. Das verhindert O(n²)-Verlangsamung bei langen Daten.
+    _signal_window = max(swing_lookback, struct_lookback) + 50
 
     result = BacktestResult(
         symbol=symbol,
@@ -207,7 +214,10 @@ def run_backtest(df: pd.DataFrame, config: dict,
                 continue
 
         # --- Look for new signal ---
-        slice_df = df.iloc[:i+1]
+        # Nur das notwendige Fenster übergeben (O(1) statt O(n)):
+        # generate_signal nutzt nur die letzten swing_lookback/structure_lookback Bars.
+        slice_start = max(0, i + 1 - _signal_window)
+        slice_df = df.iloc[slice_start:i+1]
         signal: FibSignal = generate_signal(slice_df, config)
 
         if signal.direction == "none" or signal.score < min_score:
