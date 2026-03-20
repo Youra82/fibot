@@ -1,0 +1,20 @@
+# Secrets
+secret.json
+*.bak
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Artifacts
+logs/
+artifacts/tracker/
+artifacts/results/
+
+# IDE
+.vscode/
+.idea/
+*.swp

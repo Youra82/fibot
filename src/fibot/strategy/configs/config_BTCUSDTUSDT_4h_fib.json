@@ -1,0 +1,42 @@
+{
+  "market": {
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "4h"
+  },
+  "strategy": {
+    "_comment": "Swing-Erkennung & Fibonacci-Parameter",
+    "swing_lookback": 100,
+    "pivot_left": 5,
+    "pivot_right": 5,
+    "structure_lookback": 60,
+
+    "_comment2": "Entry-Zone: 38.2% bis 61.8% Retracement",
+    "fib_entry_min": 0.382,
+    "fib_entry_max": 0.618,
+    "fib_sl_level": 0.786,
+    "fib_tp1_level": 1.000,
+    "fib_tp2_level": 1.272,
+
+    "_comment3": "Toleranz: wie nah muss Preis an Fib-Level sein (in %)",
+    "proximity_pct": 0.5,
+
+    "_comment4": "Indikatoren-Filter",
+    "rsi_period": 14,
+    "rsi_oversold": 45,
+    "rsi_overbought": 55,
+    "volume_ratio_min": 1.0,
+    "atr_period": 14,
+    "atr_sl_multiplier": 1.5,
+
+    "_comment5": "Mindest R:R und Signal-Score (0-10)",
+    "min_rr": 1.5,
+    "min_signal_score": 4.0,
+
+    "candle_limit": 300
+  },
+  "risk": {
+    "leverage": 10,
+    "margin_mode": "isolated",
+    "risk_per_entry_pct": 1.0
+  }
+}
