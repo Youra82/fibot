@@ -574,6 +574,7 @@ cd ~/fibot
 
 ```bash
 # Empfohlen: interaktives Menü
+chmod +x show_results.sh
 ./show_results.sh
 
 # Oder direkt per Python:
@@ -610,10 +611,11 @@ cat artifacts/tracker/fibot_BTCUSDTUSDT_4h.json
 #### Bot aktualisieren
 
 ```bash
-./update.sh
+chmod +x update.sh && ./update.sh
 ```
 
 Sichert automatisch `secret.json` vor dem `git reset --hard`.
+Ab dem zweiten Aufruf setzt `update.sh` selbst `chmod +x *.sh` — das `chmod` ist nur beim allerersten Mal nötig.
 
 ---
 
