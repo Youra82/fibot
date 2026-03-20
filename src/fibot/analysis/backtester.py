@@ -15,7 +15,9 @@ import numpy as np
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from fibot.strategy.fibonacci_logic import generate_signal, precompute_indicators, FibSignal
+from fibot.strategy.fibonacci_logic import (
+    generate_signal, precompute_indicators, precompute_swings_and_zones, FibSignal
+)
 
 logger = logging.getLogger(__name__)
 
@@ -150,8 +152,12 @@ def run_backtest(df: pd.DataFrame, config: dict,
     capital   = start_capital
     open_trade: Optional[BacktestTrade] = None
 
-    # Indikatoren einmal vorberechnen (RSI, ATR, Vol-Ratio) — vermeidet O(n²) Neuberechnung
+    # 1) Indikatoren einmal vorberechnen (RSI, ATR, Vol-Ratio)
     df = precompute_indicators(df, config)
+    # 2) Swings + Fib-Zonen vorberechnen — wie dbot's Batch-Prediction:
+    #    pivots einmal auf vollem Array, dann O(log n) pro Bar via Binary Search.
+    #    Ergebnis: _in_zone-Spalte → Loop überspringt 99% der Bars ohne generate_signal.
+    df = precompute_swings_and_zones(df, config)
 
     logger.info(f"Starte Backtest: {symbol} ({timeframe}) | {len(df)} Kerzen | Kapital: {start_capital}")
 
@@ -214,8 +220,11 @@ def run_backtest(df: pd.DataFrame, config: dict,
                 continue
 
         # --- Look for new signal ---
-        # Nur das notwendige Fenster übergeben (O(1) statt O(n)):
-        # generate_signal nutzt nur die letzten swing_lookback/structure_lookback Bars.
+        # Schneller Vorfilter: _in_zone wurde von precompute_swings_and_zones
+        # bereits für alle Bars berechnet. Nur wenn True → teures generate_signal aufrufen.
+        if not df['_in_zone'].iloc[i]:
+            continue
+
         slice_start = max(0, i + 1 - _signal_window)
         slice_df = df.iloc[slice_start:i+1]
         signal: FibSignal = generate_signal(slice_df, config)

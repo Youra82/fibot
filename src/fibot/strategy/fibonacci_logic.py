@@ -195,6 +195,105 @@ def precompute_indicators(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     return df
 
 
+def precompute_swings_and_zones(df: pd.DataFrame, config: dict) -> pd.DataFrame:
+    """
+    Inspiriert von dbot's Batch-Prediction-Ansatz: alles VOR der Backtest-Loop
+    vorberechnen, damit der Backtester nur noch O(1)-Spalten-Lookups macht.
+
+    Ablauf:
+    1. argrelmax/argrelmin EINMAL auf dem vollen Array (nicht pro Bar)
+    2. Für jeden Bar: Binary Search in sortierten Pivot-Arrays → O(log n)
+    3. Dominante Swing + Fib-Levels + Zone-Membership als Spalten schreiben
+
+    Neue Spalten:
+      _sw_high, _sw_low          — Preis des dominanten Swings
+      _sw_high_idx, _sw_low_idx  — Position im Fenster
+      _sw_dir                    — 1=up (SHORT-Setup), -1=down (LONG-Setup), 0=keiner
+      _zone_low, _zone_high      — Fib-Entry-Zone mit ATR-Puffer
+      _in_zone                   — Bool: aktueller Close in der Entry-Zone
+    """
+    cfg        = config.get('strategy', {})
+    swing_lb   = int(cfg.get('swing_lookback', 100))
+    pivot_l    = int(cfg.get('pivot_left', 5))
+    pivot_r    = int(cfg.get('pivot_right', 5))
+    fib_tol_m  = float(cfg.get('fib_tolerance_atr_mult', 0.5))
+
+    order  = max(pivot_l, pivot_r, 1)
+    n      = len(df)
+    highs  = df['high'].values
+    lows   = df['low'].values
+    closes = df['close'].values
+    atr_v  = df['_atr'].values if '_atr' in df.columns else np.ones(n)
+
+    # Pivots EINMAL auf vollem Array berechnen — O(n), sortiert für Binary Search
+    ph_arr = np.sort(argrelmax(highs, order=order)[0])
+    pl_arr = np.sort(argrelmin(lows,  order=order)[0])
+
+    sw_high     = np.full(n, np.nan)
+    sw_low      = np.full(n, np.nan)
+    sw_high_idx = np.full(n, -1,    dtype=np.int32)
+    sw_low_idx  = np.full(n, -1,    dtype=np.int32)
+    sw_dir      = np.zeros(n,       dtype=np.int8)   # 1=up, -1=down, 0=none
+    zone_low    = np.full(n, np.nan)
+    zone_high   = np.full(n, np.nan)
+    in_zone     = np.zeros(n,       dtype=bool)
+
+    for i in range(swing_lb, n):
+        start = i - swing_lb + 1
+
+        # Binary Search: Pivots im Fenster [start, i] — O(log n) in C
+        phi_lo = int(np.searchsorted(ph_arr, start))
+        phi_hi = int(np.searchsorted(ph_arr, i + 1))
+        pli_lo = int(np.searchsorted(pl_arr, start))
+        pli_hi = int(np.searchsorted(pl_arr, i + 1))
+
+        ph_win = ph_arr[phi_lo:phi_hi]
+        pl_win = pl_arr[pli_lo:pli_hi]
+
+        if len(ph_win) == 0 or len(pl_win) == 0:
+            continue
+
+        max_h_pos = int(ph_win[np.argmax(highs[ph_win])])
+        min_l_pos = int(pl_win[np.argmin(lows[pl_win])])
+
+        h = highs[max_h_pos]
+        l = lows[min_l_pos]
+        if abs(h - l) / l * 100 < 1.0:
+            continue
+
+        sw_high[i]     = h
+        sw_low[i]      = l
+        sw_high_idx[i] = max_h_pos
+        sw_low_idx[i]  = min_l_pos
+
+        diff    = h - l
+        fib_tol = fib_tol_m * atr_v[i]
+
+        if max_h_pos > min_l_pos:        # "up" → SHORT-Setup
+            sw_dir[i]    = 1
+            e_low        = h - 0.618 * diff
+            e_high       = h - 0.382 * diff
+        else:                            # "down" → LONG-Setup
+            sw_dir[i]    = -1
+            e_low        = l + 0.382 * diff
+            e_high       = l + 0.618 * diff
+
+        zone_low[i]  = e_low  - fib_tol
+        zone_high[i] = e_high + fib_tol
+        in_zone[i]   = zone_low[i] <= closes[i] <= zone_high[i]
+
+    df = df.copy()
+    df['_sw_high']     = sw_high
+    df['_sw_low']      = sw_low
+    df['_sw_high_idx'] = sw_high_idx
+    df['_sw_low_idx']  = sw_low_idx
+    df['_sw_dir']      = sw_dir
+    df['_zone_low']    = zone_low
+    df['_zone_high']   = zone_high
+    df['_in_zone']     = in_zone
+    return df
+
+
 def find_significant_swings(df: pd.DataFrame, lookback: int = 100,
                               pivot_left: int = 5, pivot_right: int = 5) -> Optional[SwingPoints]:
     """
