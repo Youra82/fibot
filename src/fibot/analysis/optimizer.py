@@ -141,10 +141,18 @@ def optimize(symbol: str, timeframe: str,
         pruner=optuna.pruners.MedianPruner(),
     )
 
-    print(f"  Optimiere {n_trials} Trials... ", end='', flush=True)
+    interval = max(10, n_trials // 10)  # ~10 Updates, min alle 10 Trials
+
+    def _progress(study, trial):
+        n = trial.number + 1
+        if n % interval == 0 or n == n_trials:
+            best = study.best_value if study.best_value > -999.0 else None
+            best_str = f" | Bestes Score: {best:.2f}" if best is not None else ""
+            print(f"  [{n:>{len(str(n_trials))}}/{n_trials}] Trials{best_str}", flush=True)
+
+    print(f"  Optimiere {n_trials} Trials...")
     study.optimize(_objective, n_trials=n_trials, show_progress_bar=False,
-                   n_jobs=1)
-    print("fertig.")
+                   n_jobs=1, callbacks=[_progress])
 
     best = study.best_trial
     if best.value <= -999.0:
