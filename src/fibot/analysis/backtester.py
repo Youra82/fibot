@@ -302,6 +302,31 @@ def save_backtest_result(result: BacktestResult, output_dir: str):
 
 
 # ---------------------------------------------------------------------------
+# Timeframe → empfohlene Backtest-Tage
+# ---------------------------------------------------------------------------
+DAYS_BY_TIMEFRAME = {
+    "1m":  90,
+    "3m":  90,
+    "5m":  180,
+    "15m": 180,
+    "30m": 365,
+    "1h":  365,
+    "2h":  365,
+    "4h":  730,   # 2 Jahre für sinnvolle Fib-Swing-Erkennung
+    "6h":  730,
+    "8h":  730,
+    "12h": 730,
+    "1d":  1095,  # 3 Jahre
+    "3d":  1460,
+    "1w":  1460,
+}
+
+def auto_days_for_timeframe(timeframe: str) -> int:
+    """Gibt die empfohlene Anzahl historischer Tage für den gegebenen Timeframe zurück."""
+    return DAYS_BY_TIMEFRAME.get(timeframe, 365)
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -315,10 +340,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FiBot Backtester")
     parser.add_argument('--symbol',    default='BTC/USDT:USDT')
     parser.add_argument('--timeframe', default='4h')
-    parser.add_argument('--days',      type=int, default=365)
+    parser.add_argument('--days',      type=int, default=None,
+                        help="Historische Tage (Standard: automatisch je nach Timeframe)")
     parser.add_argument('--capital',   type=float, default=1000.0)
     parser.add_argument('--config',    type=str, default=None, help="Pfad zur config_*.json")
     args = parser.parse_args()
+
+    # Tage automatisch ableiten wenn nicht angegeben
+    days = args.days if args.days is not None else auto_days_for_timeframe(args.timeframe)
+    logger.info(f"Backtest-Zeitraum: {days} Tage (Timeframe: {args.timeframe})")
 
     # Load config
     if args.config:
@@ -361,7 +391,7 @@ if __name__ == "__main__":
     exchange = ccxt.bitget({'enableRateLimit': True, 'options': {'defaultType': 'swap'}})
     exchange.load_markets()
     tf_ms = exchange.parse_timeframe(args.timeframe) * 1000
-    since = exchange.milliseconds() - args.days * 24 * 60 * 60 * 1000
+    since = exchange.milliseconds() - days * 24 * 60 * 60 * 1000
     all_ohlcv = []
     while since < exchange.milliseconds():
         try:

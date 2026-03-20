@@ -420,12 +420,26 @@ Die mitgelieferte BTC-Config kann als Vorlage kopiert und angepasst werden.
 #### 3. Backtest ausführen
 
 ```bash
-./run_pipeline.sh BTC/USDT:USDT 4h 365 1000
+./run_pipeline.sh BTC/USDT:USDT 4h
+#                 Symbol         TF   (Tage automatisch, Kapital default 1000)
+
+# Oder mit eigenen Werten:
+./run_pipeline.sh BTC/USDT:USDT 4h 730 1000
 #                 Symbol         TF  Tage Kapital
 ```
 
-Der Backtester lädt 365 Tage historische Daten von Bitget (ohne API-Key)
-und simuliert die Fib-Strategie im Walk-Forward-Verfahren.
+Der Backtester lädt historische Daten von Bitget (ohne API-Key) und wählt
+den Zeitraum automatisch passend zum Timeframe:
+
+| Timeframe | Historische Tage | Kerzen |
+|---|---|---|
+| 15m / 30m | 180 Tage | ~17.000 |
+| 1h / 2h | 365 Tage | ~8.700 |
+| **4h** | **730 Tage** | **~4.380** |
+| 12h / 1d | 1095 Tage | ~1.095 |
+| 1w | 1460 Tage | ~208 |
+
+Der Zeitraum kann mit `--days` manuell überschrieben werden.
 
 **Ausgabe:**
 
@@ -509,16 +523,19 @@ cd ~/fibot
 #### Backtest direkt aufrufen
 
 ```bash
-# Mit Default-Parametern
+# Tage automatisch (empfohlen) — 4h → 730 Tage
 .venv/bin/python3 src/fibot/analysis/backtester.py \
     --symbol BTC/USDT:USDT \
     --timeframe 4h \
-    --days 365 \
     --capital 1000
+
+# Tage manuell überschreiben
+.venv/bin/python3 src/fibot/analysis/backtester.py \
+    --symbol BTC/USDT:USDT --timeframe 4h --days 365 --capital 1000
 
 # Mit eigener Config
 .venv/bin/python3 src/fibot/analysis/backtester.py \
-    --symbol ETH/USDT:USDT --timeframe 1h --days 180 \
+    --symbol ETH/USDT:USDT --timeframe 1h \
     --config src/fibot/strategy/configs/config_ETHUSDT_1h_fib.json
 ```
 
