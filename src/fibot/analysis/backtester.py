@@ -15,7 +15,7 @@ import numpy as np
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from fibot.strategy.fibonacci_logic import generate_signal, FibSignal
+from fibot.strategy.fibonacci_logic import generate_signal, precompute_indicators, FibSignal
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +142,9 @@ def run_backtest(df: pd.DataFrame, config: dict,
 
     capital   = start_capital
     open_trade: Optional[BacktestTrade] = None
+
+    # Indikatoren einmal vorberechnen (RSI, ATR, Vol-Ratio) — vermeidet O(n²) Neuberechnung
+    df = precompute_indicators(df, config)
 
     logger.info(f"Starte Backtest: {symbol} ({timeframe}) | {len(df)} Kerzen | Kapital: {start_capital}")
 

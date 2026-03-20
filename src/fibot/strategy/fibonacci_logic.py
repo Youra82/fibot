@@ -140,24 +140,62 @@ class FibSignal:
 # ---------------------------------------------------------------------------
 def find_pivot_highs(df: pd.DataFrame, left: int = 5, right: int = 5) -> pd.Series:
     """ZigZag-style pivot high detection. Returns boolean Series."""
-    highs = df['high']
-    pivot = pd.Series(False, index=df.index)
-    for i in range(left, len(df) - right):
-        window = highs.iloc[i - left:i + right + 1]
-        if highs.iloc[i] == window.max():
-            pivot.iloc[i] = True
-    return pivot
+    highs = df['high'].values  # numpy array — faster random access
+    n = len(highs)
+    pivot = np.zeros(n, dtype=bool)
+    for i in range(left, n - right):
+        w = highs[i - left:i + right + 1]
+        if highs[i] == w.max():
+            pivot[i] = True
+    return pd.Series(pivot, index=df.index)
 
 
 def find_pivot_lows(df: pd.DataFrame, left: int = 5, right: int = 5) -> pd.Series:
     """ZigZag-style pivot low detection. Returns boolean Series."""
-    lows = df['low']
-    pivot = pd.Series(False, index=df.index)
-    for i in range(left, len(df) - right):
-        window = lows.iloc[i - left:i + right + 1]
-        if lows.iloc[i] == window.min():
-            pivot.iloc[i] = True
-    return pivot
+    lows = df['low'].values
+    n = len(lows)
+    pivot = np.zeros(n, dtype=bool)
+    for i in range(left, n - right):
+        w = lows[i - left:i + right + 1]
+        if lows[i] == w.min():
+            pivot[i] = True
+    return pd.Series(pivot, index=df.index)
+
+
+def precompute_indicators(df: pd.DataFrame, config: dict) -> pd.DataFrame:
+    """
+    Berechnet RSI, ATR und Volume-Ratio einmal für das gesamte DataFrame.
+    Das Ergebnis wird als Spalten (_rsi, _atr, _vol_ratio) gespeichert
+    und von generate_signal genutzt um O(n²) Neuberechnungen zu vermeiden.
+    """
+    cfg = config.get("strategy", {})
+    rsi_period = int(cfg.get("rsi_period", 14))
+    atr_period = int(cfg.get("atr_period", 14))
+
+    df = df.copy()
+
+    # RSI
+    delta    = df['close'].diff()
+    gain     = delta.clip(lower=0)
+    loss     = (-delta).clip(lower=0)
+    avg_gain = gain.ewm(alpha=1/rsi_period, min_periods=rsi_period).mean()
+    avg_loss = loss.ewm(alpha=1/rsi_period, min_periods=rsi_period).mean()
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    df['_rsi'] = 100 - (100 / (1 + rs))
+
+    # ATR
+    prev_close = df['close'].shift(1)
+    tr = pd.concat([
+        df['high'] - df['low'],
+        (df['high'] - prev_close).abs(),
+        (df['low']  - prev_close).abs(),
+    ], axis=1).max(axis=1)
+    df['_atr'] = tr.ewm(span=atr_period, min_periods=atr_period).mean()
+
+    # Volume ratio
+    df['_vol_ratio'] = df['volume'] / df['volume'].rolling(20).mean()
+
+    return df
 
 
 def find_significant_swings(df: pd.DataFrame, lookback: int = 100,
@@ -477,10 +515,10 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
     structure = detect_structure(df, structure_lookback, pivot_left, pivot_right,
                                  tolerance_atr_mult=struct_tol_mult)
 
-    # -- Step 4: Indicators --
-    rsi = calc_rsi(df['close'], rsi_period)
-    atr = calc_atr(df, atr_period)
-    vol_ratio = calc_volume_ratio(df)
+    # -- Step 4: Indicators (vorberechnet wenn verfügbar) --
+    rsi       = float(df['_rsi'].iloc[-1])      if '_rsi'      in df.columns else calc_rsi(df['close'], rsi_period)
+    atr       = float(df['_atr'].iloc[-1])      if '_atr'      in df.columns else calc_atr(df, atr_period)
+    vol_ratio = float(df['_vol_ratio'].iloc[-1]) if '_vol_ratio' in df.columns else calc_volume_ratio(df)
 
     # -- Step 5: Determine entry zone --
     score = 0.0
