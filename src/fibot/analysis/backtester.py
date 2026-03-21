@@ -16,7 +16,8 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
 from fibot.strategy.fibonacci_logic import (
-    generate_signal, precompute_indicators, precompute_swings_and_zones, FibSignal
+    precompute_indicators, precompute_all_signals,
+    # generate_signal kept for live trading in strategy/run.py
 )
 
 logger = logging.getLogger(__name__)
@@ -132,15 +133,10 @@ def run_backtest(df: pd.DataFrame, config: dict,
     risk_cfg        = config.get('risk', {})
     leverage        = int(risk_cfg.get('leverage', 10))
     risk_pct        = float(risk_cfg.get('risk_per_entry_pct', 1.0))
-    min_score       = float(strategy_cfg.get('min_signal_score', 4.0))
     swing_lookback  = int(strategy_cfg.get('swing_lookback', 100))
-    struct_lookback = int(strategy_cfg.get('structure_lookback', 60))
-    candle_warmup   = swing_lookback + 20
-
-    # Fenstergröße für den Signal-Slice: Strategie braucht nur die letzten
-    # max(swing_lookback, structure_lookback) + Puffer Bars — nicht den
-    # gesamten Verlauf. Das verhindert O(n²)-Verlangsamung bei langen Daten.
-    _signal_window = max(swing_lookback, struct_lookback) + 50
+    pivot_order     = max(int(strategy_cfg.get('pivot_left', 5)),
+                          int(strategy_cfg.get('pivot_right', 5)), 1)
+    candle_warmup   = swing_lookback + pivot_order + 10
 
     result = BacktestResult(
         symbol=symbol,
@@ -152,20 +148,25 @@ def run_backtest(df: pd.DataFrame, config: dict,
     capital   = start_capital
     open_trade: Optional[BacktestTrade] = None
 
-    # 1) Indikatoren einmal vorberechnen (RSI, ATR, Vol-Ratio)
+    # ── Batch-Precomputation: O(N log N) statt O(N²) ──────────────────────────
+    # Schritt 1: Indikatoren (RSI, ATR, Vol-Ratio) — einmal, vektorisiert
     df = precompute_indicators(df, config)
-    # 2) Swings + Fib-Zonen vorberechnen — wie dbot's Batch-Prediction:
-    #    pivots einmal auf vollem Array, dann O(log n) pro Bar via Binary Search.
-    #    Ergebnis: _in_zone-Spalte → Loop überspringt 99% der Bars ohne generate_signal.
-    df = precompute_swings_and_zones(df, config)
+    # Schritt 2: Alle Signale vorberechnen — argrelmax EINMAL auf vollem Array,
+    #            dann searchsorted (O(log N)) pro Bar statt argrelmax (O(lookback)).
+    #            Ersetzt precompute_swings_and_zones + generate_signal im Loop komplett.
+    df = precompute_all_signals(df, config)
 
     logger.info(f"Starte Backtest: {symbol} ({timeframe}) | {len(df)} Kerzen | Kapital: {start_capital}")
 
-    # Numpy-Arrays vor der Loop extrahieren — O(1) Zugriff statt pandas iloc (~5-10µs)
-    high_arr    = df['high'].values
-    low_arr     = df['low'].values
-    in_zone_arr = df['_in_zone'].values
-    timestamps  = df.index
+    # Numpy-Arrays vor der Loop extrahieren — O(1) Zugriff statt pandas iloc
+    high_arr      = df['high'].values
+    low_arr       = df['low'].values
+    sig_dir_arr   = df['_sig_dir'].values    # 0=none, 1=long, 2=short
+    sig_entry_arr = df['_sig_entry'].values
+    sig_sl_arr    = df['_sig_sl'].values
+    sig_tp1_arr   = df['_sig_tp1'].values
+    sig_score_arr = df['_sig_score'].values
+    timestamps    = df.index
 
     for i in range(candle_warmup, len(df)):
         ts = timestamps[i]
@@ -224,43 +225,38 @@ def run_backtest(df: pd.DataFrame, config: dict,
             if open_trade is not None:
                 continue
 
-        # --- Look for new signal ---
-        # Schneller Vorfilter: _in_zone wurde von precompute_swings_and_zones
-        # bereits für alle Bars berechnet. Nur wenn True → teures generate_signal aufrufen.
-        if not in_zone_arr[i]:
+        # --- O(1) Signal-Lookup aus vorberechneten Arrays ---
+        if sig_dir_arr[i] == 0:
             continue
 
-        slice_start = max(0, i + 1 - _signal_window)
-        slice_df = df.iloc[slice_start:i+1]
-        signal: FibSignal = generate_signal(slice_df, config)
-
-        if signal.direction == "none" or signal.score < min_score:
+        entry      = sig_entry_arr[i]
+        sl         = sig_sl_arr[i]
+        price_risk = abs(entry - sl)
+        if price_risk <= 0:
             continue
 
         # Notional check
         risk_amount = capital * risk_pct / 100
-        price_risk  = abs(signal.entry_price - signal.sl_price)
-        if price_risk <= 0:
-            continue
-        contracts = risk_amount / price_risk
-        notional  = contracts * signal.entry_price
+        contracts   = risk_amount / price_risk
+        notional    = contracts * entry
         if notional < MIN_NOTIONAL_USDT:
             logger.debug(f"[{ts}] Notional zu klein: {notional:.2f} USDT")
             continue
 
+        direction_str = 'long' if sig_dir_arr[i] == 1 else 'short'
         open_trade = BacktestTrade(
             bar_idx=i,
             timestamp=ts,
-            direction=signal.direction,
-            entry=signal.entry_price,
-            sl=signal.sl_price,
-            tp1=signal.tp1_price,
+            direction=direction_str,
+            entry=entry,
+            sl=sl,
+            tp1=sig_tp1_arr[i],
             contracts=contracts,
-            score=signal.score,
-            reason=signal.reason,
+            score=sig_score_arr[i],
+            reason='precomputed',
         )
-        logger.debug(f"[{ts}] {signal.direction.upper()} Entry @ {signal.entry_price:.4f} | "
-                     f"SL {signal.sl_price:.4f} | TP {signal.tp1_price:.4f} | Score {signal.score:.1f}")
+        logger.debug(f"[{ts}] {direction_str.upper()} Entry @ {entry:.4f} | "
+                     f"SL {sl:.4f} | TP {sig_tp1_arr[i]:.4f} | Score {sig_score_arr[i]:.1f}")
 
     # Close any remaining open trade at last bar close
     if open_trade is not None:

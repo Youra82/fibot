@@ -258,6 +258,301 @@ def precompute_swings_and_zones(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     return df
 
 
+def _quick_structure_precomputed(
+        highs: np.ndarray, lows: np.ndarray, closes: np.ndarray,
+        sph_pos: np.ndarray, spl_pos: np.ndarray,
+        sph_val: np.ndarray, spl_val: np.ndarray,
+        i: int, struct_lookback: int, struct_order: int,
+        atr: float, struct_tol_mult: float,
+        direction: str,
+) -> tuple:
+    """
+    Schnelle Strukturerkennung mit einmalig vorberechneten Pivots.
+    Kein argrelmax pro Bar — nur searchsorted (O(log N)).
+    Gibt zurück: (bias: str, breakout: str, confluence: bool)
+    """
+    win_start = i - struct_lookback
+
+    # Structure pivots in [win_start, i - struct_order]
+    shr = np.searchsorted(sph_pos, i - struct_order + 1)
+    shl = np.searchsorted(sph_pos, win_start)
+    slr = np.searchsorted(spl_pos, i - struct_order + 1)
+    sll = np.searchsorted(spl_pos, win_start)
+
+    w_sph_pos = sph_pos[shl:shr].astype(float)
+    w_sph_val = sph_val[shl:shr]
+    w_spl_pos = spl_pos[sll:slr].astype(float)
+    w_spl_val = spl_val[sll:slr]
+
+    if len(w_sph_pos) < 2 or len(w_spl_pos) < 2:
+        return "neutral", "none", False
+
+    up_coeffs = np.polyfit(w_sph_pos, w_sph_val, 1)
+    lo_coeffs = np.polyfit(w_spl_pos, w_spl_val, 1)
+
+    cur          = float(i)
+    resistance_at = up_coeffs[0] * cur + up_coeffs[1]
+    support_at    = lo_coeffs[0] * cur + lo_coeffs[1]
+    tolerance     = struct_tol_mult * atr
+
+    # Bias: both slopes same direction = trend
+    up_dir = up_coeffs[0] > 0
+    lo_dir = lo_coeffs[0] > 0
+    if up_dir and lo_dir:
+        bias = "bullish"
+    elif not up_dir and not lo_dir:
+        bias = "bearish"
+    else:
+        bias = "neutral"
+
+    # Breakout
+    last_close = closes[i]
+    if last_close > resistance_at + tolerance:
+        breakout = "up"
+    elif last_close < support_at - tolerance:
+        breakout = "down"
+    else:
+        breakout = "none"
+
+    # Confluence: price inside trendline ATR-zone
+    if direction == "down":    # LONG — check support
+        confluence = (support_at - tolerance) <= last_close <= (support_at + tolerance)
+    else:                       # SHORT — check resistance
+        confluence = (resistance_at - tolerance) <= last_close <= (resistance_at + tolerance)
+
+    return bias, breakout, confluence
+
+
+def precompute_all_signals(df: pd.DataFrame, config: dict) -> pd.DataFrame:
+    """
+    Vollständig vektorisierte Signal-Vorberechnung — O(N log N) statt O(N²).
+
+    Kernidee (gelernt von mbot/dnabot):
+      argrelmax/argrelmin wird EINMAL auf dem gesamten Array berechnet.
+      Pro Bar: searchsorted (O(log N)) statt erneutes argrelmax (O(lookback)).
+      DataFrame-Slicing im Loop entfällt komplett.
+
+    Ergebnis-Spalten im zurückgegebenen DataFrame:
+      _sig_dir    int8   — 0=kein Signal, 1=LONG, 2=SHORT
+      _sig_entry  float  — Entry-Preis
+      _sig_sl     float  — SL-Preis
+      _sig_tp1    float  — TP1-Preis
+      _sig_score  float  — Signal-Score (0 = kein Signal)
+
+    Der Backtester-Loop greift danach nur noch mit O(1) auf numpy-Arrays zu.
+    generate_signal() wird im Backtest nicht mehr aufgerufen.
+    """
+    cfg = config.get("strategy", {})
+    swing_lookback = int(cfg.get("swing_lookback",             100))
+    pivot_left     = int(cfg.get("pivot_left",                   5))
+    pivot_right    = int(cfg.get("pivot_right",                  5))
+    struct_lookback= int(cfg.get("structure_lookback",          60))
+    fib_entry_min  = float(cfg.get("fib_entry_min",           0.382))
+    fib_entry_max  = float(cfg.get("fib_entry_max",           0.618))
+    rsi_oversold   = float(cfg.get("rsi_oversold",             45.0))
+    rsi_overbought = float(cfg.get("rsi_overbought",           55.0))
+    vol_ratio_min  = float(cfg.get("volume_ratio_min",          1.0))
+    min_rr         = float(cfg.get("min_rr",                    1.5))
+    atr_sl_mult    = float(cfg.get("atr_sl_multiplier",         1.5))
+    fib_tol_mult   = float(cfg.get("fib_tolerance_atr_mult",   0.5))
+    struct_tol_mult= float(cfg.get("structure_tolerance_atr_mult", 0.3))
+    min_score_cfg  = float(cfg.get("min_signal_score",          4.0))
+
+    n      = len(df)
+    order  = max(pivot_left, pivot_right, 1)
+
+    highs  = df['high'].values
+    lows   = df['low'].values
+    closes = df['close'].values
+    atr_arr    = df['_atr'].values    if '_atr'       in df.columns else np.ones(n)
+    rsi_arr    = df['_rsi'].values    if '_rsi'       in df.columns else np.full(n, 50.0)
+    vol_arr    = df['_vol_ratio'].values if '_vol_ratio' in df.columns else np.ones(n)
+
+    # ── Schritt 1: Pivots EINMAL auf dem vollen Array berechnen ──────────────
+    ph_pos = argrelmax(highs, order=order)[0]
+    pl_pos = argrelmin(lows,  order=order)[0]
+    ph_val = highs[ph_pos]
+    pl_val = lows[pl_pos]
+
+    # Separate (smaller) order for structure pivots to get enough points
+    struct_order = max(3, order // 2)
+    sph_pos = argrelmax(highs, order=struct_order)[0]
+    spl_pos = argrelmin(lows,  order=struct_order)[0]
+    sph_val = highs[sph_pos]
+    spl_val = lows[spl_pos]
+
+    # ── Ergebnis-Arrays ───────────────────────────────────────────────────────
+    sig_dir   = np.zeros(n, dtype=np.int8)
+    sig_entry = np.zeros(n, dtype=np.float64)
+    sig_sl    = np.zeros(n, dtype=np.float64)
+    sig_tp1   = np.zeros(n, dtype=np.float64)
+    sig_score = np.zeros(n, dtype=np.float64)
+
+    candle_warmup = swing_lookback + order + 10
+
+    for i in range(candle_warmup, n):
+        atr = atr_arr[i]
+        if atr <= 0 or not np.isfinite(atr):
+            continue
+
+        cur_price = closes[i]
+        rsi       = rsi_arr[i]
+        vol_ratio = vol_arr[i]
+
+        # ── Schritt 2: Swing-Pivots im Fenster via searchsorted (O(log N)) ──
+        win_start = i - swing_lookback
+
+        hi_r = np.searchsorted(ph_pos, i - order + 1)   # exclusive upper bound
+        hi_l = np.searchsorted(ph_pos, win_start)
+        lo_r = np.searchsorted(pl_pos, i - order + 1)
+        lo_l = np.searchsorted(pl_pos, win_start)
+
+        if hi_r <= hi_l or lo_r <= lo_l:
+            continue
+
+        w_ph_val = ph_val[hi_l:hi_r]
+        w_pl_val = pl_val[lo_l:lo_r]
+        w_ph_pos = ph_pos[hi_l:hi_r]
+        w_pl_pos = pl_pos[lo_l:lo_r]
+
+        dom_hi_idx  = int(np.argmax(w_ph_val))
+        dom_lo_idx  = int(np.argmin(w_pl_val))
+        swing_high  = float(w_ph_val[dom_hi_idx])
+        swing_low   = float(w_pl_val[dom_lo_idx])
+        swing_hi_pos = int(w_ph_pos[dom_hi_idx])
+        swing_lo_pos = int(w_pl_pos[dom_lo_idx])
+
+        diff = swing_high - swing_low
+        if diff <= 0 or (diff / max(swing_low, 1e-9)) * 100 < 1.0:
+            continue
+
+        direction = "up" if swing_hi_pos > swing_lo_pos else "down"
+
+        # ── Schritt 3: Fib-Levels (inline, kein Objekt-Overhead) ─────────────
+        fib_tol = fib_tol_mult * atr
+
+        if direction == "down":
+            # LONG setup (price dropped, looking for bounce)
+            f_entry_low  = swing_low + fib_entry_min * diff   # ~38.2%
+            f_entry_high = swing_low + fib_entry_max * diff   # ~61.8%
+            zone_low  = f_entry_low  - fib_tol
+            zone_high = f_entry_high + fib_tol
+
+            if not (zone_low <= cur_price <= zone_high):
+                continue
+
+            # RSI: block if overbought
+            if rsi >= rsi_overbought:
+                continue
+            score = 2.0 if rsi < rsi_oversold else 1.0
+
+            # Volume
+            if vol_ratio >= vol_ratio_min:
+                score += 1.5
+
+            # Fib zone bonus
+            score += 1.5 if f_entry_low <= cur_price <= f_entry_high else 0.5
+
+            # Structure (only for bars that pass tight zone)
+            bias, breakout, confluence = _quick_structure_precomputed(
+                highs, lows, closes,
+                sph_pos, spl_pos, sph_val, spl_val,
+                i, struct_lookback, struct_order,
+                atr, struct_tol_mult, direction,
+            )
+            if bias in ("bullish", "neutral"):
+                score += 1.5
+            if breakout == "up":
+                score += 2.0
+            if confluence:
+                score += 1.5
+
+            if score < min_score_cfg:
+                continue
+
+            # SL / TP
+            sl_atr   = cur_price - atr * atr_sl_mult
+            sl_price = max(sl_atr, swing_low)       # 0% = swing_low (SL below for LONG)
+            tp1      = swing_high                    # 100% = swing_high
+
+            risk   = cur_price - sl_price
+            reward = tp1 - cur_price
+            if risk <= 0 or reward / risk < min_rr:
+                continue
+
+            sig_dir[i]   = 1
+            sig_entry[i] = cur_price
+            sig_sl[i]    = sl_price
+            sig_tp1[i]   = tp1
+            sig_score[i] = min(10.0, score)
+
+        else:  # direction == "up"
+            # SHORT setup (price rose, looking for rejection)
+            # For direction="up": levels measured from swing_high DOWN
+            # f_entry_low (in price) = swing_high - fib_entry_max * diff  (lower price)
+            # f_entry_high (in price) = swing_high - fib_entry_min * diff (higher price)
+            f_entry_high = swing_high - fib_entry_min * diff   # ~38.2% (higher price)
+            f_entry_low  = swing_high - fib_entry_max * diff   # ~61.8% (lower price)
+            zone_low  = f_entry_low  - fib_tol
+            zone_high = f_entry_high + fib_tol
+
+            if not (zone_low <= cur_price <= zone_high):
+                continue
+
+            # RSI: block if oversold
+            if rsi <= rsi_oversold:
+                continue
+            score = 2.0 if rsi > rsi_overbought else 1.0
+
+            # Volume
+            if vol_ratio >= vol_ratio_min:
+                score += 1.5
+
+            # Fib zone bonus
+            score += 1.5 if f_entry_low <= cur_price <= f_entry_high else 0.5
+
+            # Structure
+            bias, breakout, confluence = _quick_structure_precomputed(
+                highs, lows, closes,
+                sph_pos, spl_pos, sph_val, spl_val,
+                i, struct_lookback, struct_order,
+                atr, struct_tol_mult, direction,
+            )
+            if bias in ("bearish", "neutral"):
+                score += 1.5
+            if breakout == "down":
+                score += 2.0
+            if confluence:
+                score += 1.5
+
+            if score < min_score_cfg:
+                continue
+
+            # SL / TP
+            sl_atr   = cur_price + atr * atr_sl_mult
+            sl_price = min(sl_atr, swing_high)       # 0% = swing_high (SL above for SHORT)
+            tp1      = swing_low                     # 100% = swing_low
+
+            risk   = sl_price - cur_price
+            reward = cur_price - tp1
+            if risk <= 0 or reward / risk < min_rr:
+                continue
+
+            sig_dir[i]   = 2
+            sig_entry[i] = cur_price
+            sig_sl[i]    = sl_price
+            sig_tp1[i]   = tp1
+            sig_score[i] = min(10.0, score)
+
+    df = df.copy()
+    df['_sig_dir']   = sig_dir
+    df['_sig_entry'] = sig_entry
+    df['_sig_sl']    = sig_sl
+    df['_sig_tp1']   = sig_tp1
+    df['_sig_score'] = sig_score
+    return df
+
+
 def find_significant_swings(df: pd.DataFrame, lookback: int = 100,
                               pivot_left: int = 5, pivot_right: int = 5) -> Optional[SwingPoints]:
     """
