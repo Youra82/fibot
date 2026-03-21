@@ -34,63 +34,70 @@ CONFIGS_DIR = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
 
 
 # ---------------------------------------------------------------------------
-# Kapital-adaptive Parameter-Ranges
+# Kapital- und DD-adaptive Parameter-Ranges
 # ---------------------------------------------------------------------------
 
-def _get_capital_ranges(capital: float) -> dict:
+def _max_eff_risk_from_dd(max_dd: float, k: int = 3) -> float:
     """
-    Passt Optimierungs-Ranges automatisch ans Startkapital an.
+    Berechnet das maximale effektive Risiko pro Trade aus dem gewünschten max_dd.
 
-    Hintergrund: notional = (capital × risk_pct/100) ÷ sl_pct_of_price
-    Damit notional ≥ MIN_NOTIONAL_USDT (5 USDT):
-      risk_pct_min = MIN_NOTIONAL_USDT × sl_pct × 100 / capital
+    Formel: nach k aufeinanderfolgenden Verlusten soll Drawdown <= max_dd bleiben.
+      (1 - eff/100)^k >= 1 - max_dd/100
+      eff <= (1 - (1 - max_dd/100)^(1/k)) * 100
 
-    Beispiel (capital=15, sl_pct≈3% auf 1d):
-      risk_pct_min = 5 × 0.03 × 100 / 15 = 1.0%
+    k=3: schneller Vorfilter — pruned Kombinationen die selbst bei 3 Verlusten
+    in Folge schon den max_dd reissen würden. Feinere DD-Kontrolle übernimmt
+    der Backtester (er prüft den tatsächlichen DD über alle Trades).
 
-    Zusätzlich: engere atr_sl_multiplier-Range bei kleinem Kapital,
-    damit der SL nicht so weit weg liegt (kleineres price_risk → höheres notional).
+    Beispiele (k=3):
+      max_dd=30%  ->  eff <= 11.2%  (z.B. 2% x 5x = 10%)
+      max_dd=50%  ->  eff <= 20.6%  (z.B. 3% x 6x = 18%)
+      max_dd=70%  ->  eff <= 33.1%  (z.B. 5% x 6x = 30%)
+      max_dd=99%  ->  eff <= 78.5%  (praktisch unbegrenzt)
     """
-    # Maximales effektives Risiko pro Trade: risk_pct × leverage
-    # Der Backtester berechnet PnL = price_diff × contracts × leverage.
-    # Bei SL-Hit: Verlust = risk_amount × leverage = capital × risk_pct/100 × leverage
-    # → effective_risk_pct = risk_pct × leverage muss begrenzt sein.
-    # Faustformel: nach 3 Verlust-Trades noch ≥ (1 − max_dd/100) Kapital übrig
-    #   → (1 − eff/100)^3 ≥ 0.7  →  eff ≤ ~11%
-    # Wir nutzen 15% als Obergrenze (etwas großzügiger für kleine Kapitalien).
-    # Das bestimmt: max_leverage = floor(15 / risk_pct_min)
+    survival = 1.0 - max_dd / 100.0
+    if survival <= 0:
+        return 100.0
+    return (1.0 - survival ** (1.0 / k)) * 100.0
+
+
+def _get_capital_ranges(capital: float, max_dd: float = 30.0) -> dict:
+    """
+    Gibt Optimierungs-Ranges zurück, abhängig von Kapital UND max_dd.
+
+    max_effective_risk wird mathematisch aus max_dd abgeleitet:
+    Kein starre Obergrenze mehr — der Optimizer sucht selbst die beste
+    Kombination aus risk_pct × leverage die den DD-Constraint einhält.
+
+    Kapital bestimmt nur die risk_pct-Range (Notional-Constraint):
+      notional = capital × risk_pct/100 / price_risk_pct
+      Damit notional >= 5 USDT: risk_pct >= 5 × price_risk_pct × 100 / capital
+      Bei typischem price_risk_pct=1%: risk_pct_min = 5 USDT / capital × 100%
+    """
+    max_eff_risk = _max_eff_risk_from_dd(max_dd)
+
     if capital < 50:
-        # Kleinstes Kapital: risk_pct muss hoch sein (Notional), Hebel daher begrenzt
-        # risk_pct_min=2% → max_leverage=7  (2×7=14 ≤ 15)
-        # risk_pct_max=8% → max_leverage=7  (8×7=56 → wird durch Constraint begrenzt)
-        # min_max_dd=99: kleines Kapital → DD-Filter deaktivieren damit TPE-Sampler
-        # überhaupt Feedback bekommt und konvergieren kann.
-        # Hintergrund: 14% eff. Risiko/Trade → fast alle Configs haben DD>30%.
-        # Mit DD-Filter=30% → alle Trials -999 → TPE blind → nie valide Config.
-        # Die beste gefundene Config wird trotzdem nach DD-Kriterium bewertet + angezeigt.
+        # Bei kleinem Kapital höhere risk_pct nötig für ausreichende Notional (5 USDT)
+        # risk_pct_min=1%: 1% × 25 USDT = 0.25 USDT → notional bei 1% SL = 25 USDT ✓
         return {
-            "risk_per_entry_pct": (2.0,  8.0, 0.5),
+            "risk_per_entry_pct": (1.0,  8.0, 0.5),
             "atr_sl_multiplier":  (0.5,  2.0, 0.1),
-            "leverage":           (3,     7),
-            "max_effective_risk": 15.0,   # risk_pct × leverage ≤ 15%
-            "min_max_dd":         99.0,   # max_dd wird auf mindestens diesen Wert angehoben
+            "leverage":           (2,    20),
+            "max_effective_risk": max_eff_risk,
         }
     elif capital < 200:
         return {
-            "risk_per_entry_pct": (1.0,  5.0, 0.5),
+            "risk_per_entry_pct": (0.5,  5.0, 0.5),
             "atr_sl_multiplier":  (0.5,  3.0, 0.1),
-            "leverage":           (3,    15),
-            "max_effective_risk": 20.0,
-            "min_max_dd":         50.0,
+            "leverage":           (2,    20),
+            "max_effective_risk": max_eff_risk,
         }
     else:
-        # Standard-Ranges für ausreichend Kapital
         return {
             "risk_per_entry_pct": (0.5,  3.0, 0.1),
             "atr_sl_multiplier":  (0.5,  3.0, 0.1),
-            "leverage":           (3,    20),
-            "max_effective_risk": 30.0,
-            "min_max_dd":         30.0,
+            "leverage":           (2,    20),
+            "max_effective_risk": max_eff_risk,
         }
 
 
@@ -103,7 +110,7 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats: list
     _stats: gemeinsame Liste [max_trades_seen, n_valid_eff_risk, n_too_few_trades, n_high_dd]
     Wird von allen Trials aktualisiert — erlaubt Diagnose-Ausgabe nach Abschluss.
     """
-    ranges = _get_capital_ranges(capital)
+    ranges = _get_capital_ranges(capital, max_dd)
     r_min,   r_max,   r_step   = ranges["risk_per_entry_pct"]
     atr_min, atr_max, atr_step = ranges["atr_sl_multiplier"]
     lev_min, lev_max            = ranges["leverage"]
@@ -162,6 +169,9 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats: list
             return -999.0
         if result.max_drawdown_pct > max_dd:
             _stats[3] += 1   # DD zu hoch
+            # Besten (niedrigsten) erreichbaren DD tracken für Diagnose
+            if result.max_drawdown_pct < _stats[4]:
+                _stats[4] = result.max_drawdown_pct
             return -999.0
         if result.win_rate < min_wr:
             return -999.0
@@ -184,22 +194,16 @@ def optimize(symbol: str, timeframe: str,
     Lädt Daten, optimiert Parameter mit Optuna und gibt die beste Config zurück.
     Gibt None zurück wenn kein gültiges Ergebnis gefunden wurde.
     """
-    # Kapital-adaptive Ranges anzeigen wenn nötig
-    if capital < 200:
-        ranges = _get_capital_ranges(capital)
-        r = ranges["risk_per_entry_pct"]
-        a = ranges["atr_sl_multiplier"]
-        l = ranges["leverage"]
-        m = ranges["max_effective_risk"]
-        print(f"\n  HINWEIS: Kleines Kapital ({capital:.1f} USDT) — Parameter-Ranges automatisch angepasst:")
-        print(f"    risk_per_entry_pct : {r[0]:.1f} – {r[1]:.1f}%  (Standard: 0.5–3.0%)")
-        print(f"    atr_sl_multiplier  : {a[0]:.1f} – {a[1]:.1f}   (Standard: 0.5–3.0)")
-        print(f"    leverage           : {l[0]} – {l[1]}x      (Standard: 3–20x)")
-        print(f"    max effective risk : {m:.0f}%  (risk_pct x leverage <= {m:.0f}%)")
-        min_dd = ranges.get("min_max_dd", 0.0)
-        if max_dd < min_dd:
-            print(f"  WARNUNG: max_dd={max_dd:.0f}% ist sehr streng fuer {capital:.0f} USDT Kapital.")
-            print(f"           Empfehlung: --max-dd {min_dd:.0f} (sonst werden moeglicherweise 0 Configs gefunden)")
+    # Kapital- und DD-adaptive Ranges anzeigen
+    ranges = _get_capital_ranges(capital, max_dd)
+    r = ranges["risk_per_entry_pct"]
+    a = ranges["atr_sl_multiplier"]
+    l = ranges["leverage"]
+    m = ranges["max_effective_risk"]
+    print(f"\n  Parameter-Ranges (Kapital: {capital:.0f} USDT, Max-DD: {max_dd:.0f}%):")
+    print(f"    risk_per_entry_pct : {r[0]:.1f} - {r[1]:.1f}%")
+    print(f"    leverage           : {l[0]} - {l[1]}x")
+    print(f"    max effective risk : {m:.1f}%  (aus max_dd={max_dd:.0f}%: nach 3 Verlusten <= {max_dd:.0f}% DD)")
 
     print(f"\n  Lade Daten: {symbol} ({timeframe}) [{start_date} → {end_date}]")
     df = load_ohlcv(symbol, timeframe, start_date, end_date)
@@ -214,8 +218,8 @@ def optimize(symbol: str, timeframe: str,
         pruner=optuna.pruners.MedianPruner(),
     )
 
-    # _stats: [max_trades_seen, n_eff_risk_pruned, n_too_few_trades, n_high_dd]
-    _stats = [0, 0, 0, 0]
+    # _stats: [max_trades_seen, n_eff_risk_pruned, n_too_few_trades, n_high_dd, best_dd_seen]
+    _stats = [0, 0, 0, 0, float('inf')]
     objective = _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats)
     cores_str = "alle Kerne" if n_jobs == -1 else f"{n_jobs} Kern(e)"
     print(f"  Optimiere {n_trials} Trials ({cores_str})...")
@@ -223,13 +227,15 @@ def optimize(symbol: str, timeframe: str,
 
     best = study.best_trial
     if best.value <= -999.0:
-        max_trades, n_pruned, n_few, n_dd = _stats
-        print(f"  WARNUNG: Kein gültiges Ergebnis gefunden.")
-        print(f"  Diagnose: max. Trades in einem Trial = {max_trades}  "
-              f"(Minimum: {MIN_TRADES})")
-        print(f"           eff-Risk-Pruning: {n_pruned}  |  "
+        max_trades, n_pruned, n_few, n_dd, best_dd = _stats
+        print(f"  WARNUNG: Kein gueltiges Ergebnis gefunden.")
+        print(f"  Diagnose: eff-Risk-Pruning: {n_pruned}  |  "
               f"zu wenige Trades: {n_few}  |  DD zu hoch: {n_dd}")
-        if max_trades < MIN_TRADES:
+        if n_dd > 0 and best_dd < float('inf'):
+            suggested_dd = int(best_dd) + 10
+            print(f"  Bester erreichbarer DD: {best_dd:.1f}%  (Limit war: {max_dd:.0f}%)")
+            print(f"  TIPP: --max-dd {suggested_dd} verwenden um Configs zu finden.")
+        elif max_trades < MIN_TRADES:
             tf_map = {"1d": "4h", "4h": "1h", "1h": "30m", "6h": "2h"}
             alt_tf  = tf_map.get(timeframe, "kleinerer Timeframe")
             print(f"  TIPP: Strategie findet auf '{timeframe}' zu selten Signale.")
