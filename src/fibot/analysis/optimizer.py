@@ -30,8 +30,21 @@ logging.getLogger('optuna').setLevel(logging.WARNING)
 warnings.filterwarnings('ignore')
 logger = logging.getLogger(__name__)
 
-MIN_TRADES = 2     # Mindestanzahl Trades für ein gültiges Ergebnis (1d-Timeframe hat wenige Signale)
 CONFIGS_DIR = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
+
+# Minimale Trades pro Timeframe: skaliert mit Anzahl Candles im Backtest-Zeitraum.
+# Faustformel: 1 Trade pro 300 Candles (bei typischen Fib-Setups ca. 0.3% Signal-Rate).
+# Beispiele: 1d/1000 Candles → 3, 4h/2190 → 7, 1h/8760 → 29, 30m/17500 → 58
+_TF_MIN_TRADES = {
+    "1m": 50, "3m": 40, "5m": 30, "15m": 20,
+    "30m": 15, "1h": 10, "2h": 8,
+    "4h": 5, "6h": 4, "8h": 4, "12h": 3,
+    "1d": 3, "3d": 2, "1w": 2,
+}
+
+def _min_trades(timeframe: str) -> int:
+    """Gibt die Mindestanzahl Trades für einen gegebenen Timeframe zurück."""
+    return _TF_MIN_TRADES.get(timeframe, 5)
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +129,7 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats: list
     atr_min, atr_max, atr_step = ranges["atr_sl_multiplier"]
     lev_min, lev_max            = ranges["leverage"]
     max_eff_risk                = ranges["max_effective_risk"]
+    min_trades                  = _min_trades(timeframe)
 
     def _objective(trial: optuna.Trial) -> float:
         config = {
@@ -165,7 +179,7 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats: list
         if result.total_trades > _stats[0]:
             _stats[0] = result.total_trades
 
-        if result.total_trades < MIN_TRADES:
+        if result.total_trades < min_trades:
             _stats[2] += 1   # zu wenige Trades
             return -999.0
         if result.max_drawdown_pct > max_dd:
@@ -209,6 +223,7 @@ def optimize(symbol: str, timeframe: str,
     print(f"    risk_per_entry_pct : {r[0]:.1f} - {r[1]:.1f}%")
     print(f"    leverage           : {l[0]} - {l[1]}x")
     print(f"    max effective risk : {m:.1f}%  (aus max_dd={max_dd:.0f}%: nach 3 Verlusten <= {max_dd:.0f}% DD)")
+    print(f"    min trades         : {_min_trades(timeframe)}  (Timeframe: {timeframe})")
 
     print(f"\n  Lade Daten: {symbol} ({timeframe}) [{start_date} → {end_date}]")
     df = load_ohlcv(symbol, timeframe, start_date, end_date)
@@ -240,10 +255,11 @@ def optimize(symbol: str, timeframe: str,
             suggested_dd = int(best_dd) + 10
             print(f"  Bester erreichbarer DD: {best_dd:.1f}%  (Limit war: {max_dd:.0f}%)")
             print(f"  TIPP: --max-dd {suggested_dd} verwenden um Configs zu finden.")
-        elif max_trades < MIN_TRADES:
+        elif max_trades < _min_trades(timeframe):
             tf_map = {"1d": "4h", "4h": "1h", "1h": "30m", "6h": "2h"}
             alt_tf  = tf_map.get(timeframe, "kleinerer Timeframe")
-            print(f"  TIPP: Strategie findet auf '{timeframe}' zu selten Signale.")
+            print(f"  TIPP: Strategie findet auf '{timeframe}' zu selten Signale "
+                  f"(max. {max_trades} Trades, Minimum: {_min_trades(timeframe)}).")
             print(f"        Empfehlung: '{alt_tf}' verwenden (mehr Kerzen = mehr Setups).")
         return None
 
