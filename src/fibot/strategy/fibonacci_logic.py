@@ -349,6 +349,7 @@ def precompute_all_signals(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     struct_lookback= int(cfg.get("structure_lookback",          60))
     fib_entry_min  = float(cfg.get("fib_entry_min",           0.382))
     fib_entry_max  = float(cfg.get("fib_entry_max",           0.618))
+    fib_tp1_level  = float(cfg.get("fib_tp1_level",           1.618))  # Extension-Ratio
     rsi_oversold   = float(cfg.get("rsi_oversold",             45.0))
     rsi_overbought = float(cfg.get("rsi_overbought",           55.0))
     vol_ratio_min  = float(cfg.get("volume_ratio_min",          1.0))
@@ -473,7 +474,7 @@ def precompute_all_signals(df: pd.DataFrame, config: dict) -> pd.DataFrame:
             # SL / TP
             sl_atr   = cur_price - atr * atr_sl_mult
             sl_price = max(sl_atr, swing_low)       # 0% = swing_low (SL below for LONG)
-            tp1      = swing_high                    # 100% = swing_high
+            tp1      = swing_low + fib_tp1_level * diff  # configurable extension
 
             risk   = cur_price - sl_price
             reward = tp1 - cur_price
@@ -531,7 +532,7 @@ def precompute_all_signals(df: pd.DataFrame, config: dict) -> pd.DataFrame:
             # SL / TP
             sl_atr   = cur_price + atr * atr_sl_mult
             sl_price = min(sl_atr, swing_high)       # 0% = swing_high (SL above for SHORT)
-            tp1      = swing_low                     # 100% = swing_low
+            tp1      = swing_high - fib_tp1_level * diff  # configurable extension
 
             risk   = sl_price - cur_price
             reward = cur_price - tp1
@@ -838,8 +839,8 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
     fib_entry_min           = float(cfg.get("fib_entry_min",           0.382))
     fib_entry_max           = float(cfg.get("fib_entry_max",           0.618))
     fib_sl_level            = float(cfg.get("fib_sl_level",            0.786))
-    fib_tp1_level           = float(cfg.get("fib_tp1_level",           1.000))
-    fib_tp2_level           = float(cfg.get("fib_tp2_level",           1.272))
+    fib_tp1_level           = float(cfg.get("fib_tp1_level",           1.618))
+    fib_tp2_level           = float(cfg.get("fib_tp2_level",           1.618))
     rsi_period              = int(cfg.get("rsi_period",                  14))
     rsi_oversold            = float(cfg.get("rsi_oversold",             45))
     rsi_overbought          = float(cfg.get("rsi_overbought",           55))

@@ -142,8 +142,11 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats: list
                 "fib_entry_min":                0.382,
                 "fib_entry_max":                0.618,
                 "fib_sl_level":                 0.786,
-                "fib_tp1_level":                1.000,
-                "fib_tp2_level":                1.272,
+                # TP-Extension: 1.0=SwingHigh, 1.272=127.2%, 1.618=161.8%
+                # Mit 1.0 gilt R:R=(1-f)/f → nur f≤0.4 valide → 2% der Zone!
+                # Mit 1.618 gilt auch 61.8%-Entry: R:R=(1.618-0.618)/0.618=1.62 ✓
+                "fib_tp1_level":                trial.suggest_categorical("fib_tp1_level", [1.0, 1.272, 1.618]),
+                "fib_tp2_level":                1.618,
                 "fib_tolerance_atr_mult":       trial.suggest_float("fib_tolerance_atr_mult",       0.2, 2.0, step=0.1),
                 "structure_tolerance_atr_mult": trial.suggest_float("structure_tolerance_atr_mult", 0.1, 1.0, step=0.1),
                 "rsi_period":                   14,
