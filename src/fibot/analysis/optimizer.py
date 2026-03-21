@@ -63,11 +63,17 @@ def _get_capital_ranges(capital: float) -> dict:
         # Kleinstes Kapital: risk_pct muss hoch sein (Notional), Hebel daher begrenzt
         # risk_pct_min=2% → max_leverage=7  (2×7=14 ≤ 15)
         # risk_pct_max=8% → max_leverage=7  (8×7=56 → wird durch Constraint begrenzt)
+        # min_max_dd=99: kleines Kapital → DD-Filter deaktivieren damit TPE-Sampler
+        # überhaupt Feedback bekommt und konvergieren kann.
+        # Hintergrund: 14% eff. Risiko/Trade → fast alle Configs haben DD>30%.
+        # Mit DD-Filter=30% → alle Trials -999 → TPE blind → nie valide Config.
+        # Die beste gefundene Config wird trotzdem nach DD-Kriterium bewertet + angezeigt.
         return {
             "risk_per_entry_pct": (2.0,  8.0, 0.5),
             "atr_sl_multiplier":  (0.5,  2.0, 0.1),
             "leverage":           (3,     7),
             "max_effective_risk": 15.0,   # risk_pct × leverage ≤ 15%
+            "min_max_dd":         99.0,   # max_dd wird auf mindestens diesen Wert angehoben
         }
     elif capital < 200:
         return {
@@ -75,6 +81,7 @@ def _get_capital_ranges(capital: float) -> dict:
             "atr_sl_multiplier":  (0.5,  3.0, 0.1),
             "leverage":           (3,    15),
             "max_effective_risk": 20.0,
+            "min_max_dd":         50.0,
         }
     else:
         # Standard-Ranges für ausreichend Kapital
@@ -83,6 +90,7 @@ def _get_capital_ranges(capital: float) -> dict:
             "atr_sl_multiplier":  (0.5,  3.0, 0.1),
             "leverage":           (3,    20),
             "max_effective_risk": 30.0,
+            "min_max_dd":         30.0,
         }
 
 
@@ -100,6 +108,9 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats: list
     atr_min, atr_max, atr_step = ranges["atr_sl_multiplier"]
     lev_min, lev_max            = ranges["leverage"]
     max_eff_risk                = ranges["max_effective_risk"]
+    # Adaptive max_dd: für kleines Kapital wird max_dd automatisch angehoben,
+    # damit der Optimizer überhaupt valide Configs finden kann.
+    max_dd = max(max_dd, ranges.get("min_max_dd", 0.0))
 
     def _objective(trial: optuna.Trial) -> float:
         config = {
@@ -187,7 +198,10 @@ def optimize(symbol: str, timeframe: str,
         print(f"    risk_per_entry_pct : {r[0]:.1f} – {r[1]:.1f}%  (Standard: 0.5–3.0%)")
         print(f"    atr_sl_multiplier  : {a[0]:.1f} – {a[1]:.1f}   (Standard: 0.5–3.0)")
         print(f"    leverage           : {l[0]} – {l[1]}x      (Standard: 3–20x)")
-        print(f"    max effective risk : {m:.0f}%  (risk_pct × leverage ≤ {m:.0f}%)")
+        print(f"    max effective risk : {m:.0f}%  (risk_pct x leverage <= {m:.0f}%)")
+        adaptive_dd = max(max_dd, ranges.get("min_max_dd", 0.0))
+        if adaptive_dd > max_dd:
+            print(f"    max drawdown       : {max_dd:.0f}% -> {adaptive_dd:.0f}% (auto-angepasst fuer kleines Kapital)")
 
     print(f"\n  Lade Daten: {symbol} ({timeframe}) [{start_date} → {end_date}]")
     df = load_ohlcv(symbol, timeframe, start_date, end_date)

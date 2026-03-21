@@ -430,7 +430,7 @@ def detect_structure(df: pd.DataFrame, lookback: int = 60,
 
     # Breakout detection:
     # Echter Breakout = letzter Close AUSSERHALB der Toleranzzone (nicht nur über der Linie)
-    last_close = float(recent['close'].iloc[-1])
+    last_close = float(df['close'].iloc[-1])
     breakout = "none"
     breakout_strength = 0.0
 
@@ -667,7 +667,7 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
 
         # ATR-based SL
         sl_atr  = current_price - atr * atr_sl_mult
-        sl_fib  = fibs.levels["78.6"]
+        sl_fib  = fibs.levels["0.0"]     # 0% = swing_low: SL below this level for LONG
         sl_price = max(sl_atr, sl_fib)   # use the higher (tighter) SL
 
         tp1_price = fibs.levels["100.0"]   # back to swing high
@@ -750,7 +750,7 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
             )
 
         sl_atr   = current_price + atr * atr_sl_mult
-        sl_fib   = fibs.levels["78.6"]
+        sl_fib   = fibs.levels["0.0"]    # 0% = swing_high: SL above this level for SHORT
         sl_price = min(sl_atr, sl_fib)   # lower (tighter) SL
 
         tp1_price = fibs.levels["100.0"]   # back to swing low
