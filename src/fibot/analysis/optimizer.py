@@ -36,10 +36,10 @@ CONFIGS_DIR = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
 # Faustformel: 1 Trade pro 300 Candles (bei typischen Fib-Setups ca. 0.3% Signal-Rate).
 # Beispiele: 1d/1000 Candles → 3, 4h/2190 → 7, 1h/8760 → 29, 30m/17500 → 58
 _TF_MIN_TRADES = {
-    "1m": 50, "3m": 40, "5m": 30, "15m": 20,
-    "30m": 15, "1h": 10, "2h": 8,
-    "4h": 5, "6h": 4, "8h": 4, "12h": 3,
-    "1d": 3, "3d": 2, "1w": 2,
+    "1m": 150, "3m": 120, "5m": 100, "15m": 80,
+    "30m": 60, "1h": 50, "2h": 40,
+    "4h": 30, "6h": 20, "8h": 20, "12h": 15,
+    "1d": 10, "3d": 8, "1w": 5,
 }
 
 def _min_trades(timeframe: str) -> int:
