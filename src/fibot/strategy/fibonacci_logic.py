@@ -5,6 +5,7 @@
 import pandas as pd
 import numpy as np
 import logging
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Optional, Tuple, Dict, List
 from scipy.signal import argrelmax, argrelmin
@@ -229,64 +230,95 @@ def precompute_swings_and_zones(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     ph_arr = np.sort(argrelmax(highs, order=order)[0])
     pl_arr = np.sort(argrelmin(lows,  order=order)[0])
 
-    sw_high     = np.full(n, np.nan)
-    sw_low      = np.full(n, np.nan)
-    sw_high_idx = np.full(n, -1,    dtype=np.int32)
-    sw_low_idx  = np.full(n, -1,    dtype=np.int32)
-    sw_dir      = np.zeros(n,       dtype=np.int8)   # 1=up, -1=down, 0=none
-    zone_low    = np.full(n, np.nan)
-    zone_high   = np.full(n, np.nan)
-    in_zone     = np.zeros(n,       dtype=bool)
+    sw_high_val = np.full(n, np.nan,  dtype=np.float64)
+    sw_high_pos = np.full(n, -1,      dtype=np.int32)
+    sw_low_val  = np.full(n, np.nan,  dtype=np.float64)
+    sw_low_pos  = np.full(n, -1,      dtype=np.int32)
 
-    for i in range(swing_lb, n):
+    # -----------------------------------------------------------------------
+    # O(n) Sliding Window Maximum/Minimum via deque
+    # Jedes Pivot betritt und verlässt die deque genau einmal → O(n) gesamt.
+    # deque für Hochs: Front = aktuelles Maximum (absteigend sortiert).
+    # deque für Tiefs: Front = aktuelles Minimum (aufsteigend sortiert).
+    # -----------------------------------------------------------------------
+    h_dq: deque = deque()   # Elemente: (bar_position, high_value)
+    l_dq: deque = deque()   # Elemente: (bar_position, low_value)
+    ph_ptr = 0
+    pl_ptr = 0
+
+    for i in range(n):
+        # Neue Pivots aufnehmen, die bei Position i angekommen sind
+        while ph_ptr < len(ph_arr) and ph_arr[ph_ptr] <= i:
+            pos = int(ph_arr[ph_ptr])
+            val = highs[pos]
+            while h_dq and h_dq[-1][1] <= val:   # kleinere Werte hinten raus
+                h_dq.pop()
+            h_dq.append((pos, val))
+            ph_ptr += 1
+
+        while pl_ptr < len(pl_arr) and pl_arr[pl_ptr] <= i:
+            pos = int(pl_arr[pl_ptr])
+            val = lows[pos]
+            while l_dq and l_dq[-1][1] >= val:   # größere Werte hinten raus
+                l_dq.pop()
+            l_dq.append((pos, val))
+            pl_ptr += 1
+
+        if i < swing_lb - 1:
+            continue
+
         start = i - swing_lb + 1
 
-        # Binary Search: Pivots im Fenster [start, i] — O(log n) in C
-        phi_lo = int(np.searchsorted(ph_arr, start))
-        phi_hi = int(np.searchsorted(ph_arr, i + 1))
-        pli_lo = int(np.searchsorted(pl_arr, start))
-        pli_hi = int(np.searchsorted(pl_arr, i + 1))
+        # Pivots außerhalb des Fensters vorne entfernen
+        while h_dq and h_dq[0][0] < start:
+            h_dq.popleft()
+        while l_dq and l_dq[0][0] < start:
+            l_dq.popleft()
 
-        ph_win = ph_arr[phi_lo:phi_hi]
-        pl_win = pl_arr[pli_lo:pli_hi]
-
-        if len(ph_win) == 0 or len(pl_win) == 0:
+        if not h_dq or not l_dq:
             continue
 
-        max_h_pos = int(ph_win[np.argmax(highs[ph_win])])
-        min_l_pos = int(pl_win[np.argmin(lows[pl_win])])
+        sw_high_val[i] = h_dq[0][1]
+        sw_high_pos[i] = h_dq[0][0]
+        sw_low_val[i]  = l_dq[0][1]
+        sw_low_pos[i]  = l_dq[0][0]
 
-        h = highs[max_h_pos]
-        l = lows[min_l_pos]
-        if abs(h - l) / l * 100 < 1.0:
-            continue
+    # -----------------------------------------------------------------------
+    # Vektorisierte Fib-Zone-Berechnung (kein weiterer Python-Loop nötig)
+    # -----------------------------------------------------------------------
+    valid = (sw_high_pos >= 0) & (sw_low_pos >= 0)
+    diff  = sw_high_val - sw_low_val
 
-        sw_high[i]     = h
-        sw_low[i]      = l
-        sw_high_idx[i] = max_h_pos
-        sw_low_idx[i]  = min_l_pos
+    # Mindest-Swing-Größe 1%
+    with np.errstate(invalid='ignore', divide='ignore'):
+        move_pct = np.where(sw_low_val > 0, np.abs(diff) / sw_low_val * 100, 0.0)
+    valid &= (move_pct >= 1.0)
 
-        diff    = h - l
-        fib_tol = fib_tol_m * atr_v[i]
+    is_up   = valid & (sw_high_pos > sw_low_pos)   # SHORT-Setup
+    is_down = valid & (sw_high_pos < sw_low_pos)   # LONG-Setup
 
-        if max_h_pos > min_l_pos:        # "up" → SHORT-Setup
-            sw_dir[i]    = 1
-            e_low        = h - 0.618 * diff
-            e_high       = h - 0.382 * diff
-        else:                            # "down" → LONG-Setup
-            sw_dir[i]    = -1
-            e_low        = l + 0.382 * diff
-            e_high       = l + 0.618 * diff
+    sw_dir  = np.where(is_up, np.int8(1), np.where(is_down, np.int8(-1), np.int8(0)))
 
-        zone_low[i]  = e_low  - fib_tol
-        zone_high[i] = e_high + fib_tol
-        in_zone[i]   = zone_low[i] <= closes[i] <= zone_high[i]
+    fib_tol   = fib_tol_m * atr_v
+
+    zone_low  = np.where(is_up,
+                         sw_high_val - 0.618 * diff - fib_tol,
+                         np.where(is_down,
+                                  sw_low_val  + 0.382 * diff - fib_tol,
+                                  np.nan))
+    zone_high = np.where(is_up,
+                         sw_high_val - 0.382 * diff + fib_tol,
+                         np.where(is_down,
+                                  sw_low_val  + 0.618 * diff + fib_tol,
+                                  np.nan))
+
+    in_zone = valid & (closes >= zone_low) & (closes <= zone_high)
 
     df = df.copy()
-    df['_sw_high']     = sw_high
-    df['_sw_low']      = sw_low
-    df['_sw_high_idx'] = sw_high_idx
-    df['_sw_low_idx']  = sw_low_idx
+    df['_sw_high']     = sw_high_val
+    df['_sw_low']      = sw_low_val
+    df['_sw_high_idx'] = sw_high_pos
+    df['_sw_low_idx']  = sw_low_pos
     df['_sw_dir']      = sw_dir
     df['_zone_low']    = zone_low
     df['_zone_high']   = zone_high

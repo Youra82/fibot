@@ -161,14 +161,19 @@ def run_backtest(df: pd.DataFrame, config: dict,
 
     logger.info(f"Starte Backtest: {symbol} ({timeframe}) | {len(df)} Kerzen | Kapital: {start_capital}")
 
+    # Numpy-Arrays vor der Loop extrahieren — O(1) Zugriff statt pandas iloc (~5-10µs)
+    high_arr    = df['high'].values
+    low_arr     = df['low'].values
+    in_zone_arr = df['_in_zone'].values
+    timestamps  = df.index
+
     for i in range(candle_warmup, len(df)):
-        bar = df.iloc[i]
-        ts  = df.index[i]
+        ts = timestamps[i]
 
         # --- Manage open trade ---
         if open_trade is not None:
-            high_i = bar['high']
-            low_i  = bar['low']
+            high_i = high_arr[i]
+            low_i  = low_arr[i]
 
             hit_sl  = False
             hit_tp  = False
@@ -222,7 +227,7 @@ def run_backtest(df: pd.DataFrame, config: dict,
         # --- Look for new signal ---
         # Schneller Vorfilter: _in_zone wurde von precompute_swings_and_zones
         # bereits für alle Bars berechnet. Nur wenn True → teures generate_signal aufrufen.
-        if not df['_in_zone'].iloc[i]:
+        if not in_zone_arr[i]:
             continue
 
         slice_start = max(0, i + 1 - _signal_window)
