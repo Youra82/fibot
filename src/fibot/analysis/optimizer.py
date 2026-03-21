@@ -8,6 +8,7 @@ import json
 import logging
 import argparse
 import warnings
+import math
 from datetime import date
 
 import pandas as pd
@@ -175,7 +176,11 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats: list
             return -999.0
         if result.win_rate < min_wr:
             return -999.0
-        return result.pnl_pct + result.avg_rr * 5.0
+        # Score belohnt: Profit + R:R-Qualität + Trade-Häufigkeit (logarithmisch)
+        # log(trades+1)*10: 10 Trades=+24, 32 Trades=+35, 100 Trades=+46
+        # Logarithmisch damit mehr Trades immer besser sind, aber mit Deckelung
+        trade_bonus = math.log1p(result.total_trades) * 10.0
+        return result.pnl_pct + result.avg_rr * 5.0 + trade_bonus
     return _objective
 
 
