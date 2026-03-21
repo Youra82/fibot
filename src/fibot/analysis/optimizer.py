@@ -108,9 +108,6 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats: list
     atr_min, atr_max, atr_step = ranges["atr_sl_multiplier"]
     lev_min, lev_max            = ranges["leverage"]
     max_eff_risk                = ranges["max_effective_risk"]
-    # Adaptive max_dd: für kleines Kapital wird max_dd automatisch angehoben,
-    # damit der Optimizer überhaupt valide Configs finden kann.
-    max_dd = max(max_dd, ranges.get("min_max_dd", 0.0))
 
     def _objective(trial: optuna.Trial) -> float:
         config = {
@@ -199,9 +196,10 @@ def optimize(symbol: str, timeframe: str,
         print(f"    atr_sl_multiplier  : {a[0]:.1f} – {a[1]:.1f}   (Standard: 0.5–3.0)")
         print(f"    leverage           : {l[0]} – {l[1]}x      (Standard: 3–20x)")
         print(f"    max effective risk : {m:.0f}%  (risk_pct x leverage <= {m:.0f}%)")
-        adaptive_dd = max(max_dd, ranges.get("min_max_dd", 0.0))
-        if adaptive_dd > max_dd:
-            print(f"    max drawdown       : {max_dd:.0f}% -> {adaptive_dd:.0f}% (auto-angepasst fuer kleines Kapital)")
+        min_dd = ranges.get("min_max_dd", 0.0)
+        if max_dd < min_dd:
+            print(f"  WARNUNG: max_dd={max_dd:.0f}% ist sehr streng fuer {capital:.0f} USDT Kapital.")
+            print(f"           Empfehlung: --max-dd {min_dd:.0f} (sonst werden moeglicherweise 0 Configs gefunden)")
 
     print(f"\n  Lade Daten: {symbol} ({timeframe}) [{start_date} → {end_date}]")
     df = load_ohlcv(symbol, timeframe, start_date, end_date)

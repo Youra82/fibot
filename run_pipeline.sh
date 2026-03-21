@@ -67,6 +67,29 @@ OPTIM_MODE="${OPTIM_MODE:-1}"
 read -p "Max Drawdown % [Standard: 30]: " MAX_DD
 MAX_DD="${MAX_DD:-30}"
 
+# Warnung bei kleinem Kapital: mit hohem eff. Risiko/Trade ist max_dd=30% kaum erreichbar.
+# Der Optimizer würde intern auf 99% anheben — hier explizit fragen.
+if (( $(echo "$START_CAPITAL < 50" | bc -l) )); then
+    MIN_DD_SMALL=99
+    if (( $(echo "$MAX_DD < $MIN_DD_SMALL" | bc -l) )); then
+        echo ""
+        echo -e "${YELLOW}HINWEIS: Bei ${START_CAPITAL} USDT Kapital und 14% eff. Risiko/Trade${NC}"
+        echo -e "${YELLOW}         sind nach 2 Verlusten bereits ~26% Drawdown erreicht.${NC}"
+        echo -e "${YELLOW}         Max-DD=${MAX_DD}% ist daher zu streng — der Optimizer${NC}"
+        echo -e "${YELLOW}         wuerde 0 valide Configs finden.${NC}"
+        read -p "Max-DD automatisch auf ${MIN_DD_SMALL}% anheben? (j/n) [Standard: j]: " RAISE_DD
+        RAISE_DD="${RAISE_DD:-j}"
+        if [ "$RAISE_DD" == "j" ]; then
+            MAX_DD=$MIN_DD_SMALL
+            echo -e "${GREEN}Max-DD wird auf ${MAX_DD}% gesetzt.${NC}"
+        else
+            echo -e "${YELLOW}Behalte Max-DD=${MAX_DD}%. Moeglicherweise werden 0 Configs gefunden.${NC}"
+            # In diesem Fall: adaptive override im Optimizer NICHT anwenden
+            # -> deaktiviere min_max_dd durch sehr kleines Kapital-Limit-Bypass
+        fi
+    fi
+fi
+
 if [ "$OPTIM_MODE" == "1" ]; then
     read -p "Min Win-Rate % [Standard: 55]: " MIN_WR
     MIN_WR="${MIN_WR:-55}"
