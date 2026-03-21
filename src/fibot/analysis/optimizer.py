@@ -157,18 +157,18 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats: list
                 "candle_limit":                 500,
             },
             "risk": {
-                "leverage":           trial.suggest_int("leverage", lev_min, lev_max),
+                # Leverage-Range direkt aus risk_pct ableiten:
+                # max_leverage = floor(max_eff_risk / risk_pct)
+                # → jeder Trial erfüllt automatisch risk_pct × leverage ≤ max_eff_risk
+                # → kein Pruning, alle Trials erreichen den Backtest
                 "risk_per_entry_pct": trial.suggest_float("risk_per_entry_pct", r_min, r_max, step=r_step),
+                "leverage":           trial.suggest_int(
+                    "leverage", lev_min,
+                    max(lev_min, min(lev_max, int(max_eff_risk / trial.params["risk_per_entry_pct"])))
+                ),
                 "margin_mode":        "isolated",
             }
         }
-        # Effektives Risiko pro Trade: risk_pct × leverage
-        # Bei SL-Hit verliert man: capital × risk_pct/100 × leverage
-        # Zu hoch → Konto geht bei 1-2 Verlust-Trades auf 0
-        effective_risk = config["risk"]["risk_per_entry_pct"] * config["risk"]["leverage"]
-        if effective_risk > max_eff_risk:
-            _stats[1] += 1   # eff-risk zu hoch
-            return -999.0
 
         try:
             result = run_backtest(df, config, capital, symbol, timeframe)
@@ -249,8 +249,7 @@ def optimize(symbol: str, timeframe: str,
     if best.value <= -999.0:
         max_trades, n_pruned, n_few, n_dd, best_dd = _stats
         print(f"  WARNUNG: Kein gueltiges Ergebnis gefunden.")
-        print(f"  Diagnose: eff-Risk-Pruning: {n_pruned}  |  "
-              f"zu wenige Trades: {n_few}  |  DD zu hoch: {n_dd}")
+        print(f"  Diagnose: zu wenige Trades: {n_few}  |  DD zu hoch: {n_dd}")
         if n_dd > 0 and best_dd < float('inf'):
             suggested_dd = int(best_dd) + 10
             print(f"  Bester erreichbarer DD: {best_dd:.1f}%  (Limit war: {max_dd:.0f}%)")
