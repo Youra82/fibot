@@ -241,20 +241,20 @@ def precompute_swings_and_zones(df: pd.DataFrame, config: dict) -> pd.DataFrame:
 
     fib_tol = fib_tol_m * atr_v
 
-    # LONG-Zone (Swing nach unten: bounce von 38.2%-61.8%)
-    long_z_low  = sw_l + 0.382 * diff - fib_tol
-    long_z_high = sw_l + 0.618 * diff + fib_tol
-
-    # SHORT-Zone (Swing nach oben: retrace von 38.2%-61.8%)
-    short_z_low  = sw_h - 0.618 * diff - fib_tol
-    short_z_high = sw_h - 0.382 * diff + fib_tol
-
-    # Beide Richtungen prüfen — Union verhindert false negatives
-    in_long  = valid & (closes >= long_z_low)  & (closes <= long_z_high)
-    in_short = valid & (closes >= short_z_low) & (closes <= short_z_high)
+    # Vorfilter: Preis muss im mittleren 80% des Rolling-Fensters liegen.
+    # Mathematisch: Fib-Zonen (38.2%-61.8%) ⊂ mittlere 80% (10%-90%)
+    # → garantiert KEIN false negative, egal welche Richtung die Strategie wählt.
+    #
+    # Warum NICHT direkt Fib-Zonen vorberechnen:
+    #   Rolling-Max/Min-basierte Fib-Zonen sind in Trend-Märkten ENGER als
+    #   Pivot-basierte Swings. Aktueller Preis liegt dann außerhalb → false negative.
+    #   Beispiel DOGE Downtrend: sw_h=0.20, sw_l=0.12, Preis=0.15
+    #     Fib-Zone: [0.151, 0.169] → Preis UNTER Zone → in_zone=False (falsch!)
+    #     80%-Filter: [0.128, 0.192] → Preis IN Zone → in_zone=True (korrekt!)
+    buf = 0.10 * diff   # 10% Puffer von jedem Extrem
 
     df = df.copy()
-    df['_in_zone'] = in_long | in_short
+    df['_in_zone'] = valid & (closes >= sw_l + buf) & (closes <= sw_h - buf)
     return df
 
 
