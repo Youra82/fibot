@@ -158,48 +158,190 @@ def run_all_from_settings(date_from: Optional[str], date_to: Optional[str],
 
 
 # ---------------------------------------------------------------------------
-# Modus 3: Gespeicherte Ergebnisse anzeigen
+# Modus 3: Portfolio-Optimierer — beste Coins/TFs für gegebene Randbedingungen
 # ---------------------------------------------------------------------------
 
-def show_saved_results():
-    if not os.path.exists(RESULTS_DIR):
-        print(f"{YELLOW}Keine gespeicherten Ergebnisse gefunden.{NC}")
+CONFIGS_DIR = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
+OPT_RESULTS  = os.path.join(PROJECT_ROOT, 'artifacts', 'results', 'optimization_results.json')
+
+
+def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
+                          start_date: str, end_date: str):
+    """
+    Lädt alle vorhandenen Configs, backtestet sie und wählt per Greedy-Algorithmus
+    das optimale Portfolio aus — identisch zu stbot's Mode 3.
+
+    Randbedingungen:
+      - max_drawdown  <= target_max_dd
+      - win_rate      >= min_wr  (0 = kein Limit)
+    Ziel: maximales End-Kapital bei eingehaltenen Randbedingungen.
+    Coin-Kollision: kein Coin doppelt im Portfolio (z.B. BTC 4h + BTC 6h → nur einer).
+    """
+    from fibot.analysis.backtester import run_backtest, load_ohlcv
+
+    # --- Alle Configs laden ---
+    if not os.path.isdir(CONFIGS_DIR):
+        print(f"{RED}Kein Configs-Verzeichnis gefunden: {CONFIGS_DIR}{NC}")
         return
 
-    files = sorted(
-        [f for f in os.listdir(RESULTS_DIR) if f.startswith('backtest_') and f.endswith('.json')],
-        key=lambda f: os.path.getmtime(os.path.join(RESULTS_DIR, f)),
-        reverse=True
-    )
-
-    if not files:
-        print(f"{YELLOW}Keine Backtest-Ergebnisse in {RESULTS_DIR}.{NC}")
+    cfg_files = sorted(f for f in os.listdir(CONFIGS_DIR)
+                       if f.startswith('config_') and f.endswith('.json'))
+    if not cfg_files:
+        print(f"{YELLOW}Keine Configs gefunden. Erst run_pipeline.sh ausführen.{NC}")
         return
 
-    print(f"\n{BOLD}Gespeicherte Backtest-Ergebnisse:{NC}\n")
-    print(f"{'#':<4} {'Datei':<38} {'PnL':>8} {'WR':>7} {'Trades':>7} {'MaxDD':>8}")
-    print(f"{'─'*70}")
-
-    for i, fname in enumerate(files, 1):
-        try:
-            with open(os.path.join(RESULTS_DIR, fname)) as f:
-                d = json.load(f)
-            pnl   = d.get('pnl_pct', 0)
-            wr    = d.get('win_rate', 0)
-            tr    = d.get('total_trades', 0)
-            dd    = d.get('max_drawdown', 0)
-            color = GREEN if pnl >= 0 else RED
-            print(f"{i:<4} {fname:<38} {color}{pnl:>+7.2f}%{NC} {wr:>6.1f}% {tr:>7} {dd:>7.2f}%")
-        except Exception:
-            print(f"{i:<4} {fname:<38}  {RED}(Lesefehler){NC}")
-
+    print(f"\n{CYAN}Lade {len(cfg_files)} Config(s) und starte Backtests...{NC}")
+    print(f"  Zeitraum: {start_date} → {end_date} | Kapital: {capital:.0f} USDT")
+    print(f"  Randbedingungen: MaxDD <= {target_max_dd:.0f}%"
+          + (f"  |  WR >= {min_wr:.0f}%" if min_wr > 0 else ""))
     print()
-    choice = input("Nummer für Details (Enter = zurück): ").strip()
-    if choice.isdigit() and 1 <= int(choice) <= len(files):
-        fname = files[int(choice) - 1]
-        with open(os.path.join(RESULTS_DIR, fname)) as f:
-            d = json.load(f)
-        _print_json_result(d)
+
+    # --- Einzel-Backtests ---
+    single_results = []
+    for fname in cfg_files:
+        cfg_path = os.path.join(CONFIGS_DIR, fname)
+        try:
+            with open(cfg_path) as f:
+                config = json.load(f)
+        except Exception as e:
+            print(f"  {RED}Lesefehler {fname}: {e}{NC}")
+            continue
+
+        symbol    = config.get('market', {}).get('symbol', '')
+        timeframe = config.get('market', {}).get('timeframe', '')
+        if not symbol or not timeframe:
+            continue
+
+        df = load_ohlcv(symbol, timeframe, start_date, end_date)
+        if df.empty or len(df) < 50:
+            print(f"  {YELLOW}Übersprungen (keine Daten): {fname}{NC}")
+            continue
+
+        result = run_backtest(df, config, capital, symbol, timeframe)
+
+        entry = {
+            'filename':  fname,
+            'symbol':    symbol,
+            'timeframe': timeframe,
+            'coin':      symbol.split('/')[0],
+            'pnl_pct':   result.pnl_pct,
+            'end_cap':   result.end_capital,
+            'win_rate':  result.win_rate,
+            'max_dd':    result.max_drawdown_pct,
+            'trades':    result.total_trades,
+            'avg_rr':    result.avg_rr,
+        }
+        single_results.append(entry)
+
+        dd_color  = GREEN if result.max_drawdown_pct <= target_max_dd else RED
+        pnl_color = GREEN if result.pnl_pct >= 0 else RED
+        print(f"  {fname:<42}  "
+              f"PnL {pnl_color}{result.pnl_pct:>+7.2f}%{NC}  "
+              f"WR {result.win_rate:>5.1f}%  "
+              f"Trades {result.total_trades:>4}  "
+              f"DD {dd_color}{result.max_drawdown_pct:>6.2f}%{NC}")
+
+    if not single_results:
+        print(f"{RED}Kein Backtest erfolgreich. Abbruch.{NC}")
+        return
+
+    # --- Filter nach Randbedingungen ---
+    valid = [r for r in single_results
+             if r['max_dd'] <= target_max_dd and r['win_rate'] >= min_wr]
+
+    print(f"\n{'═'*65}")
+    print(f"  {len(valid)}/{len(single_results)} Configs erfüllen die Randbedingungen.")
+
+    if not valid:
+        print(f"\n{RED}Keine Config erfüllt MaxDD<={target_max_dd:.0f}%"
+              + (f" und WR>={min_wr:.0f}%" if min_wr > 0 else "") + f".{NC}")
+        # Zeige trotzdem bestes Ergebnis
+        best = max(single_results, key=lambda x: x['pnl_pct'])
+        print(f"  Bester erreichbarer DD: {min(r['max_dd'] for r in single_results):.1f}%")
+        print(f"  TIPP: --target-max-dd auf mindestens {int(min(r['max_dd'] for r in single_results)) + 5} erhöhen.")
+        return
+
+    # --- Greedy Portfolio-Aufbau ---
+    # Kapital wird gleichmäßig auf alle Strategien aufgeteilt (capital / N).
+    # portfolio_pnl_pct = Durchschnitt aller Einzel-PnL% (unabhängig von N).
+    # Coin-Kollision: kein Coin doppelt, egal welcher Timeframe
+    #   (BTC 2h + BTC 15m wäre schon blockiert da coin='BTC')
+
+    def _port_stats(strats: list) -> tuple:
+        """Gibt (end_cap, pnl_pct) für das Portfolio zurück (Kapital geteilt durch N)."""
+        n        = len(strats)
+        per_cap  = capital / n
+        end_sum  = sum(per_cap * (1 + r['pnl_pct'] / 100) for r in strats)
+        pnl_pct  = (end_sum - capital) / capital * 100
+        return end_sum, pnl_pct
+
+    valid.sort(key=lambda x: x['pnl_pct'], reverse=True)
+    portfolio  = [valid[0]]
+    used_coins = {valid[0]['coin']}
+    remaining  = valid[1:]
+
+    print(f"\n{BOLD}Starte Portfolio-Aufbau (Greedy):{NC}")
+    print(f"  Hinweis: Kapital wird gleichmaessig auf alle Coins aufgeteilt.")
+    print(f"  Start: {valid[0]['filename']}  (PnL {valid[0]['pnl_pct']:+.2f}%)")
+
+    improved = True
+    while improved and remaining:
+        improved      = False
+        best_addition = None
+        _, best_pnl   = _port_stats(portfolio)
+
+        for candidate in remaining:
+            if candidate['coin'] in used_coins:
+                continue   # kein Coin doppelt (auch verschiedene Timeframes blockiert)
+
+            combined_max_dd = max(r['max_dd'] for r in portfolio + [candidate])
+            if combined_max_dd > target_max_dd:
+                continue
+
+            _, candidate_pnl = _port_stats(portfolio + [candidate])
+            if candidate_pnl > best_pnl:
+                best_pnl      = candidate_pnl
+                best_addition = candidate
+
+        if best_addition:
+            portfolio.append(best_addition)
+            used_coins.add(best_addition['coin'])
+            remaining.remove(best_addition)
+            improved = True
+            _, cur_pnl = _port_stats(portfolio)
+            print(f"  + {best_addition['filename']}  "
+                  f"(PnL {best_addition['pnl_pct']:+.2f}%  -> Portfolio avg {cur_pnl:+.2f}%)")
+
+    # --- Portfolio-Ergebnis anzeigen ---
+    n_strats     = len(portfolio)
+    per_cap      = capital / n_strats
+    port_end_cap, port_pnl_pct = _port_stats(portfolio)
+    port_max_dd  = max(r['max_dd'] for r in portfolio)
+
+    print(f"\n{'═'*65}")
+    print(f"{BOLD}Optimales Portfolio ({n_strats} Strategie(n), je {per_cap:.2f} USDT):{NC}\n")
+    print(f"  {'Config':<42} {'Kapital':>9} {'PnL':>8} {'WR':>7} {'Trades':>7} {'MaxDD':>8}")
+    print(f"  {'─'*72}")
+    for r in sorted(portfolio, key=lambda x: x['pnl_pct'], reverse=True):
+        pc       = GREEN if r['pnl_pct'] >= 0 else RED
+        r_endcap = per_cap * (1 + r['pnl_pct'] / 100)
+        print(f"  {r['filename']:<42} {per_cap:>8.2f}  "
+              f"{pc}{r['pnl_pct']:>+7.2f}%{NC} "
+              f"{r['win_rate']:>6.1f}% {r['trades']:>7} {r['max_dd']:>7.2f}%")
+
+    print(f"\n  {'─'*50}")
+    pnl_col = GREEN if port_pnl_pct >= 0 else RED
+    print(f"  Gesamt-Kapital : {capital:.2f} USDT  ({n_strats} x {per_cap:.2f} USDT)")
+    print(f"  Portfolio-End  : {pnl_col}{port_end_cap:.2f} USDT{NC}"
+          f"  ({pnl_col}{port_pnl_pct:+.2f}%{NC})")
+    print(f"  Portfolio MaxDD: {port_max_dd:.2f}%  (konservativ = max Einzel-DD)")
+    print(f"{'═'*65}\n")
+
+    # --- Ergebnis speichern ---
+    os.makedirs(os.path.dirname(OPT_RESULTS), exist_ok=True)
+    with open(OPT_RESULTS, 'w') as f:
+        json.dump({'optimal_portfolio': [r['filename'] for r in portfolio]}, f, indent=2)
+    print(f"{GREEN}Ergebnis gespeichert: {OPT_RESULTS}{NC}")
 
 
 # ---------------------------------------------------------------------------
@@ -326,14 +468,18 @@ def _default_config(symbol: str, timeframe: str) -> dict:
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FiBot Show Results")
-    parser.add_argument('--mode',      type=int, required=True, help="1-5")
-    parser.add_argument('--symbol',    default=None)
-    parser.add_argument('--timeframe', default='4h')
-    parser.add_argument('--from',      dest='date_from', default=None)
-    parser.add_argument('--to',        dest='date_to',   default=None)
-    parser.add_argument('--days',      type=int, default=None)
-    parser.add_argument('--capital',   type=float, default=1000.0)
-    parser.add_argument('--config',    default=None)
+    parser.add_argument('--mode',           type=int, required=True, help="1-5")
+    parser.add_argument('--symbol',         default=None)
+    parser.add_argument('--timeframe',      default='4h')
+    parser.add_argument('--from',           dest='date_from', default=None)
+    parser.add_argument('--to',             dest='date_to',   default=None)
+    parser.add_argument('--days',           type=int, default=None)
+    parser.add_argument('--capital',        type=float, default=1000.0)
+    parser.add_argument('--config',         default=None)
+    parser.add_argument('--target-max-dd',  type=float, default=30.0,
+                        help="Max Drawdown %% für Portfolio-Finder (Modus 3)")
+    parser.add_argument('--min-wr',         type=float, default=0.0,
+                        help="Min Win-Rate %% für Portfolio-Finder (Modus 3)")
     args = parser.parse_args()
 
     if args.mode == 1:
@@ -346,7 +492,11 @@ if __name__ == "__main__":
     elif args.mode == 2:
         run_all_from_settings(args.date_from, args.date_to, args.days, args.capital)
     elif args.mode == 3:
-        show_saved_results()
+        today = date.today().isoformat()
+        start = args.date_from if args.date_from else \
+                (pd.Timestamp(today, tz='UTC') - pd.Timedelta(days=365)).strftime('%Y-%m-%d')
+        end   = args.date_to if args.date_to else today
+        run_portfolio_finder(args.capital, args.target_max_dd, args.min_wr, start, end)
     elif args.mode == 4:
         if not args.symbol:
             print(f"{RED}--symbol erforderlich für Modus 4.{NC}")
