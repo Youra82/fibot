@@ -403,7 +403,8 @@ def _fit_line(x: np.ndarray, y: np.ndarray) -> Tuple[float, float]:
 
 def detect_structure(df: pd.DataFrame, lookback: int = 60,
                      pivot_left: int = 3, pivot_right: int = 3,
-                     tolerance_atr_mult: float = 0.3) -> StructureInfo:
+                     tolerance_atr_mult: float = 0.3,
+                     atr_override: Optional[float] = None) -> StructureInfo:
     """
     Fits linear regression lines through pivot highs and pivot lows.
     Classifies the resulting shape as wedge/triangle/channel.
@@ -413,31 +414,34 @@ def detect_structure(df: pd.DataFrame, lookback: int = 60,
       - Preis IN der Zone → "testet die Struktur" → Confluence-Bonus
       - Preis AUSSERHALB der Zone → echter Breakout (kein falscher Ausbruch)
 
-      Beispiel (BTC, ATR=800, mult=0.3):
-        support_at       = 83.200
-        support_zone_low = 83.200 - 0.3*800 = 82.960  ← Untergrenze
-        support_zone_high= 83.200 + 0.3*800 = 83.440  ← Obergrenze
-        → Preis zwischen 82.960–83.440 = "an der Unterstützung"
+    atr_override: optionaler vorberechneter ATR-Wert (aus precompute_indicators).
+      Wenn übergeben, wird calc_atr() übersprungen (spart ~100µs pro Aufruf).
     """
-    recent = df.iloc[-lookback:].copy().reset_index(drop=True)
-    n = len(recent)
+    n_df  = len(df)
+    start = max(0, n_df - lookback)
+    n     = n_df - start
 
-    # ATR für Toleranzzone berechnen (über gesamten lookback)
-    atr = calc_atr(recent, period=min(14, n - 1))
+    # Numpy-Arrays direkt statt DataFrame-Copy + reset_index — spart ~50µs
+    highs = df['high'].values[start:]
+    lows  = df['low'].values[start:]
 
-    ph = find_pivot_highs(recent, pivot_left, pivot_right)
-    pl = find_pivot_lows(recent, pivot_left, pivot_right)
+    # ATR: vorberechneten Wert nehmen wenn vorhanden, sonst berechnen
+    if atr_override is not None:
+        atr = float(atr_override)
+    else:
+        atr = calc_atr(df.iloc[start:], period=min(14, n - 1))
 
-    ph_idx = np.array(ph[ph].index.tolist(), dtype=float)
-    pl_idx = np.array(pl[pl].index.tolist(), dtype=float)
+    order  = max(pivot_left, pivot_right, 1)
+    ph_pos = argrelmax(highs, order=order)[0].astype(float)
+    pl_pos = argrelmin(lows,  order=order)[0].astype(float)
 
     tolerance = tolerance_atr_mult * atr
 
     # Need at least 2 pivot highs and 2 pivot lows for meaningful lines
-    if len(ph_idx) < 2 or len(pl_idx) < 2:
+    if len(ph_pos) < 2 or len(pl_pos) < 2:
         logger.debug("Nicht genug Pivots für Strukturerkennung.")
-        s = float(recent['low'].iloc[-1])
-        r = float(recent['high'].iloc[-1])
+        s = float(lows[-1])
+        r = float(highs[-1])
         return StructureInfo(
             type="none", bias="neutral",
             upper_slope=0, lower_slope=0,
@@ -449,11 +453,11 @@ def detect_structure(df: pd.DataFrame, lookback: int = 60,
             breakout="none", breakout_strength=0.0
         )
 
-    ph_prices = recent['high'].iloc[ph_idx.astype(int)].values
-    pl_prices = recent['low'].iloc[pl_idx.astype(int)].values
+    ph_prices = highs[ph_pos.astype(int)]
+    pl_prices = lows[pl_pos.astype(int)]
 
-    up_slope, up_intercept = _fit_line(ph_idx, ph_prices)
-    lo_slope, lo_intercept = _fit_line(pl_idx, pl_prices)
+    up_slope, up_intercept = _fit_line(ph_pos, ph_prices)
+    lo_slope, lo_intercept = _fit_line(pl_pos, pl_prices)
 
     # Current trendline values (at bar n-1)
     cur = float(n - 1)
@@ -633,10 +637,25 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
 
     current_price = float(df['close'].iloc[-1])
 
-    # -- Step 1: Swings --
-    swings = find_significant_swings(df, swing_lookback, pivot_left, pivot_right)
-    if swings is None:
-        return no_signal
+    # -- Step 1: Swings (vorberechnet oder On-the-fly) --
+    # Wenn precompute_swings_and_zones() vorher lief (Backtester), lesen wir
+    # direkt aus den _sw_* Spalten → spart argrelmax + DataFrame-Kopie pro Bar.
+    if '_sw_dir' in df.columns:
+        _last = df.iloc[-1]
+        _sw_dir_val = int(_last['_sw_dir'])
+        if _sw_dir_val == 0:
+            return no_signal
+        swings = SwingPoints(
+            high_price = float(_last['_sw_high']),
+            high_idx   = int(_last['_sw_high_idx']),
+            low_price  = float(_last['_sw_low']),
+            low_idx    = int(_last['_sw_low_idx']),
+            direction  = "up" if _sw_dir_val == 1 else "down",
+        )
+    else:
+        swings = find_significant_swings(df, swing_lookback, pivot_left, pivot_right)
+        if swings is None:
+            return no_signal
 
     move_pct = abs(swings.high_price - swings.low_price) / swings.low_price * 100
     if move_pct < 1.0:
@@ -663,9 +682,11 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
         return no_signal
 
     # -- Step 5: Structure (mit ATR-basierter Toleranzzone) --
-    # Nur erreicht wenn Preis in der Fib-Zone liegt (~1-5% aller Bars)
+    # Nur erreicht wenn Preis in der Fib-Zone liegt (~1-5% aller Bars).
+    # atr bereits aus precompute_indicators → kein weiteres calc_atr() nötig.
     structure = detect_structure(df, structure_lookback, pivot_left, pivot_right,
-                                 tolerance_atr_mult=struct_tol_mult)
+                                 tolerance_atr_mult=struct_tol_mult,
+                                 atr_override=atr)
 
     # -- Step 6: Restliche Indikatoren (vorberechnet, O(1)) --
     rsi       = float(df['_rsi'].iloc[-1])       if '_rsi'       in df.columns else calc_rsi(df['close'], rsi_period)
