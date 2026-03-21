@@ -51,7 +51,7 @@ def _min_trades(timeframe: str) -> int:
 # Kapital- und DD-adaptive Parameter-Ranges
 # ---------------------------------------------------------------------------
 
-def _max_eff_risk_from_dd(max_dd: float, k: int = 3) -> float:
+def _max_eff_risk_from_dd(max_dd: float, k: int = 30) -> float:
     """
     Berechnet das maximale effektive Risiko pro Trade aus dem gewünschten max_dd.
 
@@ -59,15 +59,18 @@ def _max_eff_risk_from_dd(max_dd: float, k: int = 3) -> float:
       (1 - eff/100)^k >= 1 - max_dd/100
       eff <= (1 - (1 - max_dd/100)^(1/k)) * 100
 
-    k=3: schneller Vorfilter — pruned Kombinationen die selbst bei 3 Verlusten
-    in Folge schon den max_dd reissen würden. Feinere DD-Kontrolle übernimmt
-    der Backtester (er prüft den tatsächlichen DD über alle Trades).
+    k=30: Fibonacci-Strategie hat typisch WR ~10-20%. Erwartete längste Verlust-
+    Serie bei 60 Trades mit WR=15% (p_loss=0.85):
+      E[max_run] ≈ log(60) / log(1/0.85) ≈ 25-35 Verluste in Folge.
+    Empirisch bestätigt (DOGE 30m Scan): nur eff_risk ≤ 1.0% erreicht DD ≤ 30%.
+    k=30 liefert max_eff_risk(30%) = 1.1% — trifft diese Grenze genau.
 
-    Beispiele (k=3):
-      max_dd=30%  ->  eff <= 11.2%  (z.B. 2% x 5x = 10%)
-      max_dd=50%  ->  eff <= 20.6%  (z.B. 3% x 6x = 18%)
-      max_dd=70%  ->  eff <= 33.1%  (z.B. 5% x 6x = 30%)
-      max_dd=99%  ->  eff <= 78.5%  (praktisch unbegrenzt)
+    Vergleich k=3 (alt) vs k=30 (neu):
+      max_dd=30%: k=3 → 11.2%  (zu locker → 88% Trials scheitern an DD)
+                  k=30 → 1.1%  (korrekt → Optimizer findet nur valide Configs)
+      max_dd=50%: k=3 → 20.6%, k=30 → 2.3%
+      max_dd=70%: k=3 → 33.1%, k=30 → 4.0%
+      max_dd=99%: k=3 → 78.5%, k=30 → 15.4% (praktisch unbegrenzt)
     """
     survival = 1.0 - max_dd / 100.0
     if survival <= 0:
@@ -91,10 +94,13 @@ def _get_capital_ranges(capital: float, max_dd: float = 30.0) -> dict:
     max_eff_risk = _max_eff_risk_from_dd(max_dd)
 
     if capital < 50:
-        # Bei kleinem Kapital höhere risk_pct nötig für ausreichende Notional (5 USDT)
-        # risk_pct_min=1%: 1% × 25 USDT = 0.25 USDT → notional bei 1% SL = 25 USDT ✓
+        # risk_pct_min=0.5%: 0.5% × 25 USDT = 0.125 USDT riskiert.
+        # Bei typischem ATR-SL (0.8-1.0x ATR ≈ 0.1% Preisrisiko):
+        #   contracts = 0.125 / (0.001 DOGE) = 125 DOGE, notional = 12.5 USDT > 5 USDT ✓
+        # Mit k=30 und max_dd=30%: max_eff_risk=1.1% → max_leverage = floor(1.1/0.5) = 2x
+        # Empirisch: eff=1.0% (rsk=0.5, lev=2) → DD=29.7%, PnL=+149% auf DOGE 30m ✓
         return {
-            "risk_per_entry_pct": (1.0,  8.0, 0.5),
+            "risk_per_entry_pct": (0.5,  8.0, 0.5),
             "atr_sl_multiplier":  (0.5,  2.0, 0.1),
             "leverage":           (2,    20),
             "max_effective_risk": max_eff_risk,
@@ -131,7 +137,20 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats: list
     max_eff_risk                = ranges["max_effective_risk"]
     min_trades                  = _min_trades(timeframe)
 
+    # Leverage-Obergrenze: selbst bei minimalem risk_pct muss eff_risk <= max_eff_risk gelten.
+    # lev_max_safe = floor(max_eff_risk / r_min) stellt sicher dass risk × leverage <= max_eff_risk.
+    # Beispiel: max_eff_risk=1.18%, r_min=0.5% → lev_max_safe=2 → nur lev=2 valide.
+    lev_max_safe = max(lev_min, int(max_eff_risk / r_min))
+    lev_max      = min(lev_max, lev_max_safe)
+
     def _objective(trial: optuna.Trial) -> float:
+        # Leverage zuerst sampeln, dann risk_pct daraus ableiten.
+        # Das garantiert risk_pct × leverage ≤ max_eff_risk für JEDEN Trial — kein Pruning.
+        leverage = trial.suggest_int("leverage", lev_min, lev_max)
+        # risk_pct_max für diesen Leverage: bei lev=2, max_eff=1.18% → risk_max=0.59% → step=0.5 → 0.5%
+        risk_pct_max = min(r_max, max(r_min, max_eff_risk / leverage))
+        risk_pct     = trial.suggest_float("risk_per_entry_pct", r_min, risk_pct_max, step=r_step)
+
         config = {
             "market": {"symbol": symbol, "timeframe": timeframe},
             "strategy": {
@@ -143,8 +162,7 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats: list
                 "fib_entry_max":                0.618,
                 "fib_sl_level":                 0.786,
                 # TP-Extension: 1.0=SwingHigh, 1.272=127.2%, 1.618=161.8%
-                # Mit 1.0 gilt R:R=(1-f)/f → nur f≤0.4 valide → 2% der Zone!
-                # Mit 1.618 gilt auch 61.8%-Entry: R:R=(1.618-0.618)/0.618=1.62 ✓
+                # Mit 1.618 gilt auch 61.8%-Entry: R:R=1.62 ✓ (statt 0.62 mit 1.0)
                 "fib_tp1_level":                trial.suggest_categorical("fib_tp1_level", [1.0, 1.272, 1.618]),
                 "fib_tp2_level":                1.618,
                 "fib_tolerance_atr_mult":       trial.suggest_float("fib_tolerance_atr_mult",       0.2, 2.0, step=0.1),
@@ -160,15 +178,8 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats: list
                 "candle_limit":                 500,
             },
             "risk": {
-                # Leverage-Range direkt aus risk_pct ableiten:
-                # max_leverage = floor(max_eff_risk / risk_pct)
-                # → jeder Trial erfüllt automatisch risk_pct × leverage ≤ max_eff_risk
-                # → kein Pruning, alle Trials erreichen den Backtest
-                "risk_per_entry_pct": trial.suggest_float("risk_per_entry_pct", r_min, r_max, step=r_step),
-                "leverage":           trial.suggest_int(
-                    "leverage", lev_min,
-                    max(lev_min, min(lev_max, int(max_eff_risk / trial.params["risk_per_entry_pct"])))
-                ),
+                "risk_per_entry_pct": risk_pct,
+                "leverage":           leverage,
                 "margin_mode":        "isolated",
             }
         }
@@ -225,7 +236,7 @@ def optimize(symbol: str, timeframe: str,
     print(f"\n  Parameter-Ranges (Kapital: {capital:.0f} USDT, Max-DD: {max_dd:.0f}%):")
     print(f"    risk_per_entry_pct : {r[0]:.1f} - {r[1]:.1f}%")
     print(f"    leverage           : {l[0]} - {l[1]}x")
-    print(f"    max effective risk : {m:.1f}%  (aus max_dd={max_dd:.0f}%: nach 3 Verlusten <= {max_dd:.0f}% DD)")
+    print(f"    max effective risk : {m:.1f}%  (aus max_dd={max_dd:.0f}%: nach ~30 Verlusten <= {max_dd:.0f}% DD)")
     print(f"    min trades         : {_min_trades(timeframe)}  (Timeframe: {timeframe})")
 
     print(f"\n  Lade Daten: {symbol} ({timeframe}) [{start_date} → {end_date}]")
