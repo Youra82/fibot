@@ -194,9 +194,6 @@ def main():
         pass
 
     send_tg = opt_cfg.get('send_telegram_on_completion', False)
-    if send_tg:
-        _telegram_send(bot_token, chat_id,
-            f"FiBot Auto-Optimierung gestartet\nGrund: {reason}")
 
     # In-progress Marker setzen
     open(IN_PROGRESS_FILE, 'w').close()
@@ -212,6 +209,31 @@ def main():
 
         log.info(f"Parameter: Kapital={capital} USDT | MaxDD={max_dd}% | WR>={min_wr}% | "
                  f"Zeitraum: {date_from} → {date_to}")
+
+        # Verfügbare Pairs aus Configs lesen für Startnachricht
+        pairs_str = 'alle Configs'
+        try:
+            cfg_files = sorted(f for f in os.listdir(CONFIGS_DIR)
+                               if f.startswith('config_') and f.endswith('.json'))
+            pairs = []
+            for fname in cfg_files:
+                with open(os.path.join(CONFIGS_DIR, fname)) as f:
+                    cfg = json.load(f)
+                sym = cfg.get('market', {}).get('symbol', '')
+                tf  = cfg.get('market', {}).get('timeframe', '')
+                if sym and tf:
+                    pairs.append(f"{sym.split('/')[0]}/{tf}")
+            if pairs:
+                pairs_str = ', '.join(pairs)
+        except Exception:
+            pass
+
+        if send_tg:
+            _telegram_send(bot_token, chat_id,
+                f"FiBot Auto-Optimizer GESTARTET\n"
+                f"Paare: {pairs_str}\n"
+                f"Kapital: {capital} USDT | MaxDD: {max_dd}% | {lookback} Tage\n"
+                f"Start: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
         cmd = [
             PYTHON_EXE, SHOW_RESULTS,
