@@ -67,13 +67,14 @@ Der Bot erkennt genau diese Strukturen und handelt sie automatisch — auf Bitge
 ```
 fibot/
 ├── master_runner.py                   # Cronjob-Orchestrator für Live-Trading
+├── auto_optimizer_scheduler.py        # Auto-Optimierung im Hintergrund (Scheduler)
 ├── show_results.sh                    # Interaktives Analyse-Menü (4 Modi)
 ├── run_pipeline.sh                    # Optuna-Optimierung für neue Configs
 ├── push_configs.sh                    # Optimierte Configs ins Repo pushen
 ├── install.sh                         # Erstinstallation auf VPS
 ├── update.sh                          # Git-Update (sichert secret.json)
 ├── cron_setup.sh                      # Cron-Job einrichten
-├── settings.json                      # Aktive Strategien
+├── settings.json                      # Aktive Strategien + Auto-Optimizer-Einstellungen
 ├── secret.json                        # API-Keys (nicht in Git)
 │
 └── src/fibot/
@@ -86,6 +87,8 @@ fibot/
     ├── analysis/
     │   ├── backtester.py              # Walk-Forward Backtest (vektorisiert, O(N log N))
     │   ├── optimizer.py               # Optuna-Optimierung: findet beste Parameter
+    │   ├── portfolio_simulator.py     # Chronologische Multi-Strategie-Simulation
+    │   ├── interactive_chart.py       # Interaktive Plotly-Charts (Mode 4)
     │   └── show_results.py            # Portfolio-Analyse & Backtest-Anzeige
     │
     └── utils/
@@ -257,7 +260,7 @@ Grund    : LONG | RSI überverkauft (41.2) | Volumen 1.43x
 
 ## Konfiguration
 
-### `settings.json` — Aktive Strategien
+### `settings.json` — Aktive Strategien & Auto-Optimizer
 
 ```json
 {
@@ -272,9 +275,41 @@ Grund    : LONG | RSI überverkauft (41.2) | Volumen 1.43x
         "active": true
       }
     ]
+  },
+  "optimization_settings": {
+    "enabled": false,
+    "schedule": {
+      "day_of_week": 6,
+      "hour": 3,
+      "minute": 0,
+      "interval": {
+        "value": 7,
+        "unit": "days"
+      }
+    },
+    "start_capital": 1000,
+    "max_drawdown_pct": 30,
+    "min_win_rate_pct": 0,
+    "lookback_days": 365,
+    "send_telegram_on_completion": true
   }
 }
 ```
+
+| Feld | Standard | Erklärung |
+|---|---|---|
+| `enabled` | `false` | Auto-Optimizer ein/ausschalten |
+| `day_of_week` | `6` | Wochentag (0=Montag, 6=Sonntag) für geplanten Lauf |
+| `hour` / `minute` | `3` / `0` | Uhrzeit für geplanten Lauf (03:00 Uhr) |
+| `interval.value/unit` | `7 days` | Mindestabstand zwischen zwei Optimierungen |
+| `start_capital` | `1000` | Startkapital für die Simulation |
+| `max_drawdown_pct` | `30` | Max. erlaubter Drawdown (Portfolio-Simulation) |
+| `min_win_rate_pct` | `0` | Min. Win-Rate (0 = kein Limit) |
+| `lookback_days` | `365` | Wie viele Tage historische Daten |
+| `send_telegram_on_completion` | `true` | Ergebnis via Telegram senden |
+
+> **Erster Start:** Beim ersten Lauf nach `enabled: true` startet die Optimierung sofort
+> (keine `.last_optimization_run` Datei vorhanden). Danach greift das Interval.
 
 ### `configs/config_BTCUSDTUSDT_4h_fib.json` — Strategie-Parameter
 
@@ -434,57 +469,63 @@ Wähle einen Analyse-Modus:
 ```
 
 **Modus 1 — Einzel-Analyse:**
-Backtestet alle vorhandenen Configs isoliert. Fragt nur Startdatum, Enddatum,
-Startkapital. Ausgabe als sortierte Zusammenfassungstabelle:
+Backtestet alle vorhandenen Configs isoliert. Fragt Startdatum, Enddatum,
+Startkapital. Ausgabe als sortierte Zusammenfassungstabelle (nach PnL):
 
 ```
 =========================================================================================
                         Zusammenfassung aller Einzelstrategien
 =========================================================================================
   Strategie               Trades  Win Rate %    PnL %  Max DD %  Endkapital
-  BTC/USDT:USDT (1d)          12       18.75   +30.45      9.56     1304.50
-  ETH/USDT:USDT (6h)           8       16.25   +22.10     12.30     1221.00
+  ADA/USDT:USDT (1h)         282       24.82  1613.40     19.26      428.35
+  ETH/USDT:USDT (1h)         199       20.60   299.07     17.59       99.77
 =========================================================================================
 ```
 
 **Modus 2 — Manuelle Portfolio-Simulation:**
-Zeigt alle verfügbaren Configs nummeriert. Du wählst z.B. `1 3 5`.
-Bot backtestet die gewählten Strategien und zeigt kombinierte Portfolio-Performance
-(Kapital gleichmäßig aufgeteilt: capital / N).
+Zeigt alle verfügbaren Configs nummeriert. Auswahl z.B. `1 3 5` oder `alle`.
+Bot backtestet die gewählten Strategien isoliert und zeigt kombinierte Portfolio-Performance.
 
 **Modus 3 — Automatische Portfolio-Optimierung:**
 Greedy-Algorithmus findet das beste Portfolio unter vorgegebenen Randbedingungen
 (Max Drawdown, optionale Min Win-Rate). Coin-Kollisionsschutz: gleicher Coin
 in zwei Timeframes (BTC 4h + BTC 1d) ist blockiert.
 
+Die Basis-Strategie wird gegen die **Portfolio-Simulation-DD** validiert (nicht nur
+gegen den Einzel-Backtester). Das stellt sicher, dass die Bedingung im Ergebnis
+auch tatsächlich eingehalten wird.
+
 ```
---- Starte automatische Portfolio-Optimierung (FiBot) mit Max DD <= 30.00% ---
+1/3: Suche Basis-Strategie (Portfolio-Sim-DD muss <= 30.00%)...
+  OK config_ADAUSDTUSDT_1h_fib.json     Sim: 428.35 USDT  Sim-DD: 19.26%
+  -- config_AAVEUSDTUSDT_30m_fib.json   Sim: 256.75 USDT  Sim-DD: 42.38%
 
-1/3: Analysiere Einzel-Performance & filtere...
-  [OK] config_BTCUSDTUSDT_1d_fib.json     PnL  +30.45%  WR  18.8%  DD   9.56%
-  [--] config_BTCUSDTUSDT_4h_fib.json     PnL  +12.10%  WR  15.2%  DD  35.20%
+2/3: Beste Basis: config_ADAUSDTUSDT_1h_fib.json
+     Portfolio-Simulation: 428.35 USDT, Sim-DD: 19.26%
 
-2/3: Beste Einzelstrategie: config_BTCUSDTUSDT_1d_fib.json
-     (Endkapital: 1304.50 USDT, Max DD: 9.56%)
-
-3/3: Suche die besten Team-Kollegen...
--> Fuege hinzu: config_ETHUSDTUSDT_6h_fib.json  (Neues Kapital: 1450.00 USDT, Max DD: 18.30%)
+3/3: Suche beste Team-Kollegen...
+-> Fuege hinzu: config_ETHUSDTUSDT_1h_fib.json
+   (Neues Kapital: 510.00 USDT, Max DD: 22.40%)
 
 =======================================================
      Ergebnis der automatischen Portfolio-Optimierung
 =======================================================
-Endkapital:    1450.00 USDT
-Gesamt PnL:    +450.00 USDT (45.00%)
-Portfolio MaxDD: 18.30%
+Endkapital:    510.00 USDT (+410.00%, +410.00 USDT)
+Portfolio MaxDD: 22.40%
 Liquidiert:    NEIN
 =======================================================
 ```
 
-Danach: Angebot, `settings.json` automatisch mit dem optimalen Portfolio zu aktualisieren.
+Am Ende wird angeboten:
+- `settings.json` mit dem optimalen Portfolio zu aktualisieren
+- Interaktiven Portfolio-Equity-Chart als HTML zu erstellen (`artifacts/charts/fibot_portfolio_equity.html`)
+- Excel-Tabelle aller Trades zu erstellen (`artifacts/charts/fibot_trades.xlsx`)
+- Beides via Telegram zu senden
 
 **Modus 4 — Interaktive Charts:**
-Wählt aus gespeicherten Backtest-Ergebnissen und öffnet einen interaktiven
-Plotly-Chart als HTML (`artifacts/charts/fibot_*.html`) mit 5 Panels:
+Liest alle aktuellen Configs aus `src/fibot/strategy/configs/` und zeigt sie zur Auswahl.
+Nach der Auswahl: Startdatum, Enddatum, Kapital eingeben → Backtest wird frisch berechnet
+→ HTML-Chart in `artifacts/charts/fibot_*.html` mit 5 Panels:
 Candlestick + Fib-Levels, Volumen, RSI, ATR, Signal-Score.
 
 #### 3. Configs ins Repo pushen — `push_configs.sh`
@@ -532,14 +573,91 @@ crontab -e
 
 ```cron
 # FiBot — alle 4 Stunden (passend zum 4h Timeframe)
-0 */4 * * * cd /home/user/fibot && .venv/bin/python3 master_runner.py >> logs/cron.log 2>&1
+0 */4 * * * cd /root/fibot && .venv/bin/python3 master_runner.py >> logs/cron.log 2>&1
 
 # FiBot — stündlich (für 1h Timeframe)
-5 * * * * cd /home/user/fibot && .venv/bin/python3 master_runner.py >> logs/cron.log 2>&1
+5 * * * * cd /root/fibot && .venv/bin/python3 master_runner.py >> logs/cron.log 2>&1
 ```
 
 > Offset von 5 Minuten nach der vollen Stunde empfohlen (Börse braucht ~1–2 Min
 > um die Kerze zu schließen).
+
+---
+
+## Auto-Optimierung
+
+Der Bot kann das Portfolio **vollautomatisch** neu optimieren — ohne manuellen Eingriff.
+Der Scheduler läuft bei jedem `master_runner.py`-Start im Hintergrund und prüft,
+ob eine Optimierung fällig ist.
+
+### Aktivieren
+
+```bash
+nano settings.json
+# "enabled": true setzen unter optimization_settings
+```
+
+### Zeitplan-Optionen
+
+```json
+"schedule": {
+  "day_of_week": 6,
+  "hour": 3,
+  "minute": 0,
+  "interval": { "value": 7, "unit": "days" }
+}
+```
+
+- **`interval`**: Mindestabstand zwischen zwei Läufen (z.B. alle 7 Tage)
+- **`day_of_week` + `hour`**: Zusätzlich geplanter Lauf (z.B. jeden Samstag 03:00 Uhr)
+- Beide Mechanismen greifen unabhängig voneinander
+
+Unterstützte Einheiten für `interval.unit`: `minutes`, `hours`, `days`, `weeks`
+
+### Ablauf
+
+```
+master_runner.py startet
+  └─ auto_optimizer_scheduler.py (Hintergrund, non-blocking)
+       ├─ Prüft .last_optimization_run
+       ├─ Wenn fällig: Telegram "Optimierung gestartet"
+       ├─ Setzt .optimization_in_progress (verhindert parallele Läufe)
+       ├─ Führt aus: show_results.py --mode 3 --auto
+       │    (verwendet start_capital / max_drawdown_pct / lookback_days aus settings.json)
+       ├─ Liest optimization_results.json
+       ├─ Schreibt active_strategies in settings.json
+       ├─ Speichert Timestamp in .last_optimization_run
+       └─ Telegram "Optimierung abgeschlossen" mit Portfolio-Details
+          + Portfolio-Chart HTML + Excel-Tabelle (artifacts/charts/)
+```
+
+### Manuell auslösen
+
+```bash
+# Scheduler direkt starten (prüft ob fällig)
+.venv/bin/python3 auto_optimizer_scheduler.py
+
+# Sofort erzwingen: .last_optimization_run löschen
+rm .last_optimization_run
+.venv/bin/python3 auto_optimizer_scheduler.py
+```
+
+### Log ansehen
+
+```bash
+tail -f logs/auto_optimizer.log
+```
+
+### Dateien
+
+| Datei | Beschreibung |
+|---|---|
+| `.last_optimization_run` | Timestamp des letzten Laufs (nicht in Git) |
+| `.optimization_in_progress` | Lock-Datei während laufender Optimierung |
+| `artifacts/results/optimization_results.json` | Letztes Optimierungs-Ergebnis |
+| `artifacts/charts/fibot_portfolio_equity.html` | Interaktiver Portfolio-Chart |
+| `artifacts/charts/fibot_trades.xlsx` | Excel-Tabelle aller Trades |
+| `logs/auto_optimizer.log` | Vollständiges Protokoll |
 
 ---
 
@@ -550,6 +668,7 @@ crontab -e
 ```bash
 tail -f logs/cron.log
 tail -n 100 logs/fibot_BTCUSDTUSDT_4h.log
+tail -f logs/auto_optimizer.log
 grep -i "ERROR" logs/fibot_BTCUSDTUSDT_4h.log
 ```
 
@@ -568,7 +687,7 @@ grep -i "ERROR" logs/fibot_BTCUSDTUSDT_4h.log
 #### show_results.py direkt aufrufen
 
 ```bash
-# Modus 1: alle Configs isoliert (Startdatum bis heute)
+# Modus 1: alle Configs isoliert
 .venv/bin/python3 src/fibot/analysis/show_results.py \
     --mode 1 --from 2024-01-01 --capital 1000
 
@@ -577,9 +696,13 @@ grep -i "ERROR" logs/fibot_BTCUSDTUSDT_4h.log
     --mode 2 --configs "config_BTCUSDTUSDT_1d_fib.json config_ETHUSDTUSDT_6h_fib.json" \
     --from 2024-01-01 --capital 1000
 
-# Modus 3: automatische Portfolio-Optimierung
+# Modus 3: automatische Portfolio-Optimierung (interaktiv)
 .venv/bin/python3 src/fibot/analysis/show_results.py \
     --mode 3 --capital 1000 --target-max-dd 30 --from 2024-01-01
+
+# Modus 3: non-interaktiv (wie Auto-Optimizer, kein Prompt)
+.venv/bin/python3 src/fibot/analysis/show_results.py \
+    --mode 3 --capital 1000 --target-max-dd 30 --from 2024-01-01 --auto
 
 # Modus 4: interaktive Charts
 .venv/bin/python3 src/fibot/analysis/show_results.py --mode 4
@@ -633,6 +756,7 @@ Mehrere Symbole laufen parallel — jedes als eigenständiger Prozess:
 
 - `secret.json` ist **nicht in Git** — wird von `update.sh` gesichert
 - `artifacts/tracker/` ist **nicht in Git** — enthält offene Trade-Zustände
+- `.last_optimization_run` ist **nicht in Git** — wird vom Auto-Optimizer verwaltet
 - Immer erst `show_results.sh` → Modus 1 oder 3 (Backtest) bevor Live-Trading aktiviert wird
 - Pro Coin maximal einen Timeframe in `active_strategies` eintragen
 - `min_signal_score ≥ 4.0` empfohlen — darunter zu viele Fehlsignale
@@ -663,4 +787,5 @@ scipy>=1.11.0    # argrelmax/argrelmin für vektorisierten Backtester
 optuna>=3.0.0    # Hyperparameter-Optimierung
 requests>=2.31.0 # Telegram-Benachrichtigungen
 plotly>=5.0.0    # Interaktive Charts
+openpyxl>=3.1.0  # Excel-Export (Trades-Tabelle)
 ```
