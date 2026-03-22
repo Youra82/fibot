@@ -1,0 +1,16 @@
+Exit code 1
+Traceback (most recent call last):
+  File "<string>", line 12, in <module>
+  File "C:\Users\matol\Desktop\botprojekte\fibot\src\fibot\analysis\optimizer.py", line 242, in optimize
+    print(f"\n  Lade Daten: {symbol} ({timeframe}) [{start_date} \u2192 {end_date}]")
+  File "C:\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2192' in position 49: character maps to <undefined>
+Zeitraum: 2024-03-01 -> 2025-03-01
+
+  Parameter-Ranges (Kapital: 25 USDT, Max-DD: 30%):
+    risk_per_entry_pct : 0.5 - 8.0%
+    leverage           : 2 - 20x
+    max effective risk : 1.2%  (aus max_dd=30%: nach ~30 Verlusten <= 30% DD)
+    min trades         : 60  (Timeframe: 30m)
