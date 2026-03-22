@@ -1,28 +1,28 @@
 {
   "market": {
-    "symbol": "BTC/USDT:USDT",
+    "symbol": "ADA/USDT:USDT",
     "timeframe": "4h"
   },
   "strategy": {
-    "swing_lookback": 70,
-    "pivot_left": 6,
-    "pivot_right": 4,
-    "structure_lookback": 90,
+    "swing_lookback": 20,
+    "pivot_left": 4,
+    "pivot_right": 5,
+    "structure_lookback": 20,
     "fib_entry_min": 0.382,
     "fib_entry_max": 0.618,
     "fib_sl_level": 0.786,
     "fib_tp1_level": 1.0,
     "fib_tp2_level": 1.272,
-    "fib_tolerance_atr_mult": 1.9,
-    "structure_tolerance_atr_mult": 0.9,
+    "fib_tolerance_atr_mult": 0.7,
+    "structure_tolerance_atr_mult": 0.3,
     "rsi_period": 14,
-    "rsi_oversold": 46.0,
-    "rsi_overbought": 69.0,
-    "volume_ratio_min": 0.1,
-    "min_rr": 1.4,
+    "rsi_oversold": 33.0,
+    "rsi_overbought": 59.0,
+    "volume_ratio_min": 1.8,
+    "min_rr": 2.4,
     "atr_period": 14,
     "atr_sl_multiplier": 0.5,
-    "min_signal_score": 2.5,
+    "min_signal_score": 3.5,
     "candle_limit": 500
   },
   "risk": {
@@ -31,11 +31,11 @@
     "margin_mode": "isolated"
   },
   "_backtest": {
-    "pnl_pct": 89.31,
-    "win_rate": 11.5,
-    "total_trades": 243,
-    "max_drawdown": 26.03,
-    "avg_rr": 2.08,
+    "pnl_pct": 70.39,
+    "win_rate": 22.3,
+    "total_trades": 265,
+    "max_drawdown": 21.9,
+    "avg_rr": 1.79,
     "start_date": "2024-03-21",
     "end_date": "2026-03-21",
     "capital": 25.0

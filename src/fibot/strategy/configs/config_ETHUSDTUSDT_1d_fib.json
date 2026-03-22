@@ -1,28 +1,28 @@
 {
   "market": {
-    "symbol": "BTC/USDT:USDT",
-    "timeframe": "4h"
+    "symbol": "ETH/USDT:USDT",
+    "timeframe": "1d"
   },
   "strategy": {
-    "swing_lookback": 70,
-    "pivot_left": 6,
+    "swing_lookback": 200,
+    "pivot_left": 8,
     "pivot_right": 4,
-    "structure_lookback": 90,
+    "structure_lookback": 50,
     "fib_entry_min": 0.382,
     "fib_entry_max": 0.618,
     "fib_sl_level": 0.786,
     "fib_tp1_level": 1.0,
     "fib_tp2_level": 1.272,
-    "fib_tolerance_atr_mult": 1.9,
+    "fib_tolerance_atr_mult": 1.8,
     "structure_tolerance_atr_mult": 0.9,
     "rsi_period": 14,
-    "rsi_oversold": 46.0,
-    "rsi_overbought": 69.0,
-    "volume_ratio_min": 0.1,
-    "min_rr": 1.4,
+    "rsi_oversold": 48.0,
+    "rsi_overbought": 66.0,
+    "volume_ratio_min": 1.8,
+    "min_rr": 1.9,
     "atr_period": 14,
     "atr_sl_multiplier": 0.5,
-    "min_signal_score": 2.5,
+    "min_signal_score": 4.0,
     "candle_limit": 500
   },
   "risk": {
@@ -31,12 +31,12 @@
     "margin_mode": "isolated"
   },
   "_backtest": {
-    "pnl_pct": 89.31,
-    "win_rate": 11.5,
-    "total_trades": 243,
-    "max_drawdown": 26.03,
-    "avg_rr": 2.08,
-    "start_date": "2024-03-21",
+    "pnl_pct": 120.29,
+    "win_rate": 36.8,
+    "total_trades": 19,
+    "max_drawdown": 3.94,
+    "avg_rr": 5.81,
+    "start_date": "2023-03-22",
     "end_date": "2026-03-21",
     "capital": 25.0
   }
