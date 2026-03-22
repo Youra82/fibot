@@ -772,11 +772,15 @@ Mehrere Symbole laufen parallel — jedes als eigenständiger Prozess:
 
 | Timeframe | Tage | Kerzen (ca.) |
 |---|---|---|
-| 15m / 30m | 180 | ~17.000 |
-| 1h / 2h | 365 | ~8.700 |
-| **4h** | **730** | **~4.380** |
-| 12h / 1d | 1095 | ~1.095 |
-| 1w | 1460 | ~208 |
+| 1m | 30 | ~43.000 |
+| 3m / 5m / 15m | 60 – 90 | ~6.000 – 13.000 |
+| 30m / 1h | 365 | ~17.500 / ~8.700 |
+| **2h / 4h** | **730** | **~8.700 / ~4.380** |
+| 6h / 8h / 12h / 1d | 1095 | ~4.380 – ~1.095 |
+| 3d / 1w | 1825 | ~608 / ~260 |
+
+Der Auto-Optimizer (`lookback_days: "auto"`) nimmt den **maximalen** Wert
+über alle vorhandenen Config-Timeframes.
 
 ---
 

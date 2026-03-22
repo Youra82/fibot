@@ -333,20 +333,20 @@ def save_backtest_result(result: BacktestResult, output_dir: str):
 # Timeframe → empfohlene Backtest-Tage
 # ---------------------------------------------------------------------------
 DAYS_BY_TIMEFRAME = {
-    "1m":  90,
-    "3m":  90,
-    "5m":  180,
-    "15m": 180,
+    "1m":  30,
+    "3m":  60,
+    "5m":  90,
+    "15m": 90,
     "30m": 365,
     "1h":  365,
-    "2h":  365,
-    "4h":  730,   # 2 Jahre für sinnvolle Fib-Swing-Erkennung
-    "6h":  730,
-    "8h":  730,
-    "12h": 730,
-    "1d":  1095,  # 3 Jahre
-    "3d":  1460,
-    "1w":  1460,
+    "2h":  730,
+    "4h":  730,
+    "6h":  1095,
+    "8h":  1095,
+    "12h": 1095,
+    "1d":  1095,
+    "3d":  1825,
+    "1w":  1825,
 }
 
 def auto_days_for_timeframe(timeframe: str) -> int:
