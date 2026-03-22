@@ -11,7 +11,7 @@ echo "       FiBot — Fibonacci Optimierungs-Pipeline"
 echo -e "=======================================================${NC}"
 
 VENV_PATH=".venv/bin/activate"
-PYTHON=".venv/bin/python3"
+PYTHON=".venv/bin/$PYTHON"
 OPTIMIZER="src/fibot/analysis/optimizer.py"
 
 if [ ! -f "$VENV_PATH" ]; then
@@ -109,7 +109,7 @@ for symbol in $SYMBOLS; do
         # Altes PnL aus bestehender Config lesen (falls vorhanden)
         OLD_PNL=""
         if [ -f "$CONFIG_FILE" ]; then
-            OLD_PNL=$(python3 -c "
+            OLD_PNL=$($PYTHON -c "
 import json, sys
 try:
     d = json.load(open('$CONFIG_FILE'))
@@ -141,7 +141,7 @@ except: pass
             fi
         elif [ -n "$OLD_PNL" ] && [ -f "$CONFIG_FILE" ]; then
             # Neues PnL auslesen und vergleichen
-            NEW_PNL=$(python3 -c "
+            NEW_PNL=$($PYTHON -c "
 import json, sys
 try:
     d = json.load(open('$CONFIG_FILE'))
@@ -149,7 +149,7 @@ try:
 except: pass
 " 2>/dev/null)
             # Vergleich: neues PnL schlechter als altes?
-            WORSE=$(python3 -c "
+            WORSE=$($PYTHON -c "
 try:
     old, new = float('$OLD_PNL'), float('$NEW_PNL')
     print('yes' if new < old else 'no')
