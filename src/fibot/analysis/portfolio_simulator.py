@@ -230,4 +230,5 @@ def run_portfolio_simulation(start_capital: float,
         'max_drawdown_date': max_dd_date,
         'liquidation_date':  liquidation_date,
         'equity_curve':      eq_df,
+        'trade_history':     trade_history,
     }

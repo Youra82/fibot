@@ -419,6 +419,16 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
         json.dump({'optimal_portfolio': final_filenames}, f, indent=2)
     print(f"{GREEN}Optimales Portfolio in '{OPT_RESULTS}' gespeichert.{NC}")
 
+    # ── Chart & Excel anbieten ────────────────────────────────────────────────
+    if final_sim:
+        print()
+        ans = input("  Interaktive Charts & Excel fuer dieses Portfolio erstellen"
+                    " & via Telegram senden? (j/n) [Standard: n]: ").strip().lower()
+        if ans in ('j', 'y', 'ja'):
+            print()
+            _generate_portfolio_chart(final_sim, portfolio, capital, start_date, end_date)
+            _generate_trades_excel(final_sim, portfolio, capital)
+
 
 # ---------------------------------------------------------------------------
 # Modus 4: Live Signal-Check
@@ -456,6 +466,251 @@ def run_signal_check(symbol: str, timeframe: str):
         print(f"{GREEN}{summary}{NC}")
     else:
         print(f"{RED}{summary}{NC}")
+
+
+# ---------------------------------------------------------------------------
+# Portfolio-Chart & Excel (Mode 3 Post-Optmierung)
+# ---------------------------------------------------------------------------
+
+def _get_telegram_cfg() -> tuple[str, str]:
+    """Liest Telegram bot_token und chat_id aus secret.json."""
+    secret_path = os.path.join(PROJECT_ROOT, 'secret.json')
+    try:
+        with open(secret_path) as f:
+            secrets = json.load(f)
+        tg = secrets.get('telegram', {})
+        return tg.get('bot_token', ''), tg.get('chat_id', '')
+    except Exception:
+        return '', ''
+
+
+def _generate_portfolio_chart(final_sim: dict, portfolio: list,
+                               capital: float, start_date: str, end_date: str):
+    """Erstellt einen interaktiven Portfolio-Equity-Chart und sendet ihn optional via Telegram."""
+    try:
+        import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
+    except ImportError:
+        print(f"  {RED}plotly nicht installiert — Chart übersprungen. (pip install plotly){NC}")
+        return
+
+    eq_df        = final_sim.get('equity_curve')
+    trade_history = final_sim.get('trade_history', [])
+    if eq_df is None or eq_df.empty:
+        print(f"  {YELLOW}Keine Equity-Daten — Chart übersprungen.{NC}")
+        return
+
+    # Equity-Kurve
+    eq_times = eq_df['timestamp'].astype(str).tolist()
+    eq_vals  = eq_df['equity'].tolist()
+
+    # Trade-Marker
+    win_x, win_y   = [], []
+    loss_x, loss_y = [], []
+    for t in trade_history:
+        ts  = str(t['ts'])
+        # Equity zum Zeitpunkt des Trades aus equity_curve holen
+        row = eq_df[eq_df['timestamp'] <= t['ts']]
+        eq_at = float(row['equity'].iloc[-1]) if not row.empty else capital
+        if t['pnl'] > 0:
+            win_x.append(ts);  win_y.append(eq_at)
+        else:
+            loss_x.append(ts); loss_y.append(eq_at)
+
+    # Hover-Text pro Trade
+    hover_txt = []
+    for t in trade_history:
+        fname_short = t['fname'].replace('config_', '').replace('_fib.json', '')
+        hover_txt.append(
+            f"{fname_short}<br>"
+            f"{t['direction'].upper()} | Entry: {t['entry']:.4f} → {t['exit']:.4f}<br>"
+            f"PnL: {t['pnl']:+.4f} USDT"
+        )
+
+    n_strats   = len(portfolio)
+    pairs_str  = ', '.join(
+        f"{r['symbol'].split('/')[0]}/{r['timeframe']}" for r in portfolio
+    )
+    pnl_pct    = final_sim['total_pnl_pct']
+    sign       = '+' if pnl_pct >= 0 else ''
+    title = (
+        f"FiBot Portfolio — {n_strats} Strategie(n) ({pairs_str}) | "
+        f"Zeitraum: {start_date} → {end_date} | "
+        f"Trades: {final_sim['trade_count']} | WR: {final_sim['win_rate']:.1f}% | "
+        f"PnL: {sign}{pnl_pct:.1f}% | "
+        f"Endkapital: {final_sim['end_capital']:.2f} USDT | "
+        f"MaxDD: {final_sim['max_drawdown_pct']:.1f}%"
+    )
+
+    fig = make_subplots(specs=[[{"secondary_y": False}]])
+
+    # Startkapital-Referenzlinie
+    fig.add_hline(
+        y=capital,
+        line=dict(color='rgba(100,100,100,0.35)', width=1, dash='dash'),
+        annotation_text=f'Start {capital:.0f} USDT',
+        annotation_position='top left',
+    )
+
+    # Equity-Kurve
+    fig.add_trace(go.Scatter(
+        x=eq_times, y=eq_vals,
+        mode='lines', name='Portfolio Equity',
+        line=dict(color='#2563eb', width=2),
+        hovertemplate='Equity: %{y:.2f} USDT<extra></extra>',
+    ))
+
+    # WIN-Marker ● cyan
+    if win_x:
+        fig.add_trace(go.Scatter(
+            x=win_x, y=win_y, mode='markers',
+            marker=dict(color='#22d3ee', symbol='circle', size=10,
+                        line=dict(width=1, color='#0e7490')),
+            name='TP ✓',
+        ))
+
+    # LOSS-Marker ✗ rot
+    if loss_x:
+        fig.add_trace(go.Scatter(
+            x=loss_x, y=loss_y, mode='markers',
+            marker=dict(color='#ef4444', symbol='x', size=10,
+                        line=dict(width=2, color='#7f1d1d')),
+            name='SL ✗',
+        ))
+
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=12), x=0.5, xanchor='center'),
+        height=600,
+        hovermode='x unified',
+        template='plotly_dark',
+        dragmode='zoom',
+        xaxis=dict(rangeslider=dict(visible=True), fixedrange=False),
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+        margin=dict(l=60, r=60, t=80, b=40),
+        yaxis=dict(title='Portfolio Equity (USDT)', fixedrange=False),
+    )
+
+    os.makedirs(os.path.join(PROJECT_ROOT, 'artifacts', 'charts'), exist_ok=True)
+    out_file = os.path.join(PROJECT_ROOT, 'artifacts', 'charts', 'fibot_portfolio_equity.html')
+    fig.write_html(out_file)
+    print(f"  {GREEN}✓ Portfolio-Chart erstellt: {out_file}{NC}")
+
+    bot_token, chat_id = _get_telegram_cfg()
+    if bot_token and chat_id:
+        from fibot.utils.telegram import send_document
+        caption = (
+            f"FiBot Portfolio-Equity\n"
+            f"{start_date} → {end_date} | {n_strats} Strategie(n) | "
+            f"PnL: {sign}{pnl_pct:.1f}% | Equity: {final_sim['end_capital']:.2f} USDT | "
+            f"MaxDD: {final_sim['max_drawdown_pct']:.1f}%"
+        )
+        send_document(bot_token, chat_id, out_file, caption=caption)
+        print(f"  {GREEN}✓ Via Telegram gesendet.{NC}")
+    else:
+        print(f"  {YELLOW}Telegram nicht konfiguriert — Chart nur lokal gespeichert.{NC}")
+
+
+def _generate_trades_excel(final_sim: dict, portfolio: list, capital: float):
+    """Erstellt eine Excel-Tabelle mit allen Trades des optimalen Portfolios."""
+    try:
+        import openpyxl
+        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        print(f"  {YELLOW}openpyxl nicht installiert — Excel übersprungen. (pip install openpyxl){NC}")
+        return
+
+    trade_history = final_sim.get('trade_history', [])
+    if not trade_history:
+        print(f"  {YELLOW}Keine Trades — Excel übersprungen.{NC}")
+        return
+
+    # Equity-Verlauf aufbauen
+    equity = capital
+    rows = []
+    for i, t in enumerate(trade_history):
+        equity += t['pnl']
+        fname_short = t['fname'].replace('config_', '').replace('_fib.json', '')
+        ergebnis = 'TP erreicht' if t['pnl'] > 0 else 'SL erreicht'
+        rows.append({
+            'Nr':              i + 1,
+            'Datum':           str(t['ts'])[:16].replace('T', ' '),
+            'Strategie':       fname_short,
+            'Richtung':        t['direction'].upper(),
+            'Entry':           round(float(t['entry']), 6),
+            'Exit':            round(float(t['exit']),  6),
+            'Ergebnis':        ergebnis,
+            'PnL (USDT)':      round(float(t['pnl']),   4),
+            'Gesamtkapital':   round(equity, 4),
+        })
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Trades'
+
+    header_fill  = PatternFill('solid', fgColor='1E3A5F')
+    win_fill     = PatternFill('solid', fgColor='D6F4DC')
+    loss_fill    = PatternFill('solid', fgColor='FAD7D7')
+    alt_fill     = PatternFill('solid', fgColor='F2F2F2')
+    thin_border  = Border(
+        left=Side(style='thin', color='CCCCCC'), right=Side(style='thin', color='CCCCCC'),
+        top=Side(style='thin', color='CCCCCC'),  bottom=Side(style='thin', color='CCCCCC'),
+    )
+    col_widths = {
+        'Nr': 5, 'Datum': 18, 'Strategie': 28, 'Richtung': 10,
+        'Entry': 14, 'Exit': 14, 'Ergebnis': 14,
+        'PnL (USDT)': 14, 'Gesamtkapital': 16,
+    }
+
+    headers = list(rows[0].keys())
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill      = header_fill
+        cell.font      = Font(bold=True, color='FFFFFF', size=11)
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border    = thin_border
+        ws.column_dimensions[get_column_letter(col)].width = col_widths.get(h, 14)
+    ws.row_dimensions[1].height = 22
+
+    for r_idx, row in enumerate(rows, 2):
+        fill = win_fill if row['Ergebnis'] == 'TP erreicht' else \
+               loss_fill if r_idx % 2 == 0 else alt_fill
+        for col, key in enumerate(headers, 1):
+            cell = ws.cell(row=r_idx, column=col, value=row[key])
+            cell.fill      = fill
+            cell.border    = thin_border
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            if key in ('Entry', 'Exit', 'PnL (USDT)', 'Gesamtkapital'):
+                cell.number_format = '#,##0.0000'
+        ws.row_dimensions[r_idx].height = 18
+
+    # Zusammenfassung
+    sr = len(rows) + 3
+    ws.cell(row=sr, column=1, value='Zusammenfassung').font = Font(bold=True, size=11)
+    wins = sum(1 for t in trade_history if t['pnl'] > 0)
+    for label, value in [
+        ('Trades gesamt',  len(trade_history)),
+        ('Win-Rate',       f"{wins / len(trade_history) * 100:.1f}%"),
+        ('PnL',            f"{final_sim['total_pnl_pct']:+.1f}%"),
+        ('Endkapital',     f"{final_sim['end_capital']:.2f} USDT"),
+        ('Max Drawdown',   f"{final_sim['max_drawdown_pct']:.1f}%"),
+    ]:
+        ws.cell(row=sr, column=1, value=label).font = Font(bold=True)
+        ws.cell(row=sr, column=2, value=value)
+        sr += 1
+
+    os.makedirs(os.path.join(PROJECT_ROOT, 'artifacts', 'charts'), exist_ok=True)
+    out_file = os.path.join(PROJECT_ROOT, 'artifacts', 'charts', 'fibot_trades.xlsx')
+    wb.save(out_file)
+    print(f"  {GREEN}✓ Excel-Tabelle erstellt: {out_file}{NC}")
+
+    bot_token, chat_id = _get_telegram_cfg()
+    if bot_token and chat_id:
+        from fibot.utils.telegram import send_document
+        send_document(bot_token, chat_id, out_file,
+                      caption=f"FiBot Trades — {len(trade_history)} Trades, "
+                              f"WR: {wins / len(trade_history) * 100:.1f}%")
+        print(f"  {GREEN}✓ Via Telegram gesendet.{NC}")
 
 
 # ---------------------------------------------------------------------------
