@@ -187,13 +187,15 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
     """
     Findet das optimale Fibonacci-Portfolio per Greedy-Algorithmus — stbot-Style.
 
-    Schritt 1: Alle Configs backtesten, nach MaxDD (+ optionalem MinWR) filtern.
+    Schritt 1: Alle Configs backtesten (isoliert), nach MaxDD + MinWR filtern.
     Schritt 2: Beste Einzelstrategie als Startpunkt.
-    Schritt 3: Greedy — iterativ den besten Team-Kollegen hinzufügen.
+    Schritt 3: Greedy — iterativ echte Portfolio-Simulation (run_portfolio_simulation)
+               pro Kandidat: gemeinsames Kapital, chronologisch, Margin-Check.
     Coin-Kollision: kein Coin doppelt (BTC 4h + BTC 1h = blockiert).
-    Kapital: gleichmäßig auf N Strategien aufgeteilt (capital / N).
     """
     from fibot.analysis.backtester import run_backtest, load_ohlcv
+    from fibot.strategy.fibonacci_logic import precompute_all_signals
+    from fibot.analysis.portfolio_simulator import run_portfolio_simulation
 
     if not os.path.isdir(CONFIGS_DIR):
         print(f"{RED}Kein Configs-Verzeichnis: {CONFIGS_DIR}{NC}")
@@ -210,11 +212,13 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
         cond += f" & WR >= {min_wr:.1f}%"
     print(f"\n--- Starte automatische Portfolio-Optimierung (FiBot) mit {cond} & ohne Coin-Kollisionen ---")
 
-    # ── Schritt 1: Einzel-Backtests + Filter ─────────────────────────────────
+    # ── Schritt 1: Daten laden, Signale vorberechnen, Einzel-Backtest ────────
     print(f"\n1/3: Analysiere Einzel-Performance & filtere nach {cond}...")
     print(f"     Zeitraum: {start_date} bis {end_date} | Startkapital: {capital:.0f} USDT\n")
 
-    single_results = []
+    single_results  = []   # für Filterung
+    strategies_data = {}   # für Portfolio-Simulator (df bereits precomputed)
+
     for fname in cfg_files:
         cfg_path = os.path.join(CONFIGS_DIR, fname)
         try:
@@ -234,9 +238,18 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
             print(f"  {YELLOW}Uebersprungen (keine Daten): {fname}{NC}")
             continue
 
+        # Signale vorberechnen (einmal, wird für Simulator wiederverwendet)
+        df = precompute_all_signals(df, config)
+
         result = run_backtest(df, config, capital, symbol, timeframe)
 
-        entry = {
+        strategies_data[fname] = {
+            'symbol':    symbol,
+            'timeframe': timeframe,
+            'df':        df,
+            'config':    config,
+        }
+        single_results.append({
             'filename':  fname,
             'symbol':    symbol,
             'timeframe': timeframe,
@@ -246,15 +259,12 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
             'win_rate':  result.win_rate,
             'max_dd':    result.max_drawdown_pct,
             'trades':    result.total_trades,
-            'avg_rr':    result.avg_rr,
-        }
-        single_results.append(entry)
+        })
 
-        ok       = result.max_drawdown_pct <= target_max_dd and result.win_rate >= min_wr
-        dd_col   = GREEN if result.max_drawdown_pct <= target_max_dd else RED
-        pnl_col  = GREEN if result.pnl_pct >= 0 else RED
-        status   = "OK" if ok else "--"
-        print(f"  [{status}] {fname:<44}  "
+        ok      = result.max_drawdown_pct <= target_max_dd and result.win_rate >= min_wr
+        dd_col  = GREEN if result.max_drawdown_pct <= target_max_dd else RED
+        pnl_col = GREEN if result.pnl_pct >= 0 else RED
+        print(f"  [{'OK' if ok else '--'}] {fname:<44}  "
               f"PnL {pnl_col}{result.pnl_pct:>+7.2f}%{NC}  "
               f"WR {result.win_rate:>5.1f}%  "
               f"DD {dd_col}{result.max_drawdown_pct:>6.2f}%{NC}  "
@@ -264,15 +274,14 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
         print(f"{RED}Kein Backtest erfolgreich. Abbruch.{NC}")
         return
 
-    # Filter
     valid = [r for r in single_results
              if r['max_dd'] <= target_max_dd and r['win_rate'] >= min_wr]
 
     if not valid:
         print(f"\n{RED}Keine Einzelstrategie erfuellt {cond}.{NC}")
-        min_achievable = min(r['max_dd'] for r in single_results)
-        print(f"  Niedrigster erreichbarer DD: {min_achievable:.1f}%")
-        print(f"  TIPP: Max Drawdown auf mindestens {int(min_achievable) + 5}% erhoehen.")
+        min_dd = min(r['max_dd'] for r in single_results)
+        print(f"  Niedrigster erreichbarer DD: {min_dd:.1f}%")
+        print(f"  TIPP: Max Drawdown auf mindestens {int(min_dd) + 5}% erhoehen.")
         return
 
     # ── Schritt 2: Besten Einzelspieler wählen ───────────────────────────────
@@ -282,58 +291,82 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
     print(f"\n2/3: Beste Einzelstrategie (unter {cond}): {best_single['filename']}")
     print(f"     (Endkapital: {best_single['end_cap']:.2f} USDT, Max DD: {best_single['max_dd']:.2f}%)")
 
-    # ── Schritt 3: Greedy — Team-Kollegen hinzufügen ─────────────────────────
-    print(f"\n3/3: Suche die besten Team-Kollegen (Kapital wird auf N Strategien aufgeteilt)...")
-
-    def _port_end_cap(strats: list) -> float:
-        n       = len(strats)
-        per_cap = capital / n
-        return sum(per_cap * (1 + r['pnl_pct'] / 100) for r in strats)
+    # ── Schritt 3: Greedy mit echter Portfolio-Simulation ────────────────────
+    print(f"\n3/3: Suche beste Team-Kollegen (echte Portfolio-Simulation, gemeinsames Kapital)...")
 
     portfolio      = [best_single]
     used_coins     = {best_single['coin']}
     candidate_pool = [r for r in valid[1:]]
-    best_end_cap   = _port_end_cap(portfolio)
+
+    # Aktuelle Portfolio-Performance per Simulation
+    def _simulate(filenames: list) -> dict | None:
+        data = {fn: strategies_data[fn] for fn in filenames if fn in strategies_data}
+        return run_portfolio_simulation(capital, data, start_date, end_date)
+
+    best_sim = _simulate([best_single['filename']])
+    best_end_cap = best_sim['end_capital'] if best_sim else best_single['end_cap']
+    best_dd      = best_sim['max_drawdown_pct'] if best_sim else best_single['max_dd']
 
     while True:
-        best_next   = None
-        best_cap_w  = best_end_cap
-        best_dd_w   = best_single['max_dd'] if len(portfolio) == 1 else \
-                      max(r['max_dd'] for r in portfolio)
+        best_next    = None
+        best_cap_w   = best_end_cap
+        best_dd_w    = best_dd
 
         for candidate in candidate_pool:
             if candidate['coin'] in used_coins:
-                continue   # Coin-Kollision (auch verschiedene Timeframes)
+                continue   # Coin-Kollision
 
-            combined_dd = max(r['max_dd'] for r in portfolio + [candidate])
-            if combined_dd > target_max_dd:
+            # Schnell-Check: Einzel-DD des Kandidaten muss <= target
+            if candidate['max_dd'] > target_max_dd:
                 continue
 
-            combined_cap = _port_end_cap(portfolio + [candidate])
-            if combined_cap > best_cap_w:
-                best_cap_w  = combined_cap
-                best_dd_w   = combined_dd
-                best_next   = candidate
+            filenames = [r['filename'] for r in portfolio] + [candidate['filename']]
+            sim = _simulate(filenames)
+            if sim is None:
+                continue
+            if sim['liquidation_date'] is not None:
+                continue
+            if sim['max_drawdown_pct'] > target_max_dd:
+                continue
+            if sim['end_capital'] > best_cap_w:
+                best_cap_w = sim['end_capital']
+                best_dd_w  = sim['max_drawdown_pct']
+                best_next  = candidate
 
         if best_next:
             portfolio.append(best_next)
             used_coins.add(best_next['coin'])
             candidate_pool.remove(best_next)
             best_end_cap = best_cap_w
+            best_dd      = best_dd_w
             print(f"-> Fuege hinzu: {best_next['filename']}"
                   f"  (Neues Kapital: {best_cap_w:.2f} USDT, Max DD: {best_dd_w:.2f}%)")
         else:
-            print("Keine weitere Verbesserung moeglich (Max DD & Coin-Kollision beruecksichtigt). "
+            print("Keine weitere Verbesserung moeglich (echte Simulation, DD & Coin-Kollision). "
                   "Optimierung beendet.")
             break
 
-    # ── Finaler Report (stbot-Style) ─────────────────────────────────────────
-    n_strats     = len(portfolio)
-    per_cap      = capital / n_strats
-    port_end_cap = _port_end_cap(portfolio)
-    port_pnl_pct = (port_end_cap - capital) / capital * 100
-    port_max_dd  = max(r['max_dd'] for r in portfolio)
-    pnl_col      = GREEN if port_pnl_pct >= 0 else RED
+    # ── Finale Simulation des optimalen Portfolios ────────────────────────────
+    final_filenames = [r['filename'] for r in portfolio]
+    final_sim = _simulate(final_filenames)
+
+    if final_sim:
+        port_end_cap = final_sim['end_capital']
+        port_pnl_pct = final_sim['total_pnl_pct']
+        port_max_dd  = final_sim['max_drawdown_pct']
+        port_trades  = final_sim['trade_count']
+        port_wr      = final_sim['win_rate']
+        liquidated   = final_sim['liquidation_date'] is not None
+    else:
+        port_end_cap = best_end_cap
+        port_pnl_pct = (best_end_cap - capital) / capital * 100
+        port_max_dd  = best_dd
+        port_trades  = sum(r['trades'] for r in portfolio)
+        port_wr      = 0.0
+        liquidated   = False
+
+    pnl_col  = GREEN if port_pnl_pct >= 0 else RED
+    n_strats = len(portfolio)
 
     print(f"\n{'='*55}")
     print(f"     Ergebnis der automatischen Portfolio-Optimierung")
@@ -351,15 +384,15 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
     print(f"Endkapital:         {pnl_col}{port_end_cap:.2f} USDT{NC}")
     print(f"Gesamt PnL:         {pnl_col}{port_end_cap - capital:+.2f} USDT "
           f"({port_pnl_pct:.2f}%){NC}")
-    print(f"Kapital je Coin:    {per_cap:.2f} USDT  ({n_strats} x {per_cap:.2f})")
+    print(f"Trades gesamt:      {port_trades}  |  Win-Rate: {port_wr:.1f}%")
     print(f"Portfolio Max DD:   {port_max_dd:.2f}%")
-    print(f"Liquidiert:         NEIN")
+    print(f"Liquidiert:         {'JA' if liquidated else 'NEIN'}")
     print(f"{'='*55}\n")
 
     # --- Ergebnis speichern ---
     os.makedirs(os.path.dirname(OPT_RESULTS), exist_ok=True)
     with open(OPT_RESULTS, 'w') as f:
-        json.dump({'optimal_portfolio': [r['filename'] for r in portfolio]}, f, indent=2)
+        json.dump({'optimal_portfolio': final_filenames}, f, indent=2)
     print(f"{GREEN}Optimales Portfolio in '{OPT_RESULTS}' gespeichert.{NC}")
 
 
