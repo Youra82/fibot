@@ -97,29 +97,6 @@ for symbol in $SYMBOLS; do
         echo -e "${BLUE}  Datenzeitraum: $FINAL_START_DATE bis $END_DATE${NC}"
         echo -e "${BLUE}=======================================================${NC}"
 
-        # Config-Dateiname bestimmen (Kurzname BTC → BTC/USDT:USDT → BTCUSDTUSDT)
-        if [[ "$symbol" != *"/"* ]]; then
-            FULL_SYM="${symbol}/USDT:USDT"
-        else
-            FULL_SYM="$symbol"
-        fi
-        SAFE_SYM=$(echo "$FULL_SYM" | tr -d '/: ')
-        CONFIG_FILE="src/fibot/strategy/configs/config_${SAFE_SYM}_${timeframe}_fib.json"
-
-        # Altes PnL aus bestehender Config lesen (falls vorhanden)
-        OLD_PNL=""
-        if [ -f "$CONFIG_FILE" ]; then
-            OLD_PNL=$($PYTHON -c "
-import json, sys
-try:
-    d = json.load(open('$CONFIG_FILE'))
-    print(d.get('_backtest', {}).get('pnl_pct', ''))
-except: pass
-" 2>/dev/null)
-            cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
-            echo -e "${YELLOW}  Backup erstellt: ${CONFIG_FILE}.bak (PnL: ${OLD_PNL}%)${NC}"
-        fi
-
         echo -e "\n${GREEN}>>> Starte Fibonacci-Optimierung für $symbol ($timeframe)...${NC}"
         $PYTHON "$OPTIMIZER" \
             --symbols "$symbol" \
@@ -134,37 +111,7 @@ except: pass
 
         if [ $? -ne 0 ]; then
             echo -e "${RED}Fehler im Optimierer für $symbol ($timeframe). Überspringe...${NC}"
-            # Backup wiederherstellen falls vorhanden
-            if [ -f "${CONFIG_FILE}.bak" ]; then
-                cp "${CONFIG_FILE}.bak" "$CONFIG_FILE"
-                echo -e "${YELLOW}  Backup wiederhergestellt nach Fehler.${NC}"
-            fi
-        elif [ -n "$OLD_PNL" ] && [ -f "$CONFIG_FILE" ]; then
-            # Neues PnL auslesen und vergleichen
-            NEW_PNL=$($PYTHON -c "
-import json, sys
-try:
-    d = json.load(open('$CONFIG_FILE'))
-    print(d.get('_backtest', {}).get('pnl_pct', ''))
-except: pass
-" 2>/dev/null)
-            # Vergleich: neues PnL schlechter als altes?
-            WORSE=$($PYTHON -c "
-try:
-    old, new = float('$OLD_PNL'), float('$NEW_PNL')
-    print('yes' if new < old else 'no')
-except: print('no')
-" 2>/dev/null)
-            if [ "$WORSE" == "yes" ]; then
-                cp "${CONFIG_FILE}.bak" "$CONFIG_FILE"
-                echo -e "${YELLOW}  Ergebnis schlechter (alt=${OLD_PNL}% > neu=${NEW_PNL}%) — alte Config beibehalten.${NC}"
-            else
-                echo -e "${GREEN}  Ergebnis verbessert oder gleich (alt=${OLD_PNL}% → neu=${NEW_PNL}%) — neue Config gespeichert.${NC}"
-            fi
         fi
-
-        # Backup aufräumen
-        rm -f "${CONFIG_FILE}.bak"
     done
 done
 

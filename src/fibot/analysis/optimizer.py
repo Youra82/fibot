@@ -331,10 +331,26 @@ def optimize(symbol: str, timeframe: str,
     return config
 
 
-def save_config(config: dict, symbol: str, timeframe: str) -> str:
+def save_config(config: dict, symbol: str, timeframe: str) -> str | None:
+    """Speichert Config nur wenn das neue Ergebnis besser ist als die bestehende."""
     os.makedirs(CONFIGS_DIR, exist_ok=True)
     safe = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
     path = os.path.join(CONFIGS_DIR, f"config_{safe}_fib.json")
+
+    new_pnl = config.get('_backtest', {}).get('pnl_pct')
+
+    if os.path.exists(path) and new_pnl is not None:
+        try:
+            with open(path) as f:
+                existing = json.load(f)
+            existing_pnl = existing.get('_backtest', {}).get('pnl_pct')
+            if existing_pnl is not None and new_pnl <= existing_pnl:
+                print(f"  Bestehende Config besser ({existing_pnl:.2f}% vs {new_pnl:.2f}%) "
+                      f"— wird nicht ueberschrieben.")
+                return None
+        except Exception:
+            pass
+
     with open(path, 'w') as f:
         json.dump(config, f, indent=2)
     return path
@@ -407,6 +423,8 @@ if __name__ == "__main__":
 
             path = save_config(best_config, symbol, timeframe)
             bt = best_config.get("_backtest", {})
+            if path is None:
+                continue
             print(f"\n  {GREEN}✓ Config gespeichert: {os.path.basename(path)}{NC}")
             if bt:
                 color = GREEN if bt.get('pnl_pct', 0) >= 0 else RED

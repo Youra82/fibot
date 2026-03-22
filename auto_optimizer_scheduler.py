@@ -204,7 +204,6 @@ def main():
     # In-progress Marker setzen
     open(IN_PROGRESS_FILE, 'w').close()
 
-    config_backups = {}  # fname → backup_path (für finally-Cleanup)
     start_time = datetime.now()
     try:
         constraints = opt_cfg.get('constraints', {})
@@ -278,21 +277,9 @@ def main():
                 pass
 
         # ── Schritt 1: Optuna-Optimizer pro Paar ──────────────────────────
+        # optimizer.py schützt selbst gegen schlechtere Ergebnisse
         log.info(f"Starte Optuna-Optimierung für {len(active_pairs)} Paar(e) "
                  f"({n_trials} Trials, {cpu_cores} CPU-Kern(e))...")
-
-        # Config-Backups anlegen BEVOR optimizer.py überschreibt
-        import shutil
-        config_backups = {}  # fname → backup_path
-        for sym, tf in active_pairs:
-            safe  = f"{sym.replace('/', '').replace(':', '')}_{tf}"
-            fname = f"config_{safe}_fib.json"
-            cfg_path = os.path.join(CONFIGS_DIR, fname)
-            if os.path.exists(cfg_path):
-                bak = cfg_path + '.bak'
-                shutil.copy2(cfg_path, bak)
-                config_backups[fname] = bak
-                log.info(f"  Backup: {fname}")
 
         opt_failed = []
         for sym, tf in active_pairs:
@@ -387,36 +374,20 @@ def main():
                     "FiBot Auto-Optimierung: Kein Portfolio gefunden.")
             return
 
-        # Vergleich mit vorherigem Lauf: nur übernehmen wenn neuer PnL >= alter PnL
-        new_pnl = {r['filename']: r.get('pnl_pct', 0.0) for r in all_results}
-        kept        = []   # werden in settings.json geschrieben
-        not_better  = []   # (filename, old_pnl_val, new_pnl_val)
+        # portfolio_files enthält nur Configs die optimizer.py als besser bewertet hat
+        # (schlechtere wurden von optimizer.py bereits nicht überschrieben)
+        kept       = portfolio_files
+        not_better = []  # für Telegram-Nachricht: aus old_pnl ableiten
+        new_pnl    = {r['filename']: r.get('pnl_pct', 0.0) for r in all_results}
         for fn in portfolio_files:
             old_val = old_pnl.get(fn)
             new_val = new_pnl.get(fn, 0.0)
             if old_val is not None and new_val < old_val:
                 not_better.append((fn, old_val, new_val))
-                log.info(f"Nicht übernommen (schlechter): {fn}  alt={old_val:.2f}%  neu={new_val:.2f}%")
-            else:
-                kept.append(fn)
 
-        # Schlechtere Config-Dateien aus Backup wiederherstellen
-        for fn, old_val, new_val in not_better:
-            bak = config_backups.get(fn)
-            if bak and os.path.exists(bak):
-                shutil.copy2(bak, os.path.join(CONFIGS_DIR, fn))
-                log.info(f"  Config wiederhergestellt: {fn} (alt={old_val:.2f}% > neu={new_val:.2f}%)")
-
-        # Backups aufräumen
-        for bak in config_backups.values():
-            if os.path.exists(bak):
-                os.remove(bak)
-
-        if kept:
-            success = _update_settings(kept)
-        else:
-            log.warning("Kein verbessertes Portfolio — settings.json bleibt unverändert.")
-            success = False
+        success = _update_settings(kept) if kept else False
+        if not kept:
+            log.warning("Kein Portfolio — settings.json bleibt unverändert.")
 
         elapsed = (datetime.now() - start_time).total_seconds()
 
@@ -491,10 +462,6 @@ def main():
     finally:
         if os.path.exists(IN_PROGRESS_FILE):
             os.remove(IN_PROGRESS_FILE)
-        # Stale Backups aufräumen (falls Fehler vor normalem Cleanup)
-        for bak in config_backups.values():
-            if os.path.exists(bak):
-                os.remove(bak)
 
 
 if __name__ == '__main__':
