@@ -29,132 +29,149 @@ BOLD   = '\033[1m'
 NC     = '\033[0m'
 
 # ---------------------------------------------------------------------------
-# Modus 1: Einzel-Backtest
+# Modus 1: Einzel-Analyse — alle Configs isoliert testen (stbot-Style)
 # ---------------------------------------------------------------------------
 
-def run_single_backtest(symbol: str, timeframe: str,
-                         date_from: Optional[str], date_to: Optional[str],
-                         days: Optional[int], capital: float, config_path: Optional[str]):
-    from fibot.analysis.backtester import (
-        run_backtest, save_backtest_result, load_ohlcv, auto_days_for_timeframe
-    )
+def run_all_configs_isolated(date_from: str, date_to: str, capital: float):
+    from fibot.analysis.backtester import run_backtest, load_ohlcv
 
-    today = date.today().isoformat()
-
-    if date_from:
-        start_date = date_from
-        end_date   = date_to if date_to else today
-    else:
-        n_days     = days if days else auto_days_for_timeframe(timeframe)
-        end_date   = today
-        start_date = (pd.Timestamp(today, tz='UTC') - pd.Timedelta(days=n_days)).strftime('%Y-%m-%d')
-
-    print(f"\n{CYAN}Lade Daten: {symbol} ({timeframe}) [{start_date} → {end_date}]{NC}")
-    df = load_ohlcv(symbol, timeframe, start_date, end_date)
-    if df.empty:
-        print(f"{RED}Keine Daten geladen. Abbruch.{NC}")
+    if not os.path.isdir(CONFIGS_DIR):
+        print(f"{RED}Kein Configs-Verzeichnis: {CONFIGS_DIR}{NC}")
         return
 
-    print(f"  {len(df)} Kerzen geladen ({df.index[0].date()} → {df.index[-1].date()})")
+    cfg_files = sorted(f for f in os.listdir(CONFIGS_DIR)
+                       if f.startswith('config_') and f.endswith('.json'))
+    if not cfg_files:
+        print(f"{YELLOW}Keine Configs gefunden. Erst run_pipeline.sh ausführen.{NC}")
+        return
 
-    if config_path and os.path.exists(config_path):
-        with open(config_path) as f:
-            config = json.load(f)
-    else:
-        # Versuche passende Config zu finden
-        safe = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
-        cfg_path = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs',
-                                f"config_{safe}_fib.json")
-        if os.path.exists(cfg_path):
+    print(f"\n--- FiBot Ergebnis-Analyse (Einzel-Modus) ---")
+    print(f"Zeitraum: {date_from} bis {date_to} | Startkapital: {capital:.0f} USDT\n")
+
+    results = []
+    for fname in cfg_files:
+        cfg_path = os.path.join(CONFIGS_DIR, fname)
+        try:
             with open(cfg_path) as f:
                 config = json.load(f)
-            print(f"  Config: {os.path.basename(cfg_path)}")
-        else:
-            print(f"  {YELLOW}Keine Config gefunden — verwende Standardparameter.{NC}")
-            config = _default_config(symbol, timeframe)
-
-    risk_cfg = config.get('risk', {})
-    config['risk']['risk_per_entry_pct'] = capital / 1000  # normiere auf Kapital
-
-    print(f"\n{CYAN}Starte Backtest...{NC}\n")
-    result = run_backtest(df, config, capital, symbol, timeframe)
-    _print_result(result)
-    out_path = save_backtest_result(result, RESULTS_DIR)
-    print(f"\n{GREEN}Ergebnis gespeichert: {out_path}{NC}")
-
-
-# ---------------------------------------------------------------------------
-# Modus 2: Alle aktiven Strategien aus settings.json backtesten
-# ---------------------------------------------------------------------------
-
-def run_all_from_settings(date_from: Optional[str], date_to: Optional[str],
-                           days: Optional[int], capital: float):
-    if not os.path.exists(SETTINGS_FILE):
-        print(f"{RED}settings.json nicht gefunden.{NC}")
-        return
-
-    with open(SETTINGS_FILE) as f:
-        settings = json.load(f)
-
-    strategies = settings.get('live_trading_settings', {}).get('active_strategies', [])
-    active = [s for s in strategies if s.get('active', False)]
-
-    if not active:
-        print(f"{YELLOW}Keine aktiven Strategien in settings.json.{NC}")
-        return
-
-    print(f"\n{CYAN}Backteste {len(active)} aktive Strategie(n)...{NC}\n")
-
-    from fibot.analysis.backtester import (
-        run_backtest, save_backtest_result, load_ohlcv, auto_days_for_timeframe
-    )
-
-    today = date.today().isoformat()
-    results = []
-
-    for s in active:
-        symbol    = s['symbol']
-        timeframe = s['timeframe']
-
-        if date_from:
-            start_date = date_from
-            end_date   = date_to if date_to else today
-        else:
-            n_days     = days if days else auto_days_for_timeframe(timeframe)
-            end_date   = today
-            start_date = (pd.Timestamp(today, tz='UTC') - pd.Timedelta(days=n_days)).strftime('%Y-%m-%d')
-
-        print(f"{'─'*55}")
-        print(f"{BOLD}{symbol} ({timeframe}){NC}  [{start_date} → {end_date}]")
-
-        df = load_ohlcv(symbol, timeframe, start_date, end_date)
-        if df.empty:
-            print(f"  {RED}Keine Daten. Übersprungen.{NC}")
+        except Exception:
             continue
 
-        safe     = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
-        cfg_path = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs',
-                                f"config_{safe}_fib.json")
-        config   = json.load(open(cfg_path)) if os.path.exists(cfg_path) \
-                   else _default_config(symbol, timeframe)
+        symbol    = config.get('market', {}).get('symbol', '')
+        timeframe = config.get('market', {}).get('timeframe', '')
+        if not symbol or not timeframe:
+            continue
+
+        print(f"Analysiere Ergebnisse für: {fname}...")
+        df = load_ohlcv(symbol, timeframe, date_from, date_to)
+        if df.empty or len(df) < 50:
+            print(f"  {YELLOW}Keine Daten — übersprungen.{NC}")
+            continue
 
         result = run_backtest(df, config, capital, symbol, timeframe)
-        _print_result(result, compact=True)
-        save_backtest_result(result, RESULTS_DIR)
-        results.append(result)
+        results.append({
+            'symbol':    symbol,
+            'timeframe': timeframe,
+            'trades':    result.total_trades,
+            'win_rate':  result.win_rate,
+            'pnl_pct':   result.pnl_pct,
+            'max_dd':    result.max_drawdown_pct,
+            'end_cap':   result.end_capital,
+        })
 
-    if len(results) > 1:
-        print(f"\n{'═'*55}")
-        print(f"{BOLD}Übersicht:{NC}")
-        print(f"{'Symbol':<22} {'TF':<5} {'PnL':>8} {'WR':>7} {'Trades':>7} {'MaxDD':>8}")
-        print(f"{'─'*55}")
-        for r in results:
-            color = GREEN if r.pnl_pct >= 0 else RED
-            print(f"{r.symbol:<22} {r.timeframe:<5} "
-                  f"{color}{r.pnl_pct:>+7.2f}%{NC} "
-                  f"{r.win_rate:>6.1f}% "
-                  f"{r.total_trades:>7} "
-                  f"{r.max_drawdown_pct:>7.2f}%")
+    if not results:
+        print(f"{RED}Kein Backtest erfolgreich.{NC}")
+        return
+
+    W = 89
+    print(f"\n{'='*W}")
+    print(f"{'Zusammenfassung aller Einzelstrategien':^{W}}")
+    print(f"{'='*W}")
+    print(f"  {'Strategie':<22}  {'Trades':>6}  {'Win Rate %':>10}  {'PnL %':>7}  {'Max DD %':>8}  {'Endkapital':>10}")
+    for r in sorted(results, key=lambda x: x['pnl_pct'], reverse=True):
+        strat  = f"{r['symbol']} ({r['timeframe']})"
+        color  = GREEN if r['pnl_pct'] >= 0 else RED
+        dd_col = GREEN if r['max_dd'] <= 30 else RED
+        print(f"  {strat:<22}  {r['trades']:>6}  {r['win_rate']:>10.2f}  "
+              f"{color}{r['pnl_pct']:>7.2f}{NC}  "
+              f"{dd_col}{r['max_dd']:>8.2f}{NC}  "
+              f"{r['end_cap']:>10.2f}")
+    print(f"{'='*W}")
+
+
+# ---------------------------------------------------------------------------
+# Modus 2: Manuelle Portfolio-Simulation — User wählt Configs
+# ---------------------------------------------------------------------------
+
+def run_manual_portfolio(filenames: list, date_from: str, date_to: str, capital: float):
+    from fibot.analysis.backtester import run_backtest, load_ohlcv
+
+    print(f"\n--- FiBot Manuelle Portfolio-Simulation ---")
+    print(f"Zeitraum: {date_from} bis {date_to} | Startkapital: {capital:.0f} USDT\n")
+
+    results = []
+    for fname in filenames:
+        cfg_path = os.path.join(CONFIGS_DIR, fname.strip())
+        if not os.path.exists(cfg_path):
+            print(f"  {RED}Config nicht gefunden: {fname}{NC}")
+            continue
+        try:
+            with open(cfg_path) as f:
+                config = json.load(f)
+        except Exception:
+            continue
+
+        symbol    = config.get('market', {}).get('symbol', '')
+        timeframe = config.get('market', {}).get('timeframe', '')
+        if not symbol or not timeframe:
+            continue
+
+        print(f"Analysiere Ergebnisse für: {fname.strip()}...")
+        df = load_ohlcv(symbol, timeframe, date_from, date_to)
+        if df.empty or len(df) < 50:
+            print(f"  {YELLOW}Keine Daten — übersprungen.{NC}")
+            continue
+
+        result = run_backtest(df, config, capital, symbol, timeframe)
+        results.append({
+            'symbol':    symbol,
+            'timeframe': timeframe,
+            'trades':    result.total_trades,
+            'win_rate':  result.win_rate,
+            'pnl_pct':   result.pnl_pct,
+            'max_dd':    result.max_drawdown_pct,
+            'end_cap':   result.end_capital,
+        })
+
+    if not results:
+        print(f"{RED}Kein Backtest erfolgreich.{NC}")
+        return
+
+    W = 89
+    print(f"\n{'='*W}")
+    print(f"{'Manuelle Portfolio-Simulation':^{W}}")
+    print(f"{'='*W}")
+    print(f"  {'Strategie':<22}  {'Trades':>6}  {'Win Rate %':>10}  {'PnL %':>7}  {'Max DD %':>8}  {'Endkapital':>10}")
+    for r in results:
+        strat  = f"{r['symbol']} ({r['timeframe']})"
+        color  = GREEN if r['pnl_pct'] >= 0 else RED
+        dd_col = GREEN if r['max_dd'] <= 30 else RED
+        print(f"  {strat:<22}  {r['trades']:>6}  {r['win_rate']:>10.2f}  "
+              f"{color}{r['pnl_pct']:>7.2f}{NC}  "
+              f"{dd_col}{r['max_dd']:>8.2f}{NC}  "
+              f"{r['end_cap']:>10.2f}")
+
+    # Kombiniertes Portfolio (Kapital / N)
+    n        = len(results)
+    per_cap  = capital / n
+    port_end = sum(per_cap * (1 + r['pnl_pct'] / 100) for r in results)
+    port_pnl = (port_end - capital) / capital * 100
+    port_dd  = max(r['max_dd'] for r in results)
+    col      = GREEN if port_pnl >= 0 else RED
+    print(f"{'─'*W}")
+    print(f"  Portfolio ({n} Strategie(n), je {per_cap:.2f} USDT):  "
+          f"{col}{port_pnl:+.2f}%{NC}  |  End: {col}{port_end:.2f} USDT{NC}  |  MaxDD: {port_dd:.2f}%")
+    print(f"{'='*W}")
 
 
 # ---------------------------------------------------------------------------
@@ -468,41 +485,36 @@ def _default_config(symbol: str, timeframe: str) -> dict:
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FiBot Show Results")
-    parser.add_argument('--mode',           type=int, required=True, help="1-5")
-    parser.add_argument('--symbol',         default=None)
-    parser.add_argument('--timeframe',      default='4h')
-    parser.add_argument('--from',           dest='date_from', default=None)
-    parser.add_argument('--to',             dest='date_to',   default=None)
-    parser.add_argument('--days',           type=int, default=None)
-    parser.add_argument('--capital',        type=float, default=1000.0)
-    parser.add_argument('--config',         default=None)
-    parser.add_argument('--target-max-dd',  type=float, default=30.0,
+    parser.add_argument('--mode',          type=int, required=True, help="1-4")
+    parser.add_argument('--from',          dest='date_from', default=None)
+    parser.add_argument('--to',            dest='date_to',   default=None)
+    parser.add_argument('--capital',       type=float, default=1000.0)
+    parser.add_argument('--configs',       default=None,
+                        help="Leerzeichen-getrennte Config-Dateinamen für Modus 2")
+    parser.add_argument('--target-max-dd', type=float, default=30.0,
                         help="Max Drawdown %% für Portfolio-Finder (Modus 3)")
-    parser.add_argument('--min-wr',         type=float, default=0.0,
+    parser.add_argument('--min-wr',        type=float, default=0.0,
                         help="Min Win-Rate %% für Portfolio-Finder (Modus 3)")
     args = parser.parse_args()
 
+    today = date.today().isoformat()
+    start = args.date_from if args.date_from else '2024-01-01'
+    end   = args.date_to   if args.date_to   else today
+
     if args.mode == 1:
-        if not args.symbol:
-            print(f"{RED}--symbol erforderlich für Modus 1.{NC}")
-            sys.exit(1)
-        run_single_backtest(args.symbol, args.timeframe,
-                            args.date_from, args.date_to, args.days,
-                            args.capital, args.config)
+        run_all_configs_isolated(start, end, args.capital)
+
     elif args.mode == 2:
-        run_all_from_settings(args.date_from, args.date_to, args.days, args.capital)
-    elif args.mode == 3:
-        today = date.today().isoformat()
-        start = args.date_from if args.date_from else \
-                (pd.Timestamp(today, tz='UTC') - pd.Timedelta(days=365)).strftime('%Y-%m-%d')
-        end   = args.date_to if args.date_to else today
-        run_portfolio_finder(args.capital, args.target_max_dd, args.min_wr, start, end)
-    elif args.mode == 4:
-        if not args.symbol:
-            print(f"{RED}--symbol erforderlich für Modus 4.{NC}")
+        if not args.configs:
+            print(f"{RED}--configs erforderlich für Modus 2.{NC}")
             sys.exit(1)
-        run_signal_check(args.symbol, args.timeframe)
-    elif args.mode == 5:
+        filenames = args.configs.split()
+        run_manual_portfolio(filenames, start, end, args.capital)
+
+    elif args.mode == 3:
+        run_portfolio_finder(args.capital, args.target_max_dd, args.min_wr, start, end)
+
+    elif args.mode == 4:
         from fibot.analysis.interactive_chart import run_interactive_chart
         secret_path = os.path.join(PROJECT_ROOT, 'secret.json')
         secrets = {}
@@ -510,6 +522,7 @@ if __name__ == "__main__":
             with open(secret_path) as f:
                 secrets = json.load(f)
         run_interactive_chart(secrets)
+
     else:
         print(f"{RED}Ungültiger Modus.{NC}")
         sys.exit(1)

@@ -8,6 +8,7 @@ NC='\033[0m'
 
 VENV_PATH=".venv/bin/activate"
 PYTHON=".venv/bin/python3"
+CONFIGS_DIR="src/fibot/strategy/configs"
 
 if [ ! -f "$VENV_PATH" ]; then
     echo -e "${RED}Fehler: .venv nicht gefunden. Erst install.sh ausführen.${NC}"
@@ -16,153 +17,130 @@ fi
 
 source "$VENV_PATH"
 
-# ─────────────────────────────────────────
-# Hilfsfunktionen
-# ─────────────────────────────────────────
-VALID_TFS="1m 3m 5m 15m 30m 1h 2h 4h 6h 8h 12h 1d 3d 1w"
-
-# "BTC" → "BTC/USDT:USDT", "BTC/USDT:USDT" bleibt unverändert
-expand_symbol() {
-    local s="$1"
-    if [[ "$s" != */* ]]; then
-        echo "${s^^}/USDT:USDT"
-    else
-        echo "$s"
-    fi
-}
-
-validate_tf() {
-    local tf="$1"
-    for v in $VALID_TFS; do
-        [ "$tf" == "$v" ] && echo "$tf" && return 0
-    done
-    echo -e "${RED}Ungültiger Timeframe '$tf'. Erlaubt: $VALID_TFS${NC}" >&2
-    return 1
-}
-
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════╗${NC}"
 echo -e "${BOLD}║        FiBot — Fibonacci Trading Bot     ║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${YELLOW}Wähle einen Analyse-Modus:${NC}"
-echo "  1) Einzel-Backtest             (Symbol + Zeitraum frei wählen)"
-echo "  2) Alle aktiven Strategien     (backtestet alle aus settings.json)"
-echo "  3) Portfolio-Optimierer        (beste Coins/TFs für deine Randbedingungen)"
-echo "  4) Live Signal-Check           (aktuelles Fib-Signal für ein Symbol)"
-echo "  5) Interaktive Charts          (Candlestick + Entry/Exit-Marker)"
+echo "  1) Einzel-Analyse              (jede Strategie wird isoliert getestet)"
+echo "  2) Manuelle Portfolio-Simulation  (du wählst das Team)"
+echo "  3) Automatische Portfolio-Optimierung  (der Bot wählt das beste Team)"
+echo "  4) Interaktive Charts          (Candlestick + Entry/Exit-Marker)"
 echo ""
-read -p "Auswahl (1-5) [Standard: 3]: " MODE
+read -p "Auswahl (1-4) [Standard: 1]: " MODE
 MODE="${MODE//[$'\r\n ']/}"
 
-if [[ ! "$MODE" =~ ^[1-5]?$ ]]; then
-    echo -e "${RED}Ungültige Eingabe. Verwende Standard (3).${NC}"
-    MODE=3
+if [[ ! "$MODE" =~ ^[1-4]?$ ]]; then
+    echo -e "${RED}Ungültige Eingabe. Verwende Standard (1).${NC}"
+    MODE=1
 fi
-MODE=${MODE:-3}
+MODE=${MODE:-1}
 
 # ─────────────────────────────────────────
-# Modus 1: Einzel-Backtest
+# Modus 1: Einzel-Analyse — alle Configs isoliert
 # ─────────────────────────────────────────
 if [ "$MODE" == "1" ]; then
     echo ""
-    echo -e "${CYAN}--- Einzel-Backtest ---${NC}"
+    echo -e "${CYAN}--- Bitte Konfiguration für den Backtest festlegen ---${NC}"
 
-    read -p "Symbol(e) (z.B. BTC ETH oder BTC/USDT:USDT) [Standard: BTC]: " SYMBOLS_INPUT
-    SYMBOLS_INPUT="${SYMBOLS_INPUT//[$'\r\n']/}"
-    [ -z "$SYMBOLS_INPUT" ] && SYMBOLS_INPUT="BTC"
+    read -p "Startdatum (JJJJ-MM-TT) [Standard: 2024-01-01]: " DATE_FROM
+    DATE_FROM="${DATE_FROM//[$'\r\n ']/}"
+    [ -z "$DATE_FROM" ] && DATE_FROM="2024-01-01"
 
-    read -p "Timeframe(s) (z.B. 4h oder 1h 4h 1d) [Standard: 4h]: " TFS_INPUT
-    TFS_INPUT="${TFS_INPUT//[$'\r\n']/}"
-    [ -z "$TFS_INPUT" ] && TFS_INPUT="4h"
+    read -p "Enddatum (JJJJ-MM-TT) [Standard: Heute]: " DATE_TO
+    DATE_TO="${DATE_TO//[$'\r\n ']/}"
 
-    echo ""
-    echo -e "${YELLOW}Zeitraum wählen:${NC}"
-    echo "  a) Automatisch (je nach Timeframe empfohlen)"
-    echo "  b) Von–Bis Datum"
-    echo "  c) Von Datum bis heute"
-    read -p "Auswahl (a/b/c) [Standard: a]: " DATE_MODE
-    DATE_MODE="${DATE_MODE//[$'\r\n ']/}"
-    [ -z "$DATE_MODE" ] && DATE_MODE="a"
-
-    DATE_ARGS=""
-    if [ "$DATE_MODE" == "b" ]; then
-        read -p "Startdatum (JJJJ-MM-TT): " DATE_FROM
-        DATE_FROM="${DATE_FROM//[$'\r\n ']/}"
-        read -p "Enddatum   (JJJJ-MM-TT): " DATE_TO
-        DATE_TO="${DATE_TO//[$'\r\n ']/}"
-        [[ "$DATE_FROM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="--from $DATE_FROM"
-        [[ "$DATE_TO"   =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="$DATE_ARGS --to $DATE_TO"
-    elif [ "$DATE_MODE" == "c" ]; then
-        read -p "Startdatum (JJJJ-MM-TT): " DATE_FROM
-        DATE_FROM="${DATE_FROM//[$'\r\n ']/}"
-        [[ "$DATE_FROM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="--from $DATE_FROM"
-    fi
-
-    read -p "Startkapital in USDT [Standard: 1000]: " CAPITAL
+    read -p "Startkapital in USDT eingeben [Standard: 1000]: " CAPITAL
     CAPITAL="${CAPITAL//[$'\r\n ']/}"
     [[ ! "$CAPITAL" =~ ^[0-9]+(\.[0-9]+)?$ ]] && CAPITAL=1000
 
-    for RAW_SYM in $SYMBOLS_INPUT; do
-        SYMBOL=$(expand_symbol "$RAW_SYM")
-        for TF in $TFS_INPUT; do
-            if ! validate_tf "$TF" > /dev/null; then continue; fi
-            echo ""
-            $PYTHON src/fibot/analysis/show_results.py \
-                --mode 1 \
-                --symbol "$SYMBOL" \
-                --timeframe "$TF" \
-                --capital "$CAPITAL" \
-                $DATE_ARGS
-        done
-    done
-
-# ─────────────────────────────────────────
-# Modus 2: Alle aktiven Strategien
-# ─────────────────────────────────────────
-elif [ "$MODE" == "2" ]; then
-    echo ""
-    echo -e "${CYAN}--- Alle aktiven Strategien aus settings.json ---${NC}"
-
-    echo ""
-    echo -e "${YELLOW}Zeitraum wählen:${NC}"
-    echo "  a) Automatisch (je nach Timeframe empfohlen)"
-    echo "  b) Von–Bis Datum"
-    echo "  c) Von Datum bis heute"
-    read -p "Auswahl (a/b/c) [Standard: a]: " DATE_MODE
-    DATE_MODE="${DATE_MODE//[$'\r\n ']/}"
-    [ -z "$DATE_MODE" ] && DATE_MODE="a"
+    echo "--------------------------------------------------"
 
     DATE_ARGS=""
-    if [ "$DATE_MODE" == "b" ]; then
-        read -p "Startdatum (JJJJ-MM-TT): " DATE_FROM
-        DATE_FROM="${DATE_FROM//[$'\r\n ']/}"
-        read -p "Enddatum   (JJJJ-MM-TT): " DATE_TO
-        DATE_TO="${DATE_TO//[$'\r\n ']/}"
-        [[ "$DATE_FROM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="--from $DATE_FROM"
-        [[ "$DATE_TO"   =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="$DATE_ARGS --to $DATE_TO"
-    elif [ "$DATE_MODE" == "c" ]; then
-        read -p "Startdatum (JJJJ-MM-TT): " DATE_FROM
-        DATE_FROM="${DATE_FROM//[$'\r\n ']/}"
-        [[ "$DATE_FROM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="--from $DATE_FROM"
-    fi
+    [[ "$DATE_FROM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="--from $DATE_FROM"
+    [[ "$DATE_TO"   =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="$DATE_ARGS --to $DATE_TO"
 
-    read -p "Startkapital in USDT [Standard: 1000]: " CAPITAL
-    CAPITAL="${CAPITAL//[$'\r\n ']/}"
-    [[ ! "$CAPITAL" =~ ^[0-9]+(\.[0-9]+)?$ ]] && CAPITAL=1000
-
-    echo ""
     $PYTHON src/fibot/analysis/show_results.py \
-        --mode 2 \
+        --mode 1 \
         --capital "$CAPITAL" \
         $DATE_ARGS
 
 # ─────────────────────────────────────────
-# Modus 3: Portfolio-Optimierer
+# Modus 2: Manuelle Portfolio-Simulation
+# ─────────────────────────────────────────
+elif [ "$MODE" == "2" ]; then
+    echo ""
+    echo -e "${CYAN}--- Manuelle Portfolio-Simulation ---${NC}"
+    echo -e "${YELLOW}Verfügbare Configs:${NC}"
+
+    mapfile -t CONFIG_FILES < <(ls "$CONFIGS_DIR"/config_*.json 2>/dev/null | xargs -I{} basename {})
+
+    if [ ${#CONFIG_FILES[@]} -eq 0 ]; then
+        echo -e "${RED}Keine Configs gefunden. Erst run_pipeline.sh ausführen.${NC}"
+        deactivate
+        exit 1
+    fi
+
+    for i in "${!CONFIG_FILES[@]}"; do
+        printf "  %2d) %s\n" "$((i+1))" "${CONFIG_FILES[$i]}"
+    done
+    echo ""
+    read -p "Strategien wählen (z.B. '1 3 5' oder 'alle') [Standard: alle]: " SELECTION
+    SELECTION="${SELECTION//[$'\r\n']/}"
+    [ -z "$SELECTION" ] && SELECTION="alle"
+
+    SELECTED_FILES=""
+    if [[ "$SELECTION" == "alle" ]]; then
+        SELECTED_FILES="${CONFIG_FILES[*]}"
+    else
+        for num in $SELECTION; do
+            idx=$((num - 1))
+            if [ "$idx" -ge 0 ] && [ "$idx" -lt ${#CONFIG_FILES[@]} ]; then
+                SELECTED_FILES="$SELECTED_FILES ${CONFIG_FILES[$idx]}"
+            fi
+        done
+        SELECTED_FILES="${SELECTED_FILES# }"
+    fi
+
+    if [ -z "$SELECTED_FILES" ]; then
+        echo -e "${RED}Keine gültige Auswahl.${NC}"
+        deactivate
+        exit 1
+    fi
+
+    echo ""
+    echo -e "${CYAN}--- Bitte Konfiguration für den Backtest festlegen ---${NC}"
+
+    read -p "Startdatum (JJJJ-MM-TT) [Standard: 2024-01-01]: " DATE_FROM
+    DATE_FROM="${DATE_FROM//[$'\r\n ']/}"
+    [ -z "$DATE_FROM" ] && DATE_FROM="2024-01-01"
+
+    read -p "Enddatum (JJJJ-MM-TT) [Standard: Heute]: " DATE_TO
+    DATE_TO="${DATE_TO//[$'\r\n ']/}"
+
+    read -p "Startkapital in USDT eingeben [Standard: 1000]: " CAPITAL
+    CAPITAL="${CAPITAL//[$'\r\n ']/}"
+    [[ ! "$CAPITAL" =~ ^[0-9]+(\.[0-9]+)?$ ]] && CAPITAL=1000
+
+    echo "--------------------------------------------------"
+
+    DATE_ARGS=""
+    [[ "$DATE_FROM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="--from $DATE_FROM"
+    [[ "$DATE_TO"   =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="$DATE_ARGS --to $DATE_TO"
+
+    $PYTHON src/fibot/analysis/show_results.py \
+        --mode 2 \
+        --capital "$CAPITAL" \
+        --configs "$SELECTED_FILES" \
+        $DATE_ARGS
+
+# ─────────────────────────────────────────
+# Modus 3: Automatische Portfolio-Optimierung
 # ─────────────────────────────────────────
 elif [ "$MODE" == "3" ]; then
     echo ""
-    echo -e "${CYAN}--- Portfolio-Optimierer ---${NC}"
+    echo -e "${CYAN}--- Automatische Portfolio-Optimierung ---${NC}"
     echo -e "${YELLOW}Findet die optimale Coin/Timeframe-Kombination aus deinen vorhandenen Configs.${NC}"
     echo ""
 
@@ -179,29 +157,21 @@ elif [ "$MODE" == "3" ]; then
     [[ ! "$MIN_WR" =~ ^[0-9]+(\.[0-9]+)?$ ]] && MIN_WR=0
 
     echo ""
-    echo -e "${YELLOW}Zeitraum wählen:${NC}"
-    echo "  a) Automatisch (365 Tage Rückblick)"
-    echo "  b) Von–Bis Datum"
-    echo "  c) Von Datum bis heute"
-    read -p "Auswahl (a/b/c) [Standard: a]: " DATE_MODE
-    DATE_MODE="${DATE_MODE//[$'\r\n ']/}"
-    [ -z "$DATE_MODE" ] && DATE_MODE="a"
+    echo -e "${YELLOW}Zeitraum:${NC}"
 
-    DATE_ARGS=""
-    if [ "$DATE_MODE" == "b" ]; then
-        read -p "Startdatum (JJJJ-MM-TT): " DATE_FROM
-        DATE_FROM="${DATE_FROM//[$'\r\n ']/}"
-        read -p "Enddatum   (JJJJ-MM-TT): " DATE_TO
-        DATE_TO="${DATE_TO//[$'\r\n ']/}"
-        [[ "$DATE_FROM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="--from $DATE_FROM"
-        [[ "$DATE_TO"   =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="$DATE_ARGS --to $DATE_TO"
-    elif [ "$DATE_MODE" == "c" ]; then
-        read -p "Startdatum (JJJJ-MM-TT): " DATE_FROM
-        DATE_FROM="${DATE_FROM//[$'\r\n ']/}"
-        [[ "$DATE_FROM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="--from $DATE_FROM"
-    fi
+    read -p "Startdatum (JJJJ-MM-TT) [Standard: 2024-01-01]: " DATE_FROM
+    DATE_FROM="${DATE_FROM//[$'\r\n ']/}"
+    [ -z "$DATE_FROM" ] && DATE_FROM="2024-01-01"
+
+    read -p "Enddatum (JJJJ-MM-TT) [Standard: Heute]: " DATE_TO
+    DATE_TO="${DATE_TO//[$'\r\n ']/}"
 
     echo ""
+
+    DATE_ARGS=""
+    [[ "$DATE_FROM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="--from $DATE_FROM"
+    [[ "$DATE_TO"   =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="$DATE_ARGS --to $DATE_TO"
+
     $PYTHON src/fibot/analysis/show_results.py \
         --mode 3 \
         --capital "$CAPITAL" \
@@ -221,9 +191,9 @@ elif [ "$MODE" == "3" ]; then
 import json, os, sys
 
 PROJECT_ROOT = os.getcwd()
-opt_file     = os.path.join(PROJECT_ROOT, "artifacts", "results", "optimization_results.json")
+opt_file      = os.path.join(PROJECT_ROOT, "artifacts", "results", "optimization_results.json")
 settings_file = os.path.join(PROJECT_ROOT, "settings.json")
-configs_dir  = os.path.join(PROJECT_ROOT, "src", "fibot", "strategy", "configs")
+configs_dir   = os.path.join(PROJECT_ROOT, "src", "fibot", "strategy", "configs")
 
 with open(opt_file) as f:
     opt = json.load(f)
@@ -243,12 +213,12 @@ for fname in portfolio_files:
     market = cfg.get("market", {})
     risk   = cfg.get("risk",   {})
     strategies.append({
-        "symbol":            market.get("symbol", ""),
-        "timeframe":         market.get("timeframe", ""),
-        "leverage":          risk.get("leverage", 10),
-        "margin_mode":       risk.get("margin_mode", "isolated"),
+        "symbol":             market.get("symbol", ""),
+        "timeframe":          market.get("timeframe", ""),
+        "leverage":           risk.get("leverage", 10),
+        "margin_mode":        risk.get("margin_mode", "isolated"),
         "risk_per_entry_pct": risk.get("risk_per_entry_pct", 1.0),
-        "active":            True,
+        "active":             True,
     })
 
 if not os.path.exists(settings_file):
@@ -273,41 +243,14 @@ PYEOF
     fi
 
 # ─────────────────────────────────────────
-# Modus 4: Live Signal-Check
+# Modus 4: Interaktive Charts
 # ─────────────────────────────────────────
 elif [ "$MODE" == "4" ]; then
-    echo ""
-    echo -e "${CYAN}--- Live Signal-Check ---${NC}"
-
-    read -p "Symbol(e) (z.B. BTC ETH oder BTC/USDT:USDT) [Standard: BTC]: " SYMBOLS_INPUT
-    SYMBOLS_INPUT="${SYMBOLS_INPUT//[$'\r\n']/}"
-    [ -z "$SYMBOLS_INPUT" ] && SYMBOLS_INPUT="BTC"
-
-    read -p "Timeframe(s) (z.B. 4h oder 1h 4h) [Standard: 4h]: " TFS_INPUT
-    TFS_INPUT="${TFS_INPUT//[$'\r\n']/}"
-    [ -z "$TFS_INPUT" ] && TFS_INPUT="4h"
-
-    for RAW_SYM in $SYMBOLS_INPUT; do
-        SYMBOL=$(expand_symbol "$RAW_SYM")
-        for TF in $TFS_INPUT; do
-            if ! validate_tf "$TF" > /dev/null; then continue; fi
-            echo ""
-            $PYTHON src/fibot/analysis/show_results.py \
-                --mode 4 \
-                --symbol "$SYMBOL" \
-                --timeframe "$TF"
-        done
-    done
-
-# ─────────────────────────────────────────
-# Modus 5: Interaktive Charts
-# ─────────────────────────────────────────
-elif [ "$MODE" == "5" ]; then
     echo ""
     echo -e "${CYAN}--- Interaktive Charts ---${NC}"
     echo -e "${YELLOW}Wählt aus gespeicherten Backtest-Ergebnissen und öffnet einen interaktiven Chart.${NC}"
     echo ""
-    $PYTHON src/fibot/analysis/show_results.py --mode 5
+    $PYTHON src/fibot/analysis/show_results.py --mode 4
 fi
 
 deactivate
