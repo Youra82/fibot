@@ -33,48 +33,45 @@ from fibot.strategy.fibonacci_logic import (
 
 logger = logging.getLogger(__name__)
 
-RESULTS_DIR = os.path.join(PROJECT_ROOT, 'artifacts', 'results')
+CONFIGS_DIR = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
 CHARTS_DIR  = os.path.join(PROJECT_ROOT, 'artifacts', 'charts')
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Pair-Auswahl
+# Pair-Auswahl aus aktuellen Configs
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _load_saved_results() -> list[dict]:
-    results = []
-    if not os.path.isdir(RESULTS_DIR):
-        return results
-    for fname in sorted(os.listdir(RESULTS_DIR)):
-        if not fname.startswith('backtest_') or not fname.endswith('.json'):
-            continue
+def _load_configs() -> list[dict]:
+    """Liest alle config_*_fib.json aus dem Configs-Verzeichnis."""
+    entries = []
+    if not os.path.isdir(CONFIGS_DIR):
+        return entries
+    for fname in sorted(f for f in os.listdir(CONFIGS_DIR)
+                        if f.startswith('config_') and f.endswith('.json')):
         try:
-            with open(os.path.join(RESULTS_DIR, fname)) as f:
-                d = json.load(f)
-            results.append(d)
+            with open(os.path.join(CONFIGS_DIR, fname)) as f:
+                cfg = json.load(f)
+            symbol    = cfg.get('market', {}).get('symbol', '')
+            timeframe = cfg.get('market', {}).get('timeframe', '')
+            if symbol and timeframe:
+                entries.append({'filename': fname, 'symbol': symbol, 'timeframe': timeframe})
         except Exception:
             pass
-    return results
+    return entries
 
 
 def select_pairs() -> list[tuple[str, str]]:
-    saved = _load_saved_results()
-    if not saved:
-        print("Keine Backtest-Ergebnisse gefunden. Zuerst Modus 1 oder 2 ausführen.")
+    configs = _load_configs()
+    if not configs:
+        print("Keine Configs gefunden. Erst run_pipeline.sh ausfuehren.")
         return []
 
     w = 70
     print("\n" + "=" * w)
-    print("  Verfügbare Pairs  (PnL = gespeicherter Backtest)")
+    print("  Verfuegbare Pairs  (aus aktuellen Configs)")
     print("=" * w)
-    for i, d in enumerate(saved, 1):
-        sym = d.get('symbol', '?')
-        tf  = d.get('timeframe', '?')
-        pnl = d.get('pnl_pct', 0)
-        wr  = d.get('win_rate', 0)
-        tr  = d.get('total_trades', 0)
-        sign = '+' if pnl >= 0 else ''
-        print(f"  {i:2d}) {sym:<22} {tf:<5}  PnL: {sign}{pnl:.1f}%  WR: {wr:.1f}%  Trades: {tr}")
+    for i, d in enumerate(configs, 1):
+        print(f"  {i:2d}) {d['symbol']:<22} {d['timeframe']:<5}")
     print("=" * w)
 
     print("\n  Einzeln: '1' | Mehrfach: '1,3' oder '1 3'")
@@ -83,8 +80,8 @@ def select_pairs() -> list[tuple[str, str]]:
     for token in raw.replace(',', ' ').split():
         try:
             idx = int(token)
-            if 1 <= idx <= len(saved):
-                d = saved[idx - 1]
+            if 1 <= idx <= len(configs):
+                d = configs[idx - 1]
                 pair = (d['symbol'], d['timeframe'])
                 if pair not in selected:
                     selected.append(pair)
