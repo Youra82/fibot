@@ -269,15 +269,16 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
             'config':    config,
         }
         single_results.append({
-            'filename':  fname,
-            'symbol':    symbol,
-            'timeframe': timeframe,
-            'coin':      symbol.split('/')[0],
-            'pnl_pct':   result.pnl_pct,
-            'end_cap':   result.end_capital,
-            'win_rate':  result.win_rate,
-            'max_dd':    result.max_drawdown_pct,
-            'trades':    result.total_trades,
+            'filename':   fname,
+            'symbol':     symbol,
+            'timeframe':  timeframe,
+            'coin':       symbol.split('/')[0],
+            'pnl_pct':    result.pnl_pct,
+            'end_cap':    result.end_capital,
+            'win_rate':   result.win_rate,
+            'max_dd':     result.max_drawdown_pct,
+            'trades':     result.total_trades,
+            'trade_objs': result.trades,
         })
 
         ok      = result.max_drawdown_pct <= target_max_dd and result.win_rate >= min_wr
@@ -463,7 +464,7 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
             # Im Auto-Modus immer Chart + Excel + Telegram (kein Prompt)
             print()
             _generate_portfolio_chart(final_sim, portfolio, capital, start_date, end_date)
-            _generate_trades_excel(final_sim, portfolio, capital)
+            _generate_trades_excel(final_sim, portfolio, capital, single_results)
         else:
             print()
             ans = input("  Interaktive Charts & Excel fuer dieses Portfolio erstellen"
@@ -471,7 +472,7 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
             if ans in ('j', 'y', 'ja'):
                 print()
                 _generate_portfolio_chart(final_sim, portfolio, capital, start_date, end_date)
-                _generate_trades_excel(final_sim, portfolio, capital)
+                _generate_trades_excel(final_sim, portfolio, capital, single_results)
 
 
 # ---------------------------------------------------------------------------
@@ -654,8 +655,9 @@ def _generate_portfolio_chart(final_sim: dict, portfolio: list,
         print(f"  {YELLOW}Telegram nicht konfiguriert — Chart nur lokal gespeichert.{NC}")
 
 
-def _generate_trades_excel(final_sim: dict, portfolio: list, capital: float):
-    """Erstellt eine Excel-Tabelle mit allen Trades des optimalen Portfolios."""
+def _generate_trades_excel(final_sim: dict, portfolio: list, capital: float,
+                           all_single_results: list = None):
+    """Erstellt eine Excel-Tabelle mit Trades ALLER evaluierten Strategien."""
     try:
         import openpyxl
         from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
@@ -664,28 +666,56 @@ def _generate_trades_excel(final_sim: dict, portfolio: list, capital: float):
         print(f"  {YELLOW}openpyxl nicht installiert — Excel übersprungen. (pip install openpyxl){NC}")
         return
 
-    trade_history = final_sim.get('trade_history', [])
-    if not trade_history:
+    portfolio_fnames = {r['filename'] for r in portfolio}
+
+    # Alle Trades aus single_results zusammenführen (alle Strategien)
+    all_trades = []  # (timestamp, fname, symbol, timeframe, trade_obj, in_portfolio)
+    if all_single_results:
+        for sr in all_single_results:
+            in_port = sr['filename'] in portfolio_fnames
+            for t in sr.get('trade_objs', []):
+                if t.result == 'open':
+                    continue
+                all_trades.append((t.timestamp, sr['filename'], sr['symbol'],
+                                   sr['timeframe'], t, in_port))
+        all_trades.sort(key=lambda x: x[0])
+    else:
+        # Fallback: nur Portfolio-Sim-Trades
+        for t in final_sim.get('trade_history', []):
+            all_trades.append((t['ts'], t['fname'], '', '', t, True))
+
+    if not all_trades:
         print(f"  {YELLOW}Keine Trades — Excel übersprungen.{NC}")
         return
 
-    # Equity-Verlauf aufbauen
     equity = capital
     rows = []
-    for i, t in enumerate(trade_history):
-        equity += t['pnl']
-        fname_short = t['fname'].replace('config_', '').replace('_fib.json', '')
-        ergebnis = 'TP erreicht' if t['pnl'] > 0 else 'SL erreicht'
+    for i, (ts, fname, symbol, timeframe, t, in_port) in enumerate(all_trades):
+        if isinstance(t, dict):
+            pnl  = float(t['pnl'])
+            dir_ = t['direction'].upper()
+            entr = round(float(t['entry']), 6)
+            ex   = round(float(t['exit']),  6)
+            ergebnis = 'TP erreicht' if pnl > 0 else 'SL erreicht'
+        else:
+            pnl  = float(t.pnl_usdt)
+            dir_ = t.direction.upper()
+            entr = round(float(t.entry),       6)
+            ex   = round(float(t.exit_price),  6)
+            ergebnis = 'TP erreicht' if t.result == 'win' else 'SL erreicht'
+        equity += pnl
+        fname_short = fname.replace('config_', '').replace('_fib.json', '')
         rows.append({
-            'Nr':              i + 1,
-            'Datum':           str(t['ts'])[:16].replace('T', ' '),
-            'Strategie':       fname_short,
-            'Richtung':        t['direction'].upper(),
-            'Entry':           round(float(t['entry']), 6),
-            'Exit':            round(float(t['exit']),  6),
-            'Ergebnis':        ergebnis,
-            'PnL (USDT)':      round(float(t['pnl']),   4),
-            'Gesamtkapital':   round(equity, 4),
+            'Nr':            i + 1,
+            'Datum':         str(ts)[:16].replace('T', ' '),
+            'Strategie':     fname_short,
+            'Portfolio':     '✔' if in_port else '—',
+            'Richtung':      dir_,
+            'Entry':         entr,
+            'Exit':          ex,
+            'Ergebnis':      ergebnis,
+            'PnL (USDT)':    round(pnl,    4),
+            'Kapital':       round(equity, 4),
         })
 
     wb = openpyxl.Workbook()
@@ -701,9 +731,8 @@ def _generate_trades_excel(final_sim: dict, portfolio: list, capital: float):
         top=Side(style='thin', color='CCCCCC'),  bottom=Side(style='thin', color='CCCCCC'),
     )
     col_widths = {
-        'Nr': 5, 'Datum': 18, 'Strategie': 28, 'Richtung': 10,
-        'Entry': 14, 'Exit': 14, 'Ergebnis': 14,
-        'PnL (USDT)': 14, 'Gesamtkapital': 16,
+        'Nr': 5, 'Datum': 18, 'Strategie': 28, 'Portfolio': 10, 'Richtung': 10,
+        'Entry': 14, 'Exit': 14, 'Ergebnis': 14, 'PnL (USDT)': 14, 'Kapital': 16,
     }
 
     headers = list(rows[0].keys())
@@ -724,20 +753,22 @@ def _generate_trades_excel(final_sim: dict, portfolio: list, capital: float):
             cell.fill      = fill
             cell.border    = thin_border
             cell.alignment = Alignment(horizontal='center', vertical='center')
-            if key in ('Entry', 'Exit', 'PnL (USDT)', 'Gesamtkapital'):
+            if key in ('Entry', 'Exit', 'PnL (USDT)', 'Kapital'):
                 cell.number_format = '#,##0.0000'
         ws.row_dimensions[r_idx].height = 18
 
     # Zusammenfassung
-    sr = len(rows) + 3
+    total_trades = len(rows)
+    wins = sum(1 for r in rows if r['Ergebnis'] == 'TP erreicht')
+    sr = total_trades + 3
     ws.cell(row=sr, column=1, value='Zusammenfassung').font = Font(bold=True, size=11)
-    wins = sum(1 for t in trade_history if t['pnl'] > 0)
+    pnl_total = rows[-1]['Kapital'] - capital if rows else 0.0
+    pnl_pct   = pnl_total / capital * 100 if capital else 0.0
     for label, value in [
-        ('Trades gesamt',  len(trade_history)),
-        ('Win-Rate',       f"{wins / len(trade_history) * 100:.1f}%"),
-        ('PnL',            f"{final_sim['total_pnl_pct']:+.1f}%"),
-        ('Endkapital',     f"{final_sim['end_capital']:.2f} USDT"),
-        ('Max Drawdown',   f"{final_sim['max_drawdown_pct']:.1f}%"),
+        ('Trades gesamt',  total_trades),
+        ('Win-Rate',       f"{wins / total_trades * 100:.1f}%" if total_trades else '—'),
+        ('PnL',            f"{pnl_pct:+.1f}%"),
+        ('Endkapital',     f"{rows[-1]['Kapital']:.2f} USDT" if rows else '—'),
     ]:
         ws.cell(row=sr, column=1, value=label).font = Font(bold=True)
         ws.cell(row=sr, column=2, value=value)
@@ -752,8 +783,8 @@ def _generate_trades_excel(final_sim: dict, portfolio: list, capital: float):
     if bot_token and chat_id:
         from fibot.utils.telegram import send_document
         send_document(bot_token, chat_id, out_file,
-                      caption=f"FiBot Trades — {len(trade_history)} Trades, "
-                              f"WR: {wins / len(trade_history) * 100:.1f}%")
+                      caption=f"FiBot Trades — {total_trades} Trades, "
+                              f"WR: {wins / total_trades * 100:.1f}%" if total_trades else "FiBot Trades")
         print(f"  {GREEN}✓ Via Telegram gesendet.{NC}")
 
 
