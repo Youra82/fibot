@@ -204,6 +204,7 @@ def main():
     # In-progress Marker setzen
     open(IN_PROGRESS_FILE, 'w').close()
 
+    config_backups = {}  # fname → backup_path (für finally-Cleanup)
     start_time = datetime.now()
     try:
         constraints = opt_cfg.get('constraints', {})
@@ -279,6 +280,20 @@ def main():
         # ── Schritt 1: Optuna-Optimizer pro Paar ──────────────────────────
         log.info(f"Starte Optuna-Optimierung für {len(active_pairs)} Paar(e) "
                  f"({n_trials} Trials, {cpu_cores} CPU-Kern(e))...")
+
+        # Config-Backups anlegen BEVOR optimizer.py überschreibt
+        import shutil
+        config_backups = {}  # fname → backup_path
+        for sym, tf in active_pairs:
+            safe  = f"{sym.replace('/', '').replace(':', '')}_{tf}"
+            fname = f"config_{safe}_fib.json"
+            cfg_path = os.path.join(CONFIGS_DIR, fname)
+            if os.path.exists(cfg_path):
+                bak = cfg_path + '.bak'
+                shutil.copy2(cfg_path, bak)
+                config_backups[fname] = bak
+                log.info(f"  Backup: {fname}")
+
         opt_failed = []
         for sym, tf in active_pairs:
             opt_cmd = [
@@ -385,6 +400,18 @@ def main():
             else:
                 kept.append(fn)
 
+        # Schlechtere Config-Dateien aus Backup wiederherstellen
+        for fn, old_val, new_val in not_better:
+            bak = config_backups.get(fn)
+            if bak and os.path.exists(bak):
+                shutil.copy2(bak, os.path.join(CONFIGS_DIR, fn))
+                log.info(f"  Config wiederhergestellt: {fn} (alt={old_val:.2f}% > neu={new_val:.2f}%)")
+
+        # Backups aufräumen
+        for bak in config_backups.values():
+            if os.path.exists(bak):
+                os.remove(bak)
+
         if kept:
             success = _update_settings(kept)
         else:
@@ -464,6 +491,10 @@ def main():
     finally:
         if os.path.exists(IN_PROGRESS_FILE):
             os.remove(IN_PROGRESS_FILE)
+        # Stale Backups aufräumen (falls Fehler vor normalem Cleanup)
+        for bak in config_backups.values():
+            if os.path.exists(bak):
+                os.remove(bak)
 
 
 if __name__ == '__main__':
