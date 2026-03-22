@@ -432,9 +432,29 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
     print(f"{'='*55}\n")
 
     # --- Ergebnis speichern ---
+    portfolio_set = set(final_filenames)
     os.makedirs(os.path.dirname(OPT_RESULTS), exist_ok=True)
     with open(OPT_RESULTS, 'w') as f:
-        json.dump({'optimal_portfolio': final_filenames}, f, indent=2)
+        json.dump({
+            'optimal_portfolio':  final_filenames,
+            'end_capital':        port_end_cap,
+            'total_pnl_pct':      port_pnl_pct,
+            'max_drawdown_pct':   port_max_dd,
+            'trade_count':        port_trades,
+            'win_rate':           port_wr,
+            'all_results': [
+                {
+                    'filename':   r['filename'],
+                    'symbol':     r['symbol'],
+                    'timeframe':  r['timeframe'],
+                    'pnl_pct':    r['pnl_pct'],
+                    'end_cap':    r['end_cap'],
+                    'max_dd':     r['max_dd'],
+                    'in_portfolio': r['filename'] in portfolio_set,
+                }
+                for r in single_results
+            ],
+        }, f, indent=2)
     print(f"{GREEN}Optimales Portfolio in '{OPT_RESULTS}' gespeichert.{NC}")
 
     # ── Chart & Excel anbieten ────────────────────────────────────────────────

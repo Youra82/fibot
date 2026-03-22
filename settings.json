@@ -15,9 +15,8 @@
   },
   "optimization_settings": {
     "enabled": true,
-    "_info": "Auto-Optimierung: laeuft im Hintergrund wenn master_runner.py gestartet wird",
     "schedule": {
-      "_info": "day_of_week: 0=Montag 6=Sonntag | hour: 0-23 | interval: Mindestabstand zwischen zwei Laeufen",
+      "_info": "day_of_week: 0=Montag, 6=Sonntag | hour: 0-23 (24h Format)",
       "day_of_week": 6,
       "hour": 3,
       "minute": 0,
@@ -27,10 +26,17 @@
         "unit": "days"
       }
     },
-    "start_capital": 15,
-    "max_drawdown_pct": 30,
-    "min_win_rate_pct": 0,
+    "symbols_to_optimize": "auto",
+    "timeframes_to_optimize": "auto",
     "lookback_days": "auto",
+    "start_capital": 15,
+    "cpu_cores": 1,
+    "num_trials": 200,
+    "constraints": {
+      "max_drawdown_pct": 30,
+      "min_win_rate_pct": 0,
+      "min_pnl_pct": 0
+    },
     "send_telegram_on_completion": true
   }
 }
