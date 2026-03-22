@@ -140,9 +140,11 @@ def run_portfolio_simulation(start_capital: float,
                     continue
 
                 row     = strat['df'].loc[ts]
-                sig_dir = row.get('_sig_dir', '')
-                if not sig_dir or sig_dir == 'none':
+                sig_dir_raw = row.get('_sig_dir', 0)
+                if not sig_dir_raw or sig_dir_raw == 'none':
                     continue
+                # _sig_dir ist int (0=none, 1=long, 2=short) → in String umwandeln
+                sig_dir = 'long' if sig_dir_raw == 1 else ('short' if sig_dir_raw == 2 else str(sig_dir_raw))
 
                 entry = float(row.get('_sig_entry', np.nan))
                 sl    = float(row.get('_sig_sl',    np.nan))
