@@ -23,6 +23,7 @@ from fibot.strategy.fibonacci_logic import (
 logger = logging.getLogger(__name__)
 
 MIN_NOTIONAL_USDT = 5.0
+FEE_PCT           = 0.06 / 100   # Bitget Taker-Gebühr (je Seite)
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +200,9 @@ def run_backtest(df: pd.DataFrame, config: dict,
                 if open_trade.direction == 'short':
                     price_diff = -price_diff
 
-                pnl_usdt = price_diff * open_trade.contracts * leverage
+                notional = open_trade.contracts * open_trade.entry
+                fees_usdt = notional * FEE_PCT * 2      # Entry + Exit Gebühr
+                pnl_usdt = price_diff * open_trade.contracts * leverage - fees_usdt
                 pnl_pct  = pnl_usdt / capital * 100
 
                 open_trade.exit_price = exit_p
@@ -264,7 +267,9 @@ def run_backtest(df: pd.DataFrame, config: dict,
         price_diff = last_price - open_trade.entry
         if open_trade.direction == 'short':
             price_diff = -price_diff
-        pnl_usdt = price_diff * open_trade.contracts * leverage
+        notional_last = open_trade.contracts * open_trade.entry
+        fees_last     = notional_last * FEE_PCT * 2
+        pnl_usdt = price_diff * open_trade.contracts * leverage - fees_last
         open_trade.exit_price = last_price
         open_trade.exit_bar   = len(df) - 1
         open_trade.result     = 'open'

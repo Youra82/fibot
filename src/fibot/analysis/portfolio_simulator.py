@@ -168,9 +168,10 @@ def run_portfolio_simulation(start_capital: float,
                 if notional < MIN_NOTIONAL:
                     continue
 
-                # Margin-Check: laufende Positionen + neue ≤ equity
+                # Margin-Check: bereits belegte Margin anderer Strategien darf equity nicht überschreiten
+                # (gleiche Logik wie Einzel-Backtester: eigene neue Position immer erlaubt)
                 used_margin = sum(p['margin'] for p in open_positions.values())
-                if used_margin + margin > equity:
+                if used_margin > equity:
                     continue
 
                 open_positions[fname] = {
