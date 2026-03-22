@@ -200,10 +200,31 @@ def main():
 
     start_time = datetime.now()
     try:
-        capital   = float(opt_cfg.get('start_capital',      1000))
-        max_dd    = float(opt_cfg.get('max_drawdown_pct',     30))
-        min_wr    = float(opt_cfg.get('min_win_rate_pct',      0))
-        lookback  = int(opt_cfg.get('lookback_days',         365))
+        capital  = float(opt_cfg.get('start_capital',     1000))
+        max_dd   = float(opt_cfg.get('max_drawdown_pct',   30))
+        min_wr   = float(opt_cfg.get('min_win_rate_pct',    0))
+
+        # Lookback automatisch aus den Timeframes der vorhandenen Configs bestimmen
+        lookback_setting = opt_cfg.get('lookback_days', 'auto')
+        if str(lookback_setting).lower() == 'auto':
+            from fibot.analysis.backtester import auto_days_for_timeframe
+            max_days = 365  # Fallback
+            try:
+                for fname in os.listdir(CONFIGS_DIR):
+                    if not (fname.startswith('config_') and fname.endswith('.json')):
+                        continue
+                    with open(os.path.join(CONFIGS_DIR, fname)) as f:
+                        cfg = json.load(f)
+                    tf = cfg.get('market', {}).get('timeframe', '')
+                    if tf:
+                        max_days = max(max_days, auto_days_for_timeframe(tf))
+            except Exception as e:
+                log.warning(f"Lookback-Auto-Berechnung fehlgeschlagen, nutze 365: {e}")
+            lookback = max_days
+            log.info(f"Lookback auto: {lookback} Tage (basierend auf vorhandenen Timeframes)")
+        else:
+            lookback = int(lookback_setting)
+
         date_from = (datetime.now() - timedelta(days=lookback)).strftime('%Y-%m-%d')
         date_to   = datetime.now().strftime('%Y-%m-%d')
 

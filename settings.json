@@ -30,7 +30,7 @@
     "start_capital": 1000,
     "max_drawdown_pct": 30,
     "min_win_rate_pct": 0,
-    "lookback_days": 365,
+    "lookback_days": "auto",
     "send_telegram_on_completion": true
   }
 }

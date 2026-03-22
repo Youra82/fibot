@@ -305,7 +305,7 @@ Grund    : LONG | RSI überverkauft (41.2) | Volumen 1.43x
 | `start_capital` | `1000` | Startkapital für die Simulation |
 | `max_drawdown_pct` | `30` | Max. erlaubter Drawdown (Portfolio-Simulation) |
 | `min_win_rate_pct` | `0` | Min. Win-Rate (0 = kein Limit) |
-| `lookback_days` | `365` | Wie viele Tage historische Daten |
+| `lookback_days` | `"auto"` | Historische Tage: `"auto"` = max. Wert über alle Config-Timeframes (15m→180, 1h→365, 4h→730, 1d→1095), oder feste Zahl |
 | `send_telegram_on_completion` | `true` | Ergebnis via Telegram senden |
 
 > **Erster Start:** Beim ersten Lauf nach `enabled: true` startet die Optimierung sofort
