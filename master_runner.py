@@ -23,6 +23,25 @@ logging.basicConfig(
 )
 
 
+def _run_auto_optimizer():
+    """Startet den Auto-Optimizer-Scheduler non-blocking im Hintergrund."""
+    scheduler  = os.path.join(SCRIPT_DIR, 'auto_optimizer_scheduler.py')
+    python_exe = os.path.join(SCRIPT_DIR, '.venv', 'bin', 'python3')
+    if not os.path.exists(scheduler) or not os.path.exists(python_exe):
+        return
+    log_path = os.path.join(SCRIPT_DIR, 'logs', 'auto_optimizer.log')
+    try:
+        subprocess.Popen(
+            [python_exe, scheduler],
+            stdout=open(log_path, 'a'),
+            stderr=subprocess.STDOUT,
+            cwd=SCRIPT_DIR,
+        )
+        logging.info("[Auto-Optimizer] Scheduler gestartet (prüft ob Optimierung fällig).")
+    except Exception as e:
+        logging.warning(f"[Auto-Optimizer] Konnte Scheduler nicht starten: {e}")
+
+
 def main():
     settings_file = os.path.join(SCRIPT_DIR, 'settings.json')
     secret_file   = os.path.join(SCRIPT_DIR, 'secret.json')
@@ -36,6 +55,9 @@ def main():
     logging.info("=" * 55)
     logging.info("FiBot Master Runner")
     logging.info("=" * 55)
+
+    # Auto-Optimizer im Hintergrund starten (non-blocking)
+    _run_auto_optimizer()
 
     try:
         with open(settings_file, 'r') as f:

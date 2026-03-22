@@ -12,5 +12,25 @@
         "active": false
       }
     ]
+  },
+  "optimization_settings": {
+    "enabled": false,
+    "_info": "Auto-Optimierung: laeuft im Hintergrund wenn master_runner.py gestartet wird",
+    "schedule": {
+      "_info": "day_of_week: 0=Montag 6=Sonntag | hour: 0-23 | interval: Mindestabstand zwischen zwei Laeufen",
+      "day_of_week": 6,
+      "hour": 3,
+      "minute": 0,
+      "interval": {
+        "_info": "Einheit: minutes | hours | days | weeks",
+        "value": 7,
+        "unit": "days"
+      }
+    },
+    "start_capital": 1000,
+    "max_drawdown_pct": 30,
+    "min_win_rate_pct": 0,
+    "lookback_days": 365,
+    "send_telegram_on_completion": true
   }
 }

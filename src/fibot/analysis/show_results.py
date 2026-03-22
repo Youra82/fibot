@@ -183,7 +183,7 @@ OPT_RESULTS  = os.path.join(PROJECT_ROOT, 'artifacts', 'results', 'optimization_
 
 
 def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
-                          start_date: str, end_date: str):
+                          start_date: str, end_date: str, auto: bool = False):
     """
     Findet das optimale Fibonacci-Portfolio per Greedy-Algorithmus — stbot-Style.
 
@@ -421,13 +421,19 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
 
     # ── Chart & Excel anbieten ────────────────────────────────────────────────
     if final_sim:
-        print()
-        ans = input("  Interaktive Charts & Excel fuer dieses Portfolio erstellen"
-                    " & via Telegram senden? (j/n) [Standard: n]: ").strip().lower()
-        if ans in ('j', 'y', 'ja'):
+        if auto:
+            # Im Auto-Modus immer Chart + Excel + Telegram (kein Prompt)
             print()
             _generate_portfolio_chart(final_sim, portfolio, capital, start_date, end_date)
             _generate_trades_excel(final_sim, portfolio, capital)
+        else:
+            print()
+            ans = input("  Interaktive Charts & Excel fuer dieses Portfolio erstellen"
+                        " & via Telegram senden? (j/n) [Standard: n]: ").strip().lower()
+            if ans in ('j', 'y', 'ja'):
+                print()
+                _generate_portfolio_chart(final_sim, portfolio, capital, start_date, end_date)
+                _generate_trades_excel(final_sim, portfolio, capital)
 
 
 # ---------------------------------------------------------------------------
@@ -809,6 +815,8 @@ if __name__ == "__main__":
                         help="Max Drawdown %% für Portfolio-Finder (Modus 3)")
     parser.add_argument('--min-wr',        type=float, default=0.0,
                         help="Min Win-Rate %% für Portfolio-Finder (Modus 3)")
+    parser.add_argument('--auto',          action='store_true', default=False,
+                        help="Nicht-interaktiver Modus (Auto-Optimizer): überspringt alle Prompts")
     args = parser.parse_args()
 
     today = date.today().isoformat()
@@ -826,7 +834,8 @@ if __name__ == "__main__":
         run_manual_portfolio(filenames, start, end, args.capital)
 
     elif args.mode == 3:
-        run_portfolio_finder(args.capital, args.target_max_dd, args.min_wr, start, end)
+        run_portfolio_finder(args.capital, args.target_max_dd, args.min_wr, start, end,
+                             auto=args.auto)
 
     elif args.mode == 4:
         from fibot.analysis.interactive_chart import run_interactive_chart
