@@ -634,13 +634,16 @@ master_runner.py startet
 ### Manuell auslösen
 
 ```bash
-# Scheduler direkt starten (prüft ob fällig)
+# Scheduler direkt starten (prüft ob fällig, hält sich an enabled + Schedule)
 .venv/bin/python3 auto_optimizer_scheduler.py
 
-# Sofort erzwingen: .last_optimization_run löschen
-rm .last_optimization_run
-.venv/bin/python3 auto_optimizer_scheduler.py
+# Sofort erzwingen — ignoriert enabled und Schedule (für Tests)
+.venv/bin/python3 auto_optimizer_scheduler.py --force
 ```
+
+> `--force` überspringt den `enabled`-Check und den Zeitplan-Check.
+> Nützlich um nach einer Konfigurationsänderung direkt zu testen,
+> ob der Ablauf korrekt funktioniert.
 
 ### Log ansehen
 

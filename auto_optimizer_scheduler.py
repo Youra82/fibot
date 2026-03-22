@@ -154,19 +154,29 @@ def _update_settings(portfolio_files: list) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description='FiBot Auto-Optimizer-Scheduler')
+    parser.add_argument('--force', action='store_true',
+                        help='Optimierung sofort erzwingen (ignoriert enabled + Schedule)')
+    args = parser.parse_args()
+
     settings = _load_settings()
     opt_cfg  = settings.get('optimization_settings', {})
 
-    if not opt_cfg.get('enabled', False):
-        log.info("Auto-Optimizer deaktiviert (enabled: false).")
-        return
+    if args.force:
+        log.info("--force gesetzt: Optimierung wird sofort gestartet.")
+        reason = 'force'
+    else:
+        if not opt_cfg.get('enabled', False):
+            log.info("Auto-Optimizer deaktiviert (enabled: false).")
+            return
 
-    schedule = opt_cfg.get('schedule', {})
-    due, reason = _is_due(schedule)
+        schedule = opt_cfg.get('schedule', {})
+        due, reason = _is_due(schedule)
 
-    if not due:
-        log.info(f"Optimierung nicht fällig ({reason}).")
-        return
+        if not due:
+            log.info(f"Optimierung nicht fällig ({reason}).")
+            return
 
     log.info("=" * 55)
     log.info(f"Starte Auto-Optimierung — Grund: {reason}")
