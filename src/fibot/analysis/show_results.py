@@ -194,7 +194,7 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
     Coin-Kollision: kein Coin doppelt (BTC 4h + BTC 1h = blockiert).
     """
     from fibot.analysis.backtester import run_backtest, load_ohlcv
-    from fibot.strategy.fibonacci_logic import precompute_all_signals
+    from fibot.strategy.fibonacci_logic import precompute_indicators, precompute_all_signals
     from fibot.analysis.portfolio_simulator import run_portfolio_simulation
 
     if not os.path.isdir(CONFIGS_DIR):
@@ -238,7 +238,8 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
             print(f"  {YELLOW}Uebersprungen (keine Daten): {fname}{NC}")
             continue
 
-        # Signale vorberechnen (einmal, wird für Simulator wiederverwendet)
+        # Indikatoren + Signale vorberechnen (einmal, wird für Simulator wiederverwendet)
+        df = precompute_indicators(df, config)
         df = precompute_all_signals(df, config)
 
         result = run_backtest(df, config, capital, symbol, timeframe)
