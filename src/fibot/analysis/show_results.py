@@ -463,7 +463,8 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
         if auto:
             # Im Auto-Modus immer Chart + Excel + Telegram (kein Prompt)
             print()
-            _generate_portfolio_chart(final_sim, portfolio, capital, start_date, end_date)
+            _generate_portfolio_chart(final_sim, portfolio, capital, start_date, end_date,
+                                      single_results)
             _generate_trades_excel(final_sim, portfolio, capital, single_results)
         else:
             print()
@@ -471,7 +472,8 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
                         " & via Telegram senden? (j/n) [Standard: n]: ").strip().lower()
             if ans in ('j', 'y', 'ja'):
                 print()
-                _generate_portfolio_chart(final_sim, portfolio, capital, start_date, end_date)
+                _generate_portfolio_chart(final_sim, portfolio, capital, start_date, end_date,
+                                          single_results)
                 _generate_trades_excel(final_sim, portfolio, capital, single_results)
 
 
@@ -530,7 +532,8 @@ def _get_telegram_cfg() -> tuple[str, str]:
 
 
 def _generate_portfolio_chart(final_sim: dict, portfolio: list,
-                               capital: float, start_date: str, end_date: str):
+                               capital: float, start_date: str, end_date: str,
+                               all_single_results: list = None):
     """Erstellt einen interaktiven Portfolio-Equity-Chart und sendet ihn optional via Telegram."""
     try:
         import plotly.graph_objects as go
@@ -539,22 +542,22 @@ def _generate_portfolio_chart(final_sim: dict, portfolio: list,
         print(f"  {RED}plotly nicht installiert — Chart übersprungen. (pip install plotly){NC}")
         return
 
-    eq_df        = final_sim.get('equity_curve')
+    eq_df         = final_sim.get('equity_curve')
     trade_history = final_sim.get('trade_history', [])
     if eq_df is None or eq_df.empty:
         print(f"  {YELLOW}Keine Equity-Daten — Chart übersprungen.{NC}")
         return
 
-    # Equity-Kurve
+    portfolio_fnames = {r['filename'] for r in portfolio}
+
     eq_times = eq_df['timestamp'].astype(str).tolist()
     eq_vals  = eq_df['equity'].tolist()
 
-    # Trade-Marker
+    # Trade-Marker (nur Portfolio-Trades)
     win_x, win_y   = [], []
     loss_x, loss_y = [], []
     for t in trade_history:
         ts  = str(t['ts'])
-        # Equity zum Zeitpunkt des Trades aus equity_curve holen
         row = eq_df[eq_df['timestamp'] <= t['ts']]
         eq_at = float(row['equity'].iloc[-1]) if not row.empty else capital
         if t['pnl'] > 0:
@@ -562,22 +565,12 @@ def _generate_portfolio_chart(final_sim: dict, portfolio: list,
         else:
             loss_x.append(ts); loss_y.append(eq_at)
 
-    # Hover-Text pro Trade
-    hover_txt = []
-    for t in trade_history:
-        fname_short = t['fname'].replace('config_', '').replace('_fib.json', '')
-        hover_txt.append(
-            f"{fname_short}<br>"
-            f"{t['direction'].upper()} | Entry: {t['entry']:.4f} → {t['exit']:.4f}<br>"
-            f"PnL: {t['pnl']:+.4f} USDT"
-        )
-
-    n_strats   = len(portfolio)
-    pairs_str  = ', '.join(
+    n_strats  = len(portfolio)
+    pairs_str = ', '.join(
         f"{r['symbol'].split('/')[0]}/{r['timeframe']}" for r in portfolio
     )
-    pnl_pct    = final_sim['total_pnl_pct']
-    sign       = '+' if pnl_pct >= 0 else ''
+    pnl_pct = final_sim['total_pnl_pct']
+    sign    = '+' if pnl_pct >= 0 else ''
     title = (
         f"FiBot Portfolio — {n_strats} Strategie(n) ({pairs_str}) | "
         f"Zeitraum: {start_date} → {end_date} | "
@@ -597,19 +590,49 @@ def _generate_portfolio_chart(final_sim: dict, portfolio: list,
         annotation_position='top left',
     )
 
-    # Equity-Kurve
+    # Einzelne Equity-Linien für ALLE Strategien (gedimmt im Hintergrund)
+    STRAT_COLORS = [
+        '#f59e0b', '#10b981', '#8b5cf6', '#f97316',
+        '#ec4899', '#14b8a6', '#a3e635', '#fb923c',
+    ]
+    if all_single_results:
+        for idx, sr in enumerate(all_single_results):
+            trades = [t for t in sr.get('trade_objs', []) if t.result != 'open']
+            if not trades:
+                continue
+            eq  = capital
+            xs, ys = [str(trades[0].timestamp)], [capital]
+            for t in trades:
+                eq += t.pnl_usdt
+                xs.append(str(t.timestamp))
+                ys.append(round(eq, 4))
+            in_port   = sr['filename'] in portfolio_fnames
+            color     = STRAT_COLORS[idx % len(STRAT_COLORS)]
+            dash_style = 'solid' if in_port else 'dot'
+            opacity   = 0.7 if in_port else 0.35
+            label = (f"{sr['symbol'].split('/')[0]}/{sr['timeframe']} "
+                     f"({'✔' if in_port else '—'})")
+            fig.add_trace(go.Scatter(
+                x=xs, y=ys,
+                mode='lines', name=label,
+                line=dict(color=color, width=1.5, dash=dash_style),
+                opacity=opacity,
+                hovertemplate=f"{label}: %{{y:.2f}} USDT<extra></extra>",
+            ))
+
+    # Portfolio-Equity-Gesamtlinie (vordergrund, blau, fett)
     fig.add_trace(go.Scatter(
         x=eq_times, y=eq_vals,
-        mode='lines', name='Portfolio Equity',
-        line=dict(color='#2563eb', width=2),
-        hovertemplate='Equity: %{y:.2f} USDT<extra></extra>',
+        mode='lines', name='Portfolio (gesamt)',
+        line=dict(color='#2563eb', width=3),
+        hovertemplate='Portfolio: %{y:.2f} USDT<extra></extra>',
     ))
 
     # WIN-Marker ● cyan
     if win_x:
         fig.add_trace(go.Scatter(
             x=win_x, y=win_y, mode='markers',
-            marker=dict(color='#22d3ee', symbol='circle', size=10,
+            marker=dict(color='#22d3ee', symbol='circle', size=8,
                         line=dict(width=1, color='#0e7490')),
             name='TP ✓',
         ))
@@ -618,7 +641,7 @@ def _generate_portfolio_chart(final_sim: dict, portfolio: list,
     if loss_x:
         fig.add_trace(go.Scatter(
             x=loss_x, y=loss_y, mode='markers',
-            marker=dict(color='#ef4444', symbol='x', size=10,
+            marker=dict(color='#ef4444', symbol='x', size=8,
                         line=dict(width=2, color='#7f1d1d')),
             name='SL ✗',
         ))
@@ -632,7 +655,7 @@ def _generate_portfolio_chart(final_sim: dict, portfolio: list,
         xaxis=dict(rangeslider=dict(visible=True), fixedrange=False),
         legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
         margin=dict(l=60, r=60, t=80, b=40),
-        yaxis=dict(title='Portfolio Equity (USDT)', fixedrange=False),
+        yaxis=dict(title='Equity (USDT)', fixedrange=False),
     )
 
     os.makedirs(os.path.join(PROJECT_ROOT, 'artifacts', 'charts'), exist_ok=True)
