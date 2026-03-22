@@ -11,7 +11,7 @@ echo "       FiBot — Fibonacci Optimierungs-Pipeline"
 echo -e "=======================================================${NC}"
 
 VENV_PATH=".venv/bin/activate"
-PYTHON=".venv/bin/$PYTHON"
+PYTHON=".venv/bin/python3"
 OPTIMIZER="src/fibot/analysis/optimizer.py"
 
 if [ ! -f "$VENV_PATH" ]; then
