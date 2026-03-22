@@ -289,10 +289,11 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
     best_single = valid[0]
 
     print(f"\n2/3: Beste Einzelstrategie (unter {cond}): {best_single['filename']}")
-    print(f"     (Endkapital: {best_single['end_cap']:.2f} USDT, Max DD: {best_single['max_dd']:.2f}%)")
+    print(f"     Einzel-Backtest: {best_single['end_cap']:.2f} USDT, Max DD: {best_single['max_dd']:.2f}%")
 
     # ── Schritt 3: Greedy mit echter Portfolio-Simulation ────────────────────
     print(f"\n3/3: Suche beste Team-Kollegen (echte Portfolio-Simulation, gemeinsames Kapital)...")
+    print(f"     (Basis: Einzel-Simulation von {best_single['filename']}...)")
 
     portfolio      = [best_single]
     used_coins     = {best_single['coin']}
@@ -306,6 +307,10 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
     best_sim = _simulate([best_single['filename']])
     best_end_cap = best_sim['end_capital'] if best_sim else best_single['end_cap']
     best_dd      = best_sim['max_drawdown_pct'] if best_sim else best_single['max_dd']
+
+    print(f"     Portfolio-Simulation Basis ({best_single['filename']}): "
+          f"{best_end_cap:.2f} USDT, Max DD: {best_dd:.2f}%")
+    print(f"     Verbesserungen werden relativ zu dieser Simulation bewertet.")
 
     while True:
         best_next    = None

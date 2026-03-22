@@ -111,10 +111,11 @@ def run_portfolio_simulation(start_capital: float,
                 elif candle['low']  <= pos['tp']: exit_price = pos['tp']
 
             if exit_price is not None:
+                lev = pos.get('leverage', 1)
                 if pos['direction'] == 'long':
-                    raw_pnl = pos['notional'] * (exit_price - pos['entry']) / pos['entry']
+                    raw_pnl = pos['notional'] * (exit_price - pos['entry']) / pos['entry'] * lev
                 else:
-                    raw_pnl = pos['notional'] * (pos['entry'] - exit_price) / pos['entry']
+                    raw_pnl = pos['notional'] * (pos['entry'] - exit_price) / pos['entry'] * lev
 
                 fees    = pos['notional'] * FEE_PCT * 2
                 net_pnl = raw_pnl - fees
@@ -178,6 +179,7 @@ def run_portfolio_simulation(start_capital: float,
                     'tp':        tp,
                     'notional':  notional,
                     'margin':    margin,
+                    'leverage':  leverage,
                     'entry_ts':  ts,
                 }
 
@@ -187,10 +189,11 @@ def run_portfolio_simulation(start_capital: float,
             strat = processed[fname]
             if ts in strat['df'].index:
                 close_p = float(strat['df'].loc[ts, 'close'])
+                lev = pos.get('leverage', 1)
                 if pos['direction'] == 'long':
-                    unrealized += pos['notional'] * (close_p - pos['entry']) / pos['entry']
+                    unrealized += pos['notional'] * (close_p - pos['entry']) / pos['entry'] * lev
                 else:
-                    unrealized += pos['notional'] * (pos['entry'] - close_p) / pos['entry']
+                    unrealized += pos['notional'] * (pos['entry'] - close_p) / pos['entry'] * lev
 
         total_eq = equity + unrealized
         equity_curve.append({'timestamp': ts, 'equity': total_eq})
