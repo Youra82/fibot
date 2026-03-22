@@ -14,7 +14,7 @@
     ]
   },
   "optimization_settings": {
-    "enabled": false,
+    "enabled": true,
     "_info": "Auto-Optimierung: laeuft im Hintergrund wenn master_runner.py gestartet wird",
     "schedule": {
       "_info": "day_of_week: 0=Montag 6=Sonntag | hour: 0-23 | interval: Mindestabstand zwischen zwei Laeufen",
@@ -27,7 +27,7 @@
         "unit": "days"
       }
     },
-    "start_capital": 1000,
+    "start_capital": 15,
     "max_drawdown_pct": 30,
     "min_win_rate_pct": 0,
     "lookback_days": "auto",
