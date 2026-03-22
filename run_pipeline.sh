@@ -97,8 +97,13 @@ for symbol in $SYMBOLS; do
         echo -e "${BLUE}  Datenzeitraum: $FINAL_START_DATE bis $END_DATE${NC}"
         echo -e "${BLUE}=======================================================${NC}"
 
-        # Config-Dateiname bestimmen
-        SAFE_SYM=$(echo "$symbol" | tr -d '/: ')
+        # Config-Dateiname bestimmen (Kurzname BTC → BTC/USDT:USDT → BTCUSDTUSDT)
+        if [[ "$symbol" != *"/"* ]]; then
+            FULL_SYM="${symbol}/USDT:USDT"
+        else
+            FULL_SYM="$symbol"
+        fi
+        SAFE_SYM=$(echo "$FULL_SYM" | tr -d '/: ')
         CONFIG_FILE="src/fibot/strategy/configs/config_${SAFE_SYM}_${timeframe}_fib.json"
 
         # Altes PnL aus bestehender Config lesen (falls vorhanden)
