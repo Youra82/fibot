@@ -158,8 +158,9 @@ def run_portfolio_simulation(start_capital: float,
                 leverage = max(1, int(risk.get('leverage', 3)))
                 risk_pct = risk.get('risk_per_entry_pct', 0.5) / 100
 
-                # Notional aus equity × risk_pct / sl_pct
-                notional = (equity * risk_pct) / sl_pct
+                # Notional aus start_capital × risk_pct / sl_pct (fix, wie Einzel-Backtester)
+                # Nicht equity verwenden — sonst explodiert Compounding bei vielen Trades
+                notional = (start_capital * risk_pct) / sl_pct
                 margin   = notional / leverage
 
                 if notional < MIN_NOTIONAL:
