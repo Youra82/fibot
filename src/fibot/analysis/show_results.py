@@ -183,7 +183,8 @@ OPT_RESULTS  = os.path.join(PROJECT_ROOT, 'artifacts', 'results', 'optimization_
 
 
 def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
-                          start_date: str, end_date: str, auto: bool = False):
+                          start_date: str, end_date: str, auto: bool = False,
+                          symbols: list | None = None):
     """
     Findet das optimale Fibonacci-Portfolio per Greedy-Algorithmus — stbot-Style.
 
@@ -206,6 +207,16 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
     if not cfg_files:
         print(f"{YELLOW}Keine Configs gefunden. Erst run_pipeline.sh ausführen.{NC}")
         return
+
+    # Symbol-Filter: nur Configs der gewünschten Coins laden
+    if symbols:
+        allowed = {s.upper().split('/')[0] for s in symbols}
+        cfg_files = [f for f in cfg_files
+                     if any(f.upper().startswith(f'CONFIG_{coin}') for coin in allowed)]
+        if not cfg_files:
+            print(f"{RED}Keine Configs für Symbole {allowed} gefunden.{NC}")
+            return
+        print(f"  Symbol-Filter aktiv: {', '.join(sorted(allowed))}")
 
     cond = f"Max DD <= {target_max_dd:.2f}%"
     if min_wr > 0:
@@ -817,6 +828,8 @@ if __name__ == "__main__":
                         help="Min Win-Rate %% für Portfolio-Finder (Modus 3)")
     parser.add_argument('--auto',          action='store_true', default=False,
                         help="Nicht-interaktiver Modus (Auto-Optimizer): überspringt alle Prompts")
+    parser.add_argument('--symbols',       default=None,
+                        help="Nur diese Coins optimieren, z.B. 'BTC ETH ADA' (Modus 3)")
     args = parser.parse_args()
 
     today = date.today().isoformat()
@@ -834,8 +847,9 @@ if __name__ == "__main__":
         run_manual_portfolio(filenames, start, end, args.capital)
 
     elif args.mode == 3:
+        symbols = args.symbols.split() if args.symbols else None
         run_portfolio_finder(args.capital, args.target_max_dd, args.min_wr, start, end,
-                             auto=args.auto)
+                             auto=args.auto, symbols=symbols)
 
     elif args.mode == 4:
         from fibot.analysis.interactive_chart import run_interactive_chart

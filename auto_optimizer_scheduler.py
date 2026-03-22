@@ -204,7 +204,16 @@ def main():
         max_dd   = float(opt_cfg.get('max_drawdown_pct',   30))
         min_wr   = float(opt_cfg.get('min_win_rate_pct',    0))
 
-        # Lookback automatisch aus den Timeframes der vorhandenen Configs bestimmen
+        # Aktive Coins aus settings.json lesen (nur diese optimieren)
+        active_symbols = []
+        for s in settings.get('live_trading_settings', {}).get('active_strategies', []):
+            sym = s.get('symbol', '')
+            coin = sym.split('/')[0]
+            if coin and coin not in active_symbols:
+                active_symbols.append(coin)
+        log.info(f"Aktive Coins aus settings.json: {active_symbols}")
+
+        # Lookback automatisch aus den Configs der aktiven Coins bestimmen
         lookback_setting = opt_cfg.get('lookback_days', 'auto')
         if str(lookback_setting).lower() == 'auto':
             from fibot.analysis.backtester import auto_days_for_timeframe
@@ -212,6 +221,11 @@ def main():
             try:
                 for fname in os.listdir(CONFIGS_DIR):
                     if not (fname.startswith('config_') and fname.endswith('.json')):
+                        continue
+                    # nur Configs der aktiven Coins berücksichtigen
+                    if active_symbols and not any(
+                        fname.upper().startswith(f'CONFIG_{c}') for c in active_symbols
+                    ):
                         continue
                     with open(os.path.join(CONFIGS_DIR, fname)) as f:
                         cfg = json.load(f)
@@ -221,7 +235,7 @@ def main():
             except Exception as e:
                 log.warning(f"Lookback-Auto-Berechnung fehlgeschlagen, nutze 365: {e}")
             lookback = max_days
-            log.info(f"Lookback auto: {lookback} Tage (basierend auf vorhandenen Timeframes)")
+            log.info(f"Lookback auto: {lookback} Tage")
         else:
             lookback = int(lookback_setting)
 
@@ -231,13 +245,17 @@ def main():
         log.info(f"Parameter: Kapital={capital} USDT | MaxDD={max_dd}% | WR>={min_wr}% | "
                  f"Zeitraum: {date_from} → {date_to}")
 
-        # Verfügbare Pairs aus Configs lesen für Startnachricht
-        pairs_str = 'alle Configs'
+        # Pairs-String für Startnachricht: nur aktive Coins + ihre Configs
+        pairs_str = ', '.join(active_symbols) if active_symbols else 'alle Coins'
         try:
-            cfg_files = sorted(f for f in os.listdir(CONFIGS_DIR)
-                               if f.startswith('config_') and f.endswith('.json'))
             pairs = []
-            for fname in cfg_files:
+            for fname in sorted(os.listdir(CONFIGS_DIR)):
+                if not (fname.startswith('config_') and fname.endswith('.json')):
+                    continue
+                if active_symbols and not any(
+                    fname.upper().startswith(f'CONFIG_{c}') for c in active_symbols
+                ):
+                    continue
                 with open(os.path.join(CONFIGS_DIR, fname)) as f:
                     cfg = json.load(f)
                 sym = cfg.get('market', {}).get('symbol', '')
@@ -266,6 +284,8 @@ def main():
             '--to',            date_to,
             '--auto',
         ]
+        if active_symbols:
+            cmd += ['--symbols', ' '.join(active_symbols)]
 
         proc = subprocess.run(
             cmd, cwd=PROJECT_ROOT,
