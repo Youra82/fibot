@@ -184,7 +184,8 @@ OPT_RESULTS  = os.path.join(PROJECT_ROOT, 'artifacts', 'results', 'optimization_
 
 def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
                           start_date: str, end_date: str, auto: bool = False,
-                          symbols: list | None = None):
+                          symbols: list | None = None,
+                          configs: list | None = None):
     """
     Findet das optimale Fibonacci-Portfolio per Greedy-Algorithmus — stbot-Style.
 
@@ -208,8 +209,14 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
         print(f"{YELLOW}Keine Configs gefunden. Erst run_pipeline.sh ausführen.{NC}")
         return
 
-    # Symbol-Filter: nur Configs der gewünschten Coins laden
-    if symbols:
+    # Configs-Filter: exakte Dateiliste (vom Auto-Optimizer) hat Vorrang
+    if configs:
+        cfg_files = [f for f in configs if f in cfg_files]
+        if not cfg_files:
+            print(f"{RED}Keine der angegebenen Configs gefunden.{NC}")
+            return
+        print(f"  Configs-Filter aktiv: {', '.join(cfg_files)}")
+    elif symbols:
         allowed = {s.upper().split('/')[0] for s in symbols}
         cfg_files = [f for f in cfg_files
                      if any(f.upper().startswith(f'CONFIG_{coin}') for coin in allowed)]
@@ -848,8 +855,9 @@ if __name__ == "__main__":
 
     elif args.mode == 3:
         symbols = args.symbols.split() if args.symbols else None
+        configs = args.configs.split() if args.configs else None
         run_portfolio_finder(args.capital, args.target_max_dd, args.min_wr, start, end,
-                             auto=args.auto, symbols=symbols)
+                             auto=args.auto, symbols=symbols, configs=configs)
 
     elif args.mode == 4:
         from fibot.analysis.interactive_chart import run_interactive_chart

@@ -204,37 +204,36 @@ def main():
         max_dd   = float(opt_cfg.get('max_drawdown_pct',   30))
         min_wr   = float(opt_cfg.get('min_win_rate_pct',    0))
 
-        # Aktive Coins aus settings.json lesen (nur diese optimieren)
-        active_symbols = []
+        # Exakte Symbol+Timeframe-Paare aus settings.json lesen
+        active_pairs = []  # list of (symbol, timeframe)
         for s in settings.get('live_trading_settings', {}).get('active_strategies', []):
             sym = s.get('symbol', '')
-            coin = sym.split('/')[0]
-            if coin and coin not in active_symbols:
-                active_symbols.append(coin)
-        log.info(f"Aktive Coins aus settings.json: {active_symbols}")
+            tf  = s.get('timeframe', '')
+            if sym and tf:
+                active_pairs.append((sym, tf))
+        log.info(f"Aktive Paare aus settings.json: {[f'{s}/{t}' for s,t in active_pairs]}")
 
-        # Lookback automatisch aus den Configs der aktiven Coins bestimmen
+        # Passende Config-Dateinamen ermitteln
+        active_configs = []
+        for sym, tf in active_pairs:
+            safe  = f"{sym.replace('/', '').replace(':', '')}_{tf}"
+            fname = f"config_{safe}_fib.json"
+            if os.path.exists(os.path.join(CONFIGS_DIR, fname)):
+                active_configs.append(fname)
+            else:
+                log.warning(f"Config nicht gefunden: {fname} — übersprungen")
+
+        if not active_configs:
+            log.error("Keine passenden Configs für die aktiven Strategien gefunden.")
+            return
+
+        log.info(f"Configs für Optimierung: {active_configs}")
+
+        # Lookback automatisch aus den Timeframes der aktiven Paare bestimmen
         lookback_setting = opt_cfg.get('lookback_days', 'auto')
         if str(lookback_setting).lower() == 'auto':
             from fibot.analysis.backtester import auto_days_for_timeframe
-            max_days = 365  # Fallback
-            try:
-                for fname in os.listdir(CONFIGS_DIR):
-                    if not (fname.startswith('config_') and fname.endswith('.json')):
-                        continue
-                    # nur Configs der aktiven Coins berücksichtigen
-                    if active_symbols and not any(
-                        fname.upper().startswith(f'CONFIG_{c}') for c in active_symbols
-                    ):
-                        continue
-                    with open(os.path.join(CONFIGS_DIR, fname)) as f:
-                        cfg = json.load(f)
-                    tf = cfg.get('market', {}).get('timeframe', '')
-                    if tf:
-                        max_days = max(max_days, auto_days_for_timeframe(tf))
-            except Exception as e:
-                log.warning(f"Lookback-Auto-Berechnung fehlgeschlagen, nutze 365: {e}")
-            lookback = max_days
+            lookback = max(auto_days_for_timeframe(tf) for _, tf in active_pairs)
             log.info(f"Lookback auto: {lookback} Tage")
         else:
             lookback = int(lookback_setting)
@@ -245,27 +244,7 @@ def main():
         log.info(f"Parameter: Kapital={capital} USDT | MaxDD={max_dd}% | WR>={min_wr}% | "
                  f"Zeitraum: {date_from} → {date_to}")
 
-        # Pairs-String für Startnachricht: nur aktive Coins + ihre Configs
-        pairs_str = ', '.join(active_symbols) if active_symbols else 'alle Coins'
-        try:
-            pairs = []
-            for fname in sorted(os.listdir(CONFIGS_DIR)):
-                if not (fname.startswith('config_') and fname.endswith('.json')):
-                    continue
-                if active_symbols and not any(
-                    fname.upper().startswith(f'CONFIG_{c}') for c in active_symbols
-                ):
-                    continue
-                with open(os.path.join(CONFIGS_DIR, fname)) as f:
-                    cfg = json.load(f)
-                sym = cfg.get('market', {}).get('symbol', '')
-                tf  = cfg.get('market', {}).get('timeframe', '')
-                if sym and tf:
-                    pairs.append(f"{sym.split('/')[0]}/{tf}")
-            if pairs:
-                pairs_str = ', '.join(pairs)
-        except Exception:
-            pass
+        pairs_str = ', '.join(f"{sym.split('/')[0]}/{tf}" for sym, tf in active_pairs)
 
         if send_tg:
             _telegram_send(bot_token, chat_id,
@@ -283,9 +262,8 @@ def main():
             '--from',          date_from,
             '--to',            date_to,
             '--auto',
+            '--configs',       ' '.join(active_configs),
         ]
-        if active_symbols:
-            cmd += ['--symbols', ' '.join(active_symbols)]
 
         proc = subprocess.run(
             cmd, cwd=PROJECT_ROOT,
