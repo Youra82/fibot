@@ -285,33 +285,51 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
         print(f"  TIPP: Max Drawdown auf mindestens {int(min_dd) + 5}% erhoehen.")
         return
 
-    # ── Schritt 2: Besten Einzelspieler wählen ───────────────────────────────
+    # ── Schritt 2: Besten Einzelspieler wählen (validiert gegen Portfolio-Sim-DD) ──
     valid.sort(key=lambda x: x['end_cap'], reverse=True)
-    best_single = valid[0]
-
-    print(f"\n2/3: Beste Einzelstrategie (unter {cond}): {best_single['filename']}")
-    print(f"     Einzel-Backtest: {best_single['end_cap']:.2f} USDT, Max DD: {best_single['max_dd']:.2f}%")
-
-    # ── Schritt 3: Greedy mit echter Portfolio-Simulation ────────────────────
-    print(f"\n3/3: Suche beste Team-Kollegen (echte Portfolio-Simulation, gemeinsames Kapital)...")
-    print(f"     (Basis: Einzel-Simulation von {best_single['filename']}...)")
-
-    portfolio      = [best_single]
-    used_coins     = {best_single['coin']}
-    candidate_pool = [r for r in valid[1:]]
 
     # Aktuelle Portfolio-Performance per Simulation
     def _simulate(filenames: list) -> dict | None:
         data = {fn: strategies_data[fn] for fn in filenames if fn in strategies_data}
         return run_portfolio_simulation(capital, data, start_date, end_date)
 
-    best_sim = _simulate([best_single['filename']])
-    best_end_cap = best_sim['end_capital'] if best_sim else best_single['end_cap']
-    best_dd      = best_sim['max_drawdown_pct'] if best_sim else best_single['max_dd']
+    best_single  = None
+    best_sim     = None
+    best_end_cap = 0.0
+    best_dd      = 0.0
 
-    print(f"     Portfolio-Simulation Basis ({best_single['filename']}): "
-          f"{best_end_cap:.2f} USDT, Max DD: {best_dd:.2f}%")
-    print(f"     Verbesserungen werden relativ zu dieser Simulation bewertet.")
+    print(f"\n2/3: Suche Basis-Strategie (Portfolio-Sim-DD muss <= {target_max_dd:.2f}%)...")
+    for candidate in valid:
+        sim = _simulate([candidate['filename']])
+        sim_dd = sim['max_drawdown_pct'] if sim else candidate['max_dd']
+        dd_ok  = sim_dd <= target_max_dd
+        cap    = sim['end_capital'] if sim else candidate['end_cap']
+        col    = GREEN if dd_ok else RED
+        print(f"  {'OK' if dd_ok else '--'} {candidate['filename']:<44}  "
+              f"Sim: {cap:.2f} USDT  Sim-DD: {col}{sim_dd:.2f}%{NC}")
+        if dd_ok and (best_single is None or cap > best_end_cap):
+            best_single  = candidate
+            best_sim     = sim
+            best_end_cap = cap
+            best_dd      = sim_dd
+
+    if best_single is None:
+        print(f"\n{RED}Keine Einzelstrategie erfuellt {cond} auch in der Portfolio-Simulation.{NC}")
+        print(f"  TIPP: Max Drawdown erhoehen (Portfolio-Sim berechnet Mark-to-Market DD).")
+        return
+
+    print(f"\n     Beste Basis: {best_single['filename']}")
+    print(f"     Einzel-Backtest: {best_single['end_cap']:.2f} USDT, Max DD: {best_single['max_dd']:.2f}%")
+    print(f"     Portfolio-Simulation: {best_end_cap:.2f} USDT, Sim-DD: {best_dd:.2f}%")
+
+    # ── Schritt 3: Greedy mit echter Portfolio-Simulation ────────────────────
+    print(f"\n3/3: Suche beste Team-Kollegen (echte Portfolio-Simulation, gemeinsames Kapital)...")
+
+    portfolio      = [best_single]
+    used_coins     = {best_single['coin']}
+    candidate_pool = [r for r in valid if r['filename'] != best_single['filename']]
+
+    print(f"     Verbesserungen werden relativ zur Basis-Simulation bewertet.")
 
     while True:
         best_next    = None
