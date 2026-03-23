@@ -209,14 +209,32 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
         print(f"{YELLOW}Keine Configs gefunden. Erst run_pipeline.sh ausführen.{NC}")
         return
 
-    # Configs-Filter: exakte Dateiliste (vom Auto-Optimizer) hat Vorrang
+    # Configs-Filter: exakte Dateiliste hat Vorrang, sonst settings.json aktive Strategien
     if configs:
         cfg_files = [f for f in configs if f in cfg_files]
         if not cfg_files:
             print(f"{RED}Keine der angegebenen Configs gefunden.{NC}")
             return
         print(f"  Configs-Filter aktiv: {', '.join(cfg_files)}")
-    elif symbols:
+    elif not symbols:
+        # Automatisch aus settings.json filtern
+        try:
+            with open(SETTINGS_FILE) as _sf:
+                _settings = json.load(_sf)
+            _active = _settings.get('live_trading_settings', {}).get('active_strategies', [])
+            if _active:
+                _cfg_names = set()
+                for _s in _active:
+                    _sym = _s.get('symbol', '')
+                    _tf  = _s.get('timeframe', '')
+                    if _sym and _tf:
+                        _safe = f"{_sym.replace('/', '').replace(':', '')}_{_tf}"
+                        _cfg_names.add(f"config_{_safe}_fib.json")
+                cfg_files = [f for f in cfg_files if f in _cfg_names]
+                print(f"  Auto-Filter (settings.json): {', '.join(cfg_files)}")
+        except Exception:
+            pass
+    if symbols:
         allowed = {s.upper().split('/')[0] for s in symbols}
         cfg_files = [f for f in cfg_files
                      if any(f.upper().startswith(f'CONFIG_{coin}') for coin in allowed)]
