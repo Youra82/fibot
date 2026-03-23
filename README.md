@@ -664,6 +664,38 @@ tail -f logs/auto_optimizer.log
 
 ---
 
+## Sicherheitscheck (Tests)
+
+```bash
+chmod +x run_tests.sh
+./run_tests.sh
+```
+
+Führt alle Unit- und Live-Tests aus:
+
+| Test | Beschreibung |
+|---|---|
+| `test_settings_exists` | settings.json vorhanden |
+| `test_settings_active_strategies` | Strategien haben Symbol, Timeframe, Active-Flag |
+| `test_settings_optimization_settings` | num_trials, start_capital korrekt |
+| `test_active_configs_exist` | Config-Dateien für aktive Strategien vorhanden |
+| `test_active_configs_valid_json` | strategy, risk, market-Keys vorhanden |
+| `test_active_configs_have_backtest_meta` | `_backtest.pnl_pct` in jeder Config |
+| `test_active_configs_risk_params` | Leverage ≥ 1, risk_per_entry_pct 0–10% |
+| `test_backtester_runs_without_error` | Backtester läuft fehlerfrei durch |
+| `test_backtester_result_fields` | win_rate, max_drawdown_pct korrekt |
+| `test_auto_days_known_timeframes` | Lookback-Werte für bekannte Timeframes |
+| `test_secret_exists` | secret.json vorhanden |
+| `test_secret_has_fibot_key` | `fibot.apiKey` und `fibot.secretKey` vorhanden |
+| `test_live_pepe_order_on_bitget` | Platziert + storniert echte Limit-Order auf Bitget (PEPE, 50% unter Markt) |
+
+Der Live-Test (`test_live_pepe_order_on_bitget`) wird automatisch übersprungen wenn:
+- `secret.json` fehlt
+- Kein `fibot`-Key vorhanden
+- Kontostand < 5 USDT
+
+---
+
 ## Tägliche Verwaltung
 
 #### Logs ansehen

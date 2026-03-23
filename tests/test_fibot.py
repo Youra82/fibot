@@ -219,3 +219,123 @@ def test_secret_has_fibot_key():
     fibot = data['fibot']
     assert 'apiKey'     in fibot, "'apiKey' fehlt unter 'fibot'"
     assert 'secretKey'  in fibot, "'secretKey' fehlt unter 'fibot'"
+
+
+# ---------------------------------------------------------------------------
+# 6. Live Workflow Test — PEPE/USDT:USDT auf Bitget (wie dnabot)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope='module')
+def live_setup():
+    import time
+    print('\n--- Starte FiBot Live-Workflow-Test (PEPE) ---')
+
+    secret_path = os.path.join(PROJECT_ROOT, 'secret.json')
+    if not os.path.exists(secret_path):
+        pytest.skip('secret.json nicht gefunden — Live-Test uebersprungen.')
+
+    with open(secret_path) as f:
+        secrets = json.load(f)
+
+    if not secrets.get('fibot'):
+        pytest.skip("Kein 'fibot'-Key in secret.json — Live-Test uebersprungen.")
+
+    from fibot.utils.exchange import Exchange
+    try:
+        exchange = Exchange(secrets['fibot'])
+        if not exchange.markets:
+            pytest.fail('Exchange konnte nicht initialisiert werden.')
+    except Exception as e:
+        pytest.fail(f'Exchange-Initialisierung fehlgeschlagen: {e}')
+
+    symbol = 'PEPE/USDT:USDT'
+
+    print(f'-> Bereinige {symbol} vor dem Test...')
+    try:
+        exchange.cancel_all_orders_for_symbol(symbol)
+        time.sleep(2)
+        positions = exchange.fetch_open_positions(symbol)
+        if positions:
+            pos  = positions[0]
+            side = 'sell' if pos['side'] == 'long' else 'buy'
+            amt  = float(pos.get('contracts') or pos.get('contractSize', 0))
+            if amt > 0:
+                exchange.place_market_order(symbol, side, amt, reduce=True)
+                time.sleep(3)
+        print('-> Ausgangszustand sauber.')
+    except Exception as e:
+        pytest.fail(f'Fehler beim Bereinigen: {e}')
+
+    yield exchange, symbol
+
+    print('\n[Teardown] Raeume nach dem Test auf...')
+    try:
+        exchange.cancel_all_orders_for_symbol(symbol)
+        time.sleep(2)
+        positions = exchange.fetch_open_positions(symbol)
+        if positions:
+            pos  = positions[0]
+            side = 'sell' if pos['side'] == 'long' else 'buy'
+            amt  = float(pos.get('contracts') or pos.get('contractSize', 0))
+            if amt > 0:
+                exchange.place_market_order(symbol, side, amt, reduce=True)
+                time.sleep(3)
+        exchange.cancel_all_orders_for_symbol(symbol)
+        print('-> Teardown abgeschlossen.')
+    except Exception as e:
+        print(f'FEHLER beim Teardown: {e}')
+
+
+def test_live_pepe_order_on_bitget(live_setup):
+    import time
+    from fibot.utils.exchange import Exchange
+
+    exchange, symbol = live_setup
+
+    bal = exchange.fetch_balance_usdt()
+    print(f'\n--- Verfuegbares Guthaben: {bal:.4f} USDT ---')
+    if bal < 5.0:
+        pytest.skip(f'Zu wenig Guthaben ({bal:.2f} USDT < 5 USDT) fuer Live-Test.')
+
+    # Leverage & Margin setzen
+    print('-> Setze Margin-Modus: isolated | Leverage: 5x')
+    exchange.set_margin_mode(symbol, 'isolated')
+    time.sleep(0.5)
+    exchange.set_leverage(symbol, 5, 'isolated')
+    time.sleep(0.5)
+
+    # Aktuellen Preis holen
+    ticker = exchange.exchange.fetch_ticker(symbol)
+    price  = float(ticker['last'])
+    print(f'-> Aktueller PEPE-Preis: {price:.8f}')
+
+    # Limit-Order weit unter Markt → wird nie gefüllt, kann sicher storniert werden
+    limit_price = round(price * 0.50, 8)
+    amount      = exchange.exchange.amount_to_precision(symbol, 500_000)
+
+    print(f'\n[Schritt 1/3] Platziere LONG Limit-Order @ {limit_price:.8f} ({amount} PEPE)...')
+    order = exchange.place_limit_order(symbol, 'buy', float(amount), limit_price)
+    assert order and order.get('id'), 'FEHLER: Limit-Order wurde nicht platziert.'
+    order_id = order['id']
+    print(f'-> Order platziert. ID: {order_id}')
+    time.sleep(2)
+
+    print('\n[Schritt 2/3] Pruefe ob Order offen ist...')
+    open_orders = exchange.fetch_open_orders(symbol)
+    ids = [o['id'] for o in open_orders]
+    assert order_id in ids, f'FEHLER: Order {order_id} nicht in offenen Orders gefunden.'
+    print(f'-> Order gefunden ({len(open_orders)} offene Order(s)).')
+
+    print('\n[Schritt 3/3] Storniere Order...')
+    exchange.cancel_order(order_id, symbol)
+    time.sleep(2)
+
+    remaining = exchange.fetch_open_orders(symbol)
+    remaining_ids = [o['id'] for o in remaining]
+    assert order_id not in remaining_ids, 'FEHLER: Order wurde nicht storniert.'
+    print('-> Order erfolgreich storniert.')
+
+    positions = exchange.fetch_open_positions(symbol)
+    assert len(positions) == 0, 'FEHLER: Unerwartete offene Position nach dem Test.'
+
+    print('\n--- LIVE-TEST ERFOLGREICH (PEPE) ---')
