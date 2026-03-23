@@ -327,68 +327,6 @@ def main():
             log.error("Keine Configs nach Optimierung verfügbar.")
             return
 
-        # ── Schritt 2: Portfolio-Finder ───────────────────────────────────
-        cmd = [
-            PYTHON_EXE, SHOW_RESULTS,
-            '--mode',          '3',
-            '--capital',       str(capital),
-            '--target-max-dd', str(max_dd),
-            '--min-wr',        str(min_wr),
-            '--from',          date_from,
-            '--to',            date_to,
-            '--auto',
-            '--configs',       ' '.join(active_configs),
-        ]
-
-        proc = subprocess.run(
-            cmd, cwd=PROJECT_ROOT,
-            capture_output=True, text=True, timeout=3600,
-        )
-
-        # Log-Ausgabe (letzte 5000 Zeichen reichen)
-        output = proc.stdout[-5000:] if len(proc.stdout) > 5000 else proc.stdout
-        log.info(f"show_results.py Ausgabe:\n{output}")
-
-        if proc.returncode != 0:
-            log.error(f"show_results.py Fehler (rc={proc.returncode}):\n{proc.stderr[-1000:]}")
-            if send_tg:
-                _telegram_send(bot_token, chat_id,
-                    f"FiBot Auto-Optimierung FEHLER (rc={proc.returncode})\n"
-                    f"{proc.stderr[-300:]}")
-            return
-
-        # Ergebnis lesen
-        if not os.path.exists(OPT_RESULTS_FILE):
-            log.error("optimization_results.json nicht gefunden.")
-            return
-
-        with open(OPT_RESULTS_FILE) as f:
-            opt = json.load(f)
-        portfolio_files = opt.get('optimal_portfolio', [])
-        all_results     = opt.get('all_results', [])
-
-        if not portfolio_files:
-            log.warning("Kein optimales Portfolio in optimization_results.json.")
-            if send_tg:
-                _telegram_send(bot_token, chat_id,
-                    "FiBot Auto-Optimierung: Kein Portfolio gefunden.")
-            return
-
-        # portfolio_files enthält nur Configs die optimizer.py als besser bewertet hat
-        # (schlechtere wurden von optimizer.py bereits nicht überschrieben)
-        kept       = portfolio_files
-        not_better = []  # für Telegram-Nachricht: aus old_pnl ableiten
-        new_pnl    = {r['filename']: r.get('pnl_pct', 0.0) for r in all_results}
-        for fn in portfolio_files:
-            old_val = old_pnl.get(fn)
-            new_val = new_pnl.get(fn, 0.0)
-            if old_val is not None and new_val < old_val:
-                not_better.append((fn, old_val, new_val))
-
-        success = _update_settings(kept) if kept else False
-        if not kept:
-            log.warning("Kein Portfolio — settings.json bleibt unverändert.")
-
         elapsed = (datetime.now() - start_time).total_seconds()
 
         # Last-run Timestamp speichern
@@ -396,52 +334,39 @@ def main():
             f.write(datetime.now().isoformat())
 
         if send_tg:
-            # Dauer formatieren
             h = int(elapsed // 3600)
             m = int((elapsed % 3600) // 60)
             s = int(elapsed % 60)
             dur_str = f"{h}h {m}m {s}s" if h else f"{m}m {s}s"
-
-            in_port  = [r for r in all_results if r.get('in_portfolio') and r['filename'] in kept]
-            # "Fehlgeschlagen" = nicht im Portfolio ODER im Portfolio aber nicht besser
-            excluded_set = {fn for fn in portfolio_files if fn not in kept}
-            excluded_port = [(fn, old_pnl.get(fn, 0.0), new_pnl.get(fn, 0.0)) for fn in excluded_set]
-            excl_nonport  = [r for r in all_results if not r.get('in_portfolio')]
-            total = len(all_results)
-            gespeichert_n = len(kept)
+            total = len(active_pairs)
 
             lines = [f"✅ FiBot Auto-Optimizer abgeschlossen (Dauer: {dur_str})", ""]
 
-            if in_port:
-                lines.append(f"✔ Gespeichert ({gespeichert_n}/{total}):")
-                for r in in_port:
-                    sym  = r.get('symbol', '?')
-                    tf   = r.get('timeframe', '?')
-                    pnl  = r.get('pnl_pct', 0.0)
-                    fn   = r.get('filename', '')
-                    sign = '+' if pnl >= 0 else ''
-                    lines.append(f"• {sym.split('/')[0]}/{tf}: {sign}{pnl:.2f}% → {fn}")
-            else:
-                lines.append(f"✔ Gespeichert (0/{total}): — keine Verbesserung")
-
+            kept_lines   = []
             failed_lines = []
-            # Portfolio-Kandidaten die schlechter waren
-            for fn, old_v, new_v in not_better:
-                r = next((x for x in all_results if x['filename'] == fn), {})
-                sym = r.get('symbol', fn)
-                tf  = r.get('timeframe', '')
-                failed_lines.append(
-                    f"• {sym.split('/')[0]}/{tf}: existing_better_{old_v:.2f}pct"
-                )
-            # Nicht im Portfolio (DD/WR gefiltert)
-            for r in excl_nonport:
-                sym  = r.get('symbol', '?')
-                tf   = r.get('timeframe', '?')
-                pnl  = r.get('pnl_pct', 0.0)
-                dd   = r.get('max_dd',  0.0)
-                sign = '+' if pnl >= 0 else ''
-                failed_lines.append(f"• {sym.split('/')[0]}/{tf}: {sign}{pnl:.2f}% (DD: {dd:.1f}%)")
+            for sym, tf in active_pairs:
+                safe = f"{sym.replace('/', '').replace(':', '')}_{tf}"
+                fn   = f"config_{safe}_fib.json"
+                coin = sym.split('/')[0]
+                new_pnl_val = None
+                cfg_path = os.path.join(CONFIGS_DIR, fn)
+                if os.path.exists(cfg_path):
+                    try:
+                        with open(cfg_path) as cf:
+                            new_pnl_val = json.load(cf).get('_backtest', {}).get('pnl_pct')
+                    except Exception:
+                        pass
+                old_val = old_pnl.get(fn)
+                if f"{sym}/{tf}" in opt_failed or new_pnl_val is None:
+                    failed_lines.append(f"• {coin}/{tf}: Optimizer fehlgeschlagen")
+                elif old_val is not None and new_pnl_val < old_val:
+                    failed_lines.append(f"• {coin}/{tf}: existing_better_{old_val:.2f}pct")
+                else:
+                    sign = '+' if new_pnl_val >= 0 else ''
+                    kept_lines.append(f"• {coin}/{tf}: {sign}{new_pnl_val:.2f}% → {fn}")
 
+            lines.append(f"✔ Gespeichert ({len(kept_lines)}/{total}):")
+            lines.extend(kept_lines if kept_lines else ["  — keine Verbesserung"])
             if failed_lines:
                 lines.append("")
                 lines.append(f"❌ Fehlgeschlagen ({len(failed_lines)}/{total}):")
