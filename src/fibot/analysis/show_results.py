@@ -478,12 +478,14 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
 
     # ── Chart & Excel anbieten ────────────────────────────────────────────────
     if final_sim:
+        # Nur Portfolio-Strategien in Chart & Excel
+        port_single = [r for r in single_results if r['filename'] in portfolio_set]
         if auto:
             # Im Auto-Modus immer Chart + Excel + Telegram (kein Prompt)
             print()
             _generate_portfolio_chart(final_sim, portfolio, capital, start_date, end_date,
-                                      single_results)
-            _generate_trades_excel(final_sim, portfolio, capital, single_results)
+                                      port_single)
+            _generate_trades_excel(final_sim, portfolio, capital, port_single)
         else:
             print()
             ans = input("  Interaktive Charts & Excel fuer dieses Portfolio erstellen"
@@ -491,8 +493,8 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
             if ans in ('j', 'y', 'ja'):
                 print()
                 _generate_portfolio_chart(final_sim, portfolio, capital, start_date, end_date,
-                                          single_results)
-                _generate_trades_excel(final_sim, portfolio, capital, single_results)
+                                          port_single)
+                _generate_trades_excel(final_sim, portfolio, capital, port_single)
 
 
 # ---------------------------------------------------------------------------
