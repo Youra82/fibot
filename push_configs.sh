@@ -55,11 +55,14 @@ if [ $? -eq 0 ]; then
 else
     echo ""
     echo -e "${YELLOW}Remote hat neuere Commits — fuehre Rebase durch...${NC}"
+    git stash
     git pull origin main --rebase
     if [ $? -ne 0 ]; then
+        git stash pop 2>/dev/null
         echo -e "${RED}Rebase fehlgeschlagen. Bitte manuell loesen.${NC}"
         exit 1
     fi
+    git stash pop 2>/dev/null
     git push origin HEAD:main
     if [ $? -eq 0 ]; then
         echo ""
