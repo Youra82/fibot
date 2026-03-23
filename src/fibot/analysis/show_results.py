@@ -693,21 +693,10 @@ def _generate_trades_excel(final_sim: dict, portfolio: list, capital: float,
 
     portfolio_fnames = {r['filename'] for r in portfolio}
 
-    # Alle Trades aus single_results zusammenführen (alle Strategien)
-    all_trades = []  # (timestamp, fname, symbol, timeframe, trade_obj, in_portfolio)
-    if all_single_results:
-        for sr in all_single_results:
-            in_port = sr['filename'] in portfolio_fnames
-            for t in sr.get('trade_objs', []):
-                if t.result == 'open':
-                    continue
-                all_trades.append((t.timestamp, sr['filename'], sr['symbol'],
-                                   sr['timeframe'], t, in_port))
-        all_trades.sort(key=lambda x: x[0])
-    else:
-        # Fallback: nur Portfolio-Sim-Trades
-        for t in final_sim.get('trade_history', []):
-            all_trades.append((t['ts'], t['fname'], '', '', t, True))
+    # Immer Portfolio-Sim-Trades verwenden (korrekte geteilte Kapital-PnL)
+    all_trades = []
+    for t in final_sim.get('trade_history', []):
+        all_trades.append((t['ts'], t['fname'], '', '', t, True))
 
     if not all_trades:
         print(f"  {YELLOW}Keine Trades — Excel übersprungen.{NC}")
