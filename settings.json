@@ -2,28 +2,28 @@
   "live_trading_settings": {
     "active_strategies": [
       {
-        "symbol": "ETH/USDT:USDT",
+        "symbol": "AAVE/USDT:USDT",
         "timeframe": "1h",
         "active": true
       },
       {
-        "symbol": "XRP/USDT:USDT",
+        "symbol": "SOL/USDT:USDT",
+        "timeframe": "1h",
+        "active": true
+      },
+      {
+        "symbol": "ETH/USDT:USDT",
         "timeframe": "2h",
         "active": true
       },
       {
-        "symbol": "AAVE/USDT:USDT",
-        "timeframe": "6h",
-        "active": true
-      },
-      {
-        "symbol": "SOL/USDT:USDT",
-        "timeframe": "6h",
-        "active": true
-      },
-      {
         "symbol": "ADA/USDT:USDT",
-        "timeframe": "4h",
+        "timeframe": "6h",
+        "active": true
+      },
+      {
+        "symbol": "XRP/USDT:USDT",
+        "timeframe": "1h",
         "active": true
       },
       {
