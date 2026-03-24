@@ -203,8 +203,8 @@ Ein SHORT-Signal läuft analog: Swing-Richtung "up", RSI > 55, Struktur bärisch
 ### Phase 5 — Entry, SL und TP
 
 ```
-Entry:   Limit-Order leicht unterhalb (Long) / oberhalb (Short)
-         des aktuellen Preises (0.05% Delta → sauberer Fill)
+Entry:   Limit-Order exakt am Signal-Preis (Fibonacci-Niveau)
+         → konsistent mit dem Backtester (keine künstliche Delta-Verschiebung)
 
 SL:      max(ATR × 1.5, Fibonacci 78.6%)
          → der engere Wert wird genommen (SL so nah wie möglich)
@@ -399,20 +399,20 @@ nano secret.json
 
 ```json
 {
-  "fibot": [
-    {
-      "name": "Main Account",
-      "apiKey": "DEIN_API_KEY",
-      "secret": "DEIN_SECRET",
-      "password": "DEIN_PASSPHRASE"
-    }
-  ],
+  "fibot": {
+    "name": "Main Account",
+    "apiKey": "DEIN_API_KEY",
+    "secret": "DEIN_SECRET",
+    "password": "DEIN_PASSPHRASE"
+  },
   "telegram": {
     "bot_token": "DEIN_BOT_TOKEN",
     "chat_id": "DEINE_CHAT_ID"
   }
 }
 ```
+
+> Alternativ wird auch das Array-Format unterstützt: `"fibot": [{ ... }]`
 
 ---
 
@@ -686,13 +686,16 @@ Führt alle Unit- und Live-Tests aus:
 | `test_backtester_result_fields` | win_rate, max_drawdown_pct korrekt |
 | `test_auto_days_known_timeframes` | Lookback-Werte für bekannte Timeframes |
 | `test_secret_exists` | secret.json vorhanden |
-| `test_secret_has_fibot_key` | `fibot.apiKey` und `fibot.secretKey` vorhanden |
-| `test_live_pepe_order_on_bitget` | Platziert + storniert echte Limit-Order auf Bitget (PEPE, 50% unter Markt) |
+| `test_secret_has_fibot_key` | `fibot.apiKey` und `fibot.secret` vorhanden |
+| `test_live_pepe_order_on_bitget` | Echter Live-Workflow auf Bitget (PEPE): Limit Entry + SL/TP Trigger-Orders setzen, Sichtbarkeit prüfen, Telegram-Nachricht senden, alle Orders stornieren |
 
 Der Live-Test (`test_live_pepe_order_on_bitget`) wird automatisch übersprungen wenn:
 - `secret.json` fehlt
 - Kein `fibot`-Key vorhanden
 - Kontostand < 5 USDT
+
+Der Test öffnet **keine Position** — die Limit-Order liegt 2% unter Markt und wird nie gefüllt.
+Alle Orders werden am Ende des Tests sauber storniert.
 
 ---
 
@@ -827,4 +830,5 @@ optuna>=3.0.0    # Hyperparameter-Optimierung
 requests>=2.31.0 # Telegram-Benachrichtigungen
 plotly>=5.0.0    # Interaktive Charts
 openpyxl>=3.1.0  # Excel-Export (Trades-Tabelle)
+pytest>=7.0.0    # Test-Framework (run_tests.sh)
 ```
