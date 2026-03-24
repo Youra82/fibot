@@ -218,8 +218,10 @@ def test_secret_has_fibot_key():
         data = json.load(f)
     assert 'fibot' in data, "'fibot'-Key fehlt in secret.json"
     fibot = data['fibot']
-    assert 'apiKey'     in fibot, "'apiKey' fehlt unter 'fibot'"
-    assert 'secret'     in fibot, "'secret' fehlt unter 'fibot'"
+    if isinstance(fibot, list):
+        fibot = fibot[0]
+    assert 'apiKey'  in fibot, "'apiKey' fehlt unter 'fibot'"
+    assert 'secret'  in fibot, "'secret' fehlt unter 'fibot'"
 
 
 # ---------------------------------------------------------------------------
@@ -241,9 +243,13 @@ def live_setup():
     if not secrets.get('fibot'):
         pytest.skip("Kein 'fibot'-Key in secret.json — Live-Test uebersprungen.")
 
+    fibot_cfg = secrets['fibot']
+    if isinstance(fibot_cfg, list):
+        fibot_cfg = fibot_cfg[0]
+
     from fibot.utils.exchange import Exchange
     try:
-        exchange = Exchange(secrets['fibot'])
+        exchange = Exchange(fibot_cfg)
         if not exchange.markets:
             pytest.fail('Exchange konnte nicht initialisiert werden.')
     except Exception as e:
