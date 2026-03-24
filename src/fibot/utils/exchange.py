@@ -416,8 +416,8 @@ class Exchange:
     def place_market_order(self, symbol: str, side: str, amount: float, reduce: bool = False, params={}):
         if not self.markets: return None
         try:
-            order_params = {'reduceOnly': reduce, **params} 
-            if 'productType' not in order_params: # Sicherstellen, dass productType gesetzt ist
+            order_params = {'reduceOnly': reduce, 'hedged': True, 'marginMode': 'isolated', **params}
+            if 'productType' not in order_params:
                 order_params['productType'] = 'USDT-FUTURES'
             amount_str = self.amount_to_precision(symbol, amount)
             logger.info(f"Platziere Market Order: {side.upper()} {amount_str} {symbol} (Params: {order_params})")
@@ -432,7 +432,7 @@ class Exchange:
     def place_limit_order(self, symbol: str, side: str, amount: float, price: float, reduce: bool = False, params={}):
         if not self.markets: return None
         try:
-            order_params = {'reduceOnly': reduce, **params}
+            order_params = {'reduceOnly': reduce, 'hedged': True, 'marginMode': 'isolated', **params}
             if 'productType' not in order_params:
                 order_params['productType'] = 'USDT-FUTURES'
             amount_str = self.amount_to_precision(symbol, amount)
@@ -461,7 +461,9 @@ class Exchange:
             order_params = {
                 'triggerPrice': trigger_price_str,
                 'reduceOnly': reduce,
-                **params # Fügt zusätzliche Params hinzu, z.B. productType falls nötig
+                'hedged': True,
+                'marginMode': 'isolated',
+                **params
             }
             
             # Stelle sicher, dass productType für Bitget vorhanden ist
