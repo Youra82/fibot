@@ -87,6 +87,8 @@ def main():
             secrets = json.load(f)
 
         accounts      = secrets.get('fibot', [])
+        if isinstance(accounts, dict):
+            accounts = [accounts]
         telegram_cfg  = secrets.get('telegram', {})
 
         if not accounts:

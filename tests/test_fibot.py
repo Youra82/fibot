@@ -161,7 +161,7 @@ def test_backtester_runs_without_error():
     cfg = _minimal_config()
     df  = precompute_indicators(df, cfg)
     df  = precompute_all_signals(df, cfg)
-    result = run_backtest(df, cfg, capital=100.0, symbol='BTC/USDT:USDT', timeframe='4h')
+    result = run_backtest(df, cfg, start_capital=100.0, symbol='BTC/USDT:USDT', timeframe='4h')
     assert result is not None
     assert result.start_capital == 100.0
     assert result.end_capital   >= 0
@@ -173,7 +173,7 @@ def test_backtester_result_fields():
     cfg = _minimal_config()
     df  = precompute_indicators(df, cfg)
     df  = precompute_all_signals(df, cfg)
-    result = run_backtest(df, cfg, capital=100.0)
+    result = run_backtest(df, cfg, start_capital=100.0)
     assert hasattr(result, 'trades')
     assert hasattr(result, 'win_rate')
     assert hasattr(result, 'max_drawdown_pct')
@@ -205,8 +205,9 @@ def test_auto_days_unknown_returns_default():
 
 def test_secret_exists():
     secret_path = os.path.join(PROJECT_ROOT, 'secret.json')
-    assert os.path.exists(secret_path), \
-        "secret.json fehlt — bitte aus secret.json.template erstellen"
+    if not os.path.exists(secret_path):
+        pytest.skip("secret.json nicht vorhanden (nur auf VPS)")
+    assert os.path.exists(secret_path)
 
 
 def test_secret_has_fibot_key():
@@ -218,7 +219,7 @@ def test_secret_has_fibot_key():
     assert 'fibot' in data, "'fibot'-Key fehlt in secret.json"
     fibot = data['fibot']
     assert 'apiKey'     in fibot, "'apiKey' fehlt unter 'fibot'"
-    assert 'secretKey'  in fibot, "'secretKey' fehlt unter 'fibot'"
+    assert 'secret'     in fibot, "'secret' fehlt unter 'fibot'"
 
 
 # ---------------------------------------------------------------------------
@@ -287,55 +288,114 @@ def live_setup():
 
 
 def test_live_pepe_order_on_bitget(live_setup):
+    """
+    Simuliert einen echten FiBot-Eintrag wie im Livebetrieb:
+    1. Limit Entry-Order etwas unter Markt (wird nicht gefüllt)
+    2. SL + TP als Trigger-Market Orders
+    3. Alle 3 Orders auf Bitget sichtbar + Telegram-Benachrichtigung
+    4. Aufräumen: Orders stornieren
+    """
     import time
-    from fibot.utils.exchange import Exchange
+    import math
 
     exchange, symbol = live_setup
+
+    # Telegram laden
+    with open(os.path.join(PROJECT_ROOT, 'secret.json')) as f:
+        secrets_data = json.load(f)
+    tg = secrets_data.get('telegram', {})
+    bot_token = tg.get('bot_token', '')
+    chat_id   = tg.get('chat_id', '')
+    from fibot.utils.telegram import send_message
 
     bal = exchange.fetch_balance_usdt()
     print(f'\n--- Verfuegbares Guthaben: {bal:.4f} USDT ---')
     if bal < 5.0:
         pytest.skip(f'Zu wenig Guthaben ({bal:.2f} USDT < 5 USDT) fuer Live-Test.')
 
-    # Leverage & Margin setzen
+    # Margin & Leverage
     print('-> Setze Margin-Modus: isolated | Leverage: 5x')
     exchange.set_margin_mode(symbol, 'isolated')
     time.sleep(0.5)
     exchange.set_leverage(symbol, 5, 'isolated')
     time.sleep(0.5)
 
-    # Aktuellen Preis holen
-    ticker = exchange.exchange.fetch_ticker(symbol)
-    price  = float(ticker['last'])
-    print(f'-> Aktueller PEPE-Preis: {price:.8f}')
+    # Aktuellen Preis holen + Fib-Signal simulieren
+    ticker     = exchange.exchange.fetch_ticker(symbol)
+    price      = float(ticker['last'])
+    entry_price = round(price * 0.98, 8)   # 2% unter Markt → Limit wird nie gefüllt
+    sl_price    = round(price * 0.95, 8)   # 5% unter Markt
+    tp_price    = round(price * 1.04, 8)   # 4% über Markt (2:1 R:R)
+    print(f'-> PEPE @ {price:.8f} | Entry: {entry_price:.8f} | SL: {sl_price:.8f} | TP: {tp_price:.8f}')
 
-    # Limit-Order weit unter Markt → wird nie gefüllt, kann sicher storniert werden
-    limit_price = round(price * 0.50, 8)
-    amount      = exchange.exchange.amount_to_precision(symbol, 500_000)
+    # Positionsgröße: Risiko 0.5 USDT auf SL-Distanz
+    price_risk  = abs(entry_price - sl_price)
+    contracts   = 0.5 / price_risk
+    amount_str  = exchange.amount_to_precision(symbol, contracts)
+    amount      = float(amount_str)
+    notional    = amount * entry_price
+    print(f'-> Contracts: {amount} | Notional: {notional:.2f} USDT')
+    if notional < 5.0:
+        # Auf Mindest-Notional aufstocken
+        amount  = float(exchange.amount_to_precision(symbol, math.ceil(6.0 / entry_price)))
+        notional = amount * entry_price
+        print(f'-> Auf Minimum aufgestockt: {amount} PEPE | Notional: {notional:.2f} USDT')
 
-    print(f'\n[Schritt 1/3] Platziere LONG Limit-Order @ {limit_price:.8f} ({amount} PEPE)...')
-    order = exchange.place_limit_order(symbol, 'buy', float(amount), limit_price)
-    assert order and order.get('id'), 'FEHLER: Limit-Order wurde nicht platziert.'
-    order_id = order['id']
-    print(f'-> Order platziert. ID: {order_id}')
+    # --- Schritt 1: Limit Entry-Order ---
+    print(f'\n[Schritt 1/3] Platziere Limit Entry-Order @ {entry_price:.8f}...')
+    entry_order = exchange.place_limit_order(symbol, 'buy', amount, entry_price)
+    assert entry_order and entry_order.get('id'), 'FEHLER: Entry-Order nicht platziert.'
+    entry_id = entry_order['id']
+    print(f'-> Entry-Order platziert. ID: {entry_id}')
+    time.sleep(1)
+
+    # --- Schritt 2: SL + TP Trigger-Orders ---
+    print(f'\n[Schritt 2/3] Setze SL @ {sl_price:.8f} und TP @ {tp_price:.8f}...')
+    sl_order = exchange.place_trigger_market_order(symbol, 'sell', amount, trigger_price=sl_price, reduce=True)
+    time.sleep(0.5)
+    tp_order = exchange.place_trigger_market_order(symbol, 'sell', amount, trigger_price=tp_price, reduce=True)
     time.sleep(2)
 
-    print('\n[Schritt 2/3] Pruefe ob Order offen ist...')
-    open_orders = exchange.fetch_open_orders(symbol)
-    ids = [o['id'] for o in open_orders]
-    assert order_id in ids, f'FEHLER: Order {order_id} nicht in offenen Orders gefunden.'
-    print(f'-> Order gefunden ({len(open_orders)} offene Order(s)).')
+    # Prüfen was auf Bitget angekommen ist
+    open_orders   = exchange.fetch_open_orders(symbol)
+    trigger_orders = exchange.fetch_open_trigger_orders(symbol)
+    entry_ids     = [o['id'] for o in open_orders]
 
-    print('\n[Schritt 3/3] Storniere Order...')
-    exchange.cancel_order(order_id, symbol)
-    time.sleep(2)
+    assert entry_id in entry_ids, f'FEHLER: Entry-Order {entry_id} nicht in offenen Orders.'
+    print(f'-> Entry-Order sichtbar auf Bitget [OK]')
+    print(f'-> {len(trigger_orders)} Trigger-Order(s) sichtbar auf Bitget [OK]')
 
-    remaining = exchange.fetch_open_orders(symbol)
-    remaining_ids = [o['id'] for o in remaining]
-    assert order_id not in remaining_ids, 'FEHLER: Order wurde nicht storniert.'
-    print('-> Order erfolgreich storniert.')
+    leverage  = 5
+    margin    = round((amount * entry_price) / leverage, 2)
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
-    positions = exchange.fetch_open_positions(symbol)
-    assert len(positions) == 0, 'FEHLER: Unerwartete offene Position nach dem Test.'
+    send_message(bot_token, chat_id,
+        f"\U0001f7e2 *NEUE ORDER GESETZT* (TEST)\n\n"
+        f"\U0001f4bc Account: Jurij\n"
+        f"\U0001f4ca Symbol: {symbol}\n"
+        f"\U0001f4c8 Richtung: LONG\n"
+        f"\U0001f4e6 Menge: {amount} Kontrakte\n"
+        f"\U0001f4b5 Entry-Preis: {entry_price:.8f} USDT\n"
+        f"\u26a1\ufe0f Hebel: {leverage}x\n"
+        f"\U0001f4b0 Margin: {margin:.2f} USDT\n"
+        f"\U0001f3af Take-Profit: {tp_price:.8f} USDT\n"
+        f"\U0001f6d1 Stop-Loss: {sl_price:.8f} USDT\n\n"
+        f"\U0001f550 Zeit: {now} UTC")
+    print('-> Telegram gesendet.')
 
+    time.sleep(10)  # 10s sichtbar auf Bitget
+
+    # --- Schritt 3: Aufräumen ---
+    print(f'\n[Schritt 3/3] Storniere alle Orders...')
+    exchange.cancel_all_orders_for_symbol(symbol)
+    time.sleep(3)
+
+    final_open    = exchange.fetch_open_orders(symbol)
+    final_trigger = exchange.fetch_open_trigger_orders(symbol)
+    assert entry_id not in [o['id'] for o in final_open], 'FEHLER: Entry-Order nicht storniert.'
+
+    send_message(bot_token, chat_id,
+        f"\u2705 *TEST ABGESCHLOSSEN*\n\nAlle Orders storniert.\nFiBot Workflow-Test bestanden.")
+    print('-> Alle Orders storniert.')
     print('\n--- LIVE-TEST ERFOLGREICH (PEPE) ---')

@@ -185,20 +185,13 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     contracts_str = exchange.amount_to_precision(symbol, contracts)
     contracts = float(contracts_str)
 
-    # --- Place entry (Trigger-Limit near current price for clean fill) ---
+    # --- Place entry (Limit at signal price, consistent with backtester) ---
     entry_side = 'buy' if signal.direction == 'long' else 'sell'
-    delta_pct = 0.05 / 100  # 0.05% entry delta (limit slightly below/above for fill)
-    if signal.direction == 'long':
-        trigger_price = signal.entry_price * (1 - delta_pct)
-        limit_price   = signal.entry_price * (1 - delta_pct * 2)
-    else:
-        trigger_price = signal.entry_price * (1 + delta_pct)
-        limit_price   = signal.entry_price * (1 + delta_pct * 2)
 
-    logger.info(f"Platziere Entry: {entry_side.upper()} {contracts} @ ~{signal.entry_price:.4f}")
+    logger.info(f"Platziere Entry: {entry_side.upper()} {contracts} @ {signal.entry_price:.4f}")
     try:
         entry_order = exchange.place_limit_order(
-            symbol, entry_side, contracts, limit_price)
+            symbol, entry_side, contracts, signal.entry_price)
     except Exception as e:
         logger.error(f"Entry-Order fehlgeschlagen: {e}")
         send_message(bot_token, chat_id, f"FiBot FEHLER ({symbol}): Entry fehlgeschlagen: {e}")
