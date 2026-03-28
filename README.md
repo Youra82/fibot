@@ -819,6 +819,62 @@ Der Auto-Optimizer (`lookback_days: "auto"`) nimmt den **maximalen** Wert
 
 ---
 
+## Coin & Timeframe Empfehlungen
+
+FiBot ist eine **Fibonacci-Retracement-Strategie** — er findet mittels ZigZag-Algorithmus dominante Swing-Hochs/-Tiefs, legt ein Fibonacci-Gitter und tradet den Rücklauf in die Golden Zone (38.2%–61.8%). Benötigt: klare Swing-Strukturen, ausreichend Swing-Historie für den ZigZag-Algorithmus und Coins mit nachweisbaren Fibonacci-Reaktionen.
+
+### Effektive Zeitspannen je Timeframe
+
+| TF | ZigZag(20) — Swings | RSI(14) | Vol-MA(20) | EMA20/50 Bias | Geeignet |
+|---|---|---|---|---|---|
+| 15m | 5h | 3.5h | 5h | 5h / 12.5h | ❌ |
+| 30m | 10h | 7h | 10h | 10h / 25h | ⚠️ |
+| **1h** | **20h** | **14h** | **20h** | **20h / 50h** | **✅✅** |
+| **2h** | **40h** | **28h** | **40h** | **40h / 100h** | **✅✅** |
+| **4h** | **80h** | **56h** | **80h** | **80h / 200h** | **✅✅** |
+| 6h | 120h | 84h | 120h | 120h / 300h | ✅ |
+| 1d | 20d | 14d | 20d | 20d / 50d | ✅ |
+
+Der ZigZag-Algorithmus braucht mindestens 20 Kerzen für valide Swing-Erkennung. Auf 15m entstehen in 5h viele Fake-Swings. Ab 1h (20h Spanne) sind die ZigZag-Swings strukturell relevant. Auf 4h umspannt ein Swing-Paar typisch 2-5 Tage — exakt das klassische Fibonacci-Swing-Trading-Setup.
+
+### Coin-Eignung
+
+| Coin | Swing-Struktur | Fibonacci-Reaktion | ZigZag-Qualität | Bewertung |
+|---|---|---|---|---|
+| **BTC** | Exzellent — institutionelle Swings | Starke Reaktionen an 38.2-61.8% | Klarste ZigZag-Swings | ✅✅ Beste Wahl |
+| **ETH** | Exzellent — klare Swing-Hochs/-Tiefs | Sehr gute Fibonacci-Reaktionen | Klare Swings | ✅✅ Sehr gut |
+| **SOL** | Sehr gut — explosiver, aber klar strukturiert | Gute Fibonacci-Zonen | Gut | ✅ Gut |
+| **BNB** | Gut — stabile Swing-Struktur | Solide Fibonacci-Reaktionen | Gut | ✅ Gut |
+| **AVAX** | Gut — klare Impuls-Korrektur-Muster | Gute Fibonacci-Levels | Gut | ✅ Gut |
+| **XRP** | Gut — lange Seitwärtsphasen mit klaren Swings | Solide Reaktionen | Gut | ✅ Gut |
+| **LINK** | Gut — klare Impulsbewegungen | Gute Fibonacci-Zonen in Trends | Gut | ✅ Gut |
+| **LTC** | Mittel — BTC-korreliert, kleinere Swings | Moderate Fibonacci-Reaktionen | Mittel | ⚠️ Mittel |
+| **ARB** | Mittel — ETH-korreliert, junge Datenbasis | Solide | Mittel | ⚠️ Mittel |
+| **ADA** | Mittel — sehr flache Korrekturen | Fibonacci-Reaktionen unscharf | Schwache Swings | ⚠️ Schwach |
+| **DOT** | Schwach — lange unstrukturierte Phasen | Fibonacci-Levels wenig respektiert | Viele Fake-Swings | ⚠️ Schwach |
+| **DOGE** | Schlecht — sentiment-getrieben | Fibonacci irrelevant | ZigZag unbrauchbar | ❌ Schlecht |
+| **SHIB/PEPE** | Nicht vorhanden | Fibonacci nicht anwendbar | Nur Pumps, keine Swings | ❌❌ Nicht geeignet |
+
+### Empfohlene Kombinationen (Ranking)
+
+| Rang | Kombination | Begründung |
+|---|---|---|
+| 🥇 1 | **BTC 4h** | Klarste institutionelle Fibonacci-Swings, Golden Zone sehr zuverlässig |
+| 🥇 1 | **ETH 4h** | Ähnlich BTC, exzellente Fibonacci-Reaktionen |
+| 🥈 2 | **BTC 1h / 2h** | Mehr Trades, ZigZag noch strukturell relevant |
+| 🥈 2 | **SOL 4h** | Explosive Fibonacci-Bounces in Bullphasen |
+| 🥉 3 | **BNB 4h** | Stabile, vorhersehbare Fibonacci-Struktur |
+| 4 | **AVAX 4h** | Gute Impuls-Korrektur-Muster |
+| 4 | **LINK 4h** | Klare Fibonacci-Zonen bei Trendbewegungen |
+| 4 | **XRP 4h** | Lange Seitwärtsphasen mit klaren Fibonacci-Levels |
+| ❌ | **15m / 30m** | Zu viele Fake-Swings, ZigZag instabil |
+| ❌ | **DOGE / SHIB** | Keine Fibonacci-Struktur erkennbar |
+
+> **Hinweis:** Der SL liegt bei 78.6% Fibonacci oder ATR×1.5 — welcher enger ist. BTC und ETH auf 4h liefern die zuverlässigsten Fibonacci-Reaktionszonen mit ausreichend SL-Abstand.
+
+
+---
+
 ## Abhängigkeiten
 
 ```
