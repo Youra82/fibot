@@ -68,6 +68,7 @@ Der Bot erkennt genau diese Strukturen und handelt sie automatisch — auf Bitge
 fibot/
 ├── master_runner.py                   # Cronjob-Orchestrator für Live-Trading
 ├── auto_optimizer_scheduler.py        # Auto-Optimierung im Hintergrund (Scheduler)
+├── show_leverage.py                   # Zeigt Hebel, SL, Risiko aller aktiven Strategien
 ├── show_results.sh                    # Interaktives Analyse-Menü (4 Modi)
 ├── run_pipeline.sh                    # Optuna-Optimierung für neue Configs
 ├── push_configs.sh                    # Optimierte Configs ins Repo pushen
@@ -661,6 +662,59 @@ tail -f logs/auto_optimizer.log
 | `artifacts/charts/fibot_portfolio_equity.html` | Interaktiver Portfolio-Chart |
 | `artifacts/charts/fibot_trades.xlsx` | Excel-Tabelle aller Trades |
 | `logs/auto_optimizer.log` | Vollständiges Protokoll |
+
+---
+
+## Risikoparameter anzeigen
+
+```bash
+python3 show_leverage.py
+```
+
+Zeigt für alle aktiven Strategien aus `settings.json`:
+
+```
+  ====================================================
+  BTC/4h
+  ====================================================
+  Hebel          : 2x
+  Risiko/Trade   : 0.50%
+  Margin         : isolated
+  ---
+  Fib Entry Zone : 0.382 – 0.618
+  SL             : Fib 0.786  ATR × 0.50
+  TSL Aktivierung: —  (kein Trailing Stop)
+  TSL Callback   : —  (kein Trailing Stop)
+  Min R:R        : 1.40
+  ---
+  PnL (Backtest) : 89.3%
+  Win-Rate       : 11.5%
+  Trades         : 243
+  Kapital        : 25 USDT
+```
+
+---
+
+## Excel-Trades (`fibot_trades.xlsx`)
+
+Die Tabelle wird von `show_results.sh` → Modus 4 erzeugt und enthält folgende Spalten:
+
+| Spalte | Inhalt |
+|---|---|
+| Nr | Laufende Nummer |
+| Datum | Schlusskurs-Zeitstempel |
+| Strategie | Symbol/Timeframe-Kürzel |
+| Richtung | LONG / SHORT |
+| Hebel | Hebel aus Config (z.B. 2x) |
+| Einsatz (USDT) | Tatsächlich eingesetztes Notional pro Trade |
+| SL-Bereich | Fib-Level + ATR-Multiplikator + aktuelle SL-Distanz in % |
+| TSL Akt. | — (fibot hat kein Trailing Stop) |
+| TSL Callback | — (fibot hat kein Trailing Stop) |
+| Entry | Eintrittspreis |
+| Exit | Austrttspreis |
+| Ergebnis | TP erreicht / SL erreicht |
+| PnL (USDT) | Gewinn/Verlust in USDT |
+| Kapital | Kontostand nach dem Trade |
 
 ---
 
