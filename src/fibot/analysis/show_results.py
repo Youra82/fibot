@@ -693,6 +693,18 @@ def _generate_trades_excel(final_sim: dict, portfolio: list, capital: float,
 
     portfolio_fnames = {r['filename'] for r in portfolio}
 
+    # Config-Cache: fname -> risk-Parameter
+    _cfg_cache = {}
+    def _get_cfg(fname):
+        if fname not in _cfg_cache:
+            cfg_path = os.path.join(CONFIGS_DIR, fname)
+            try:
+                with open(cfg_path) as cf:
+                    _cfg_cache[fname] = json.load(cf)
+            except Exception:
+                _cfg_cache[fname] = {}
+        return _cfg_cache[fname]
+
     # Immer Portfolio-Sim-Trades verwenden (korrekte geteilte Kapital-PnL)
     all_trades = []
     for t in final_sim.get('trade_history', []):
@@ -711,25 +723,64 @@ def _generate_trades_excel(final_sim: dict, portfolio: list, capital: float,
             entr = round(float(t['entry']), 6)
             ex   = round(float(t['exit']),  6)
             ergebnis = 'TP erreicht' if pnl > 0 else 'SL erreicht'
+            lev      = t.get('leverage', '—')
+            notional = t.get('notional')
+            sl_dist  = t.get('sl_dist_pct')
         else:
             pnl  = float(t.pnl_usdt)
             dir_ = t.direction.upper()
             entr = round(float(t.entry),       6)
             ex   = round(float(t.exit_price),  6)
             ergebnis = 'TP erreicht' if t.result == 'win' else 'SL erreicht'
+            lev      = '—'
+            notional = None
+            sl_dist  = None
         equity += pnl
+
+        # Risk-Felder aus Config nachladen
+        cfg  = _get_cfg(fname)
+        risk = cfg.get('risk', {})
+        strat_cfg = cfg.get('strategy', {})
+        if lev == '—':
+            lev = risk.get('leverage', '—')
+        risk_pct    = risk.get('risk_per_entry_pct', '—')
+        fib_sl      = strat_cfg.get('fib_sl_level')
+        atr_sl_mult = strat_cfg.get('atr_sl_multiplier')
+
+        # Einsatz (USDT): notional aus Trade wenn vorhanden, sonst aus risk_pct × equity-vorher
+        if notional is not None:
+            einsatz_str = f"{notional:.2f}"
+        elif isinstance(risk_pct, (int, float)):
+            einsatz_str = f"~{(equity - pnl) * risk_pct / 100:.2f}"
+        else:
+            einsatz_str = '—'
+
+        # SL-Bereich: Fib-Level + ATR-Mult aus Config
+        sl_parts = []
+        if isinstance(fib_sl, (int, float)):
+            sl_parts.append(f"Fib {fib_sl:.3f}")
+        if isinstance(atr_sl_mult, (int, float)):
+            sl_parts.append(f"ATR×{atr_sl_mult:.2f}")
+        if sl_dist is not None:
+            sl_parts.append(f"({sl_dist:.2f}%)")
+        sl_str = ' '.join(sl_parts) if sl_parts else '—'
+
         fname_short = fname.replace('config_', '').replace('_fib.json', '')
         rows.append({
-            'Nr':            i + 1,
-            'Datum':         str(ts)[:16].replace('T', ' '),
-            'Strategie':     fname_short,
-            'Portfolio':     '✔' if in_port else '—',
-            'Richtung':      dir_,
-            'Entry':         entr,
-            'Exit':          ex,
-            'Ergebnis':      ergebnis,
-            'PnL (USDT)':    round(pnl,    4),
-            'Kapital':       round(equity, 4),
+            'Nr':              i + 1,
+            'Datum':           str(ts)[:16].replace('T', ' '),
+            'Strategie':       fname_short,
+            'Richtung':        dir_,
+            'Hebel':           f"{lev}x" if isinstance(lev, (int, float)) else str(lev),
+            'Einsatz (USDT)':  einsatz_str,
+            'SL-Bereich':      sl_str,
+            'TSL Akt.':        '—',
+            'TSL Callback':    '—',
+            'Entry':           entr,
+            'Exit':            ex,
+            'Ergebnis':        ergebnis,
+            'PnL (USDT)':      round(pnl,    4),
+            'Kapital':         round(equity, 4),
         })
 
     wb = openpyxl.Workbook()
@@ -745,7 +796,9 @@ def _generate_trades_excel(final_sim: dict, portfolio: list, capital: float,
         top=Side(style='thin', color='CCCCCC'),  bottom=Side(style='thin', color='CCCCCC'),
     )
     col_widths = {
-        'Nr': 5, 'Datum': 18, 'Strategie': 28, 'Portfolio': 10, 'Richtung': 10,
+        'Nr': 5, 'Datum': 18, 'Strategie': 26, 'Richtung': 10,
+        'Hebel': 8, 'Einsatz (USDT)': 16, 'SL-Bereich': 22,
+        'TSL Akt.': 12, 'TSL Callback': 14,
         'Entry': 14, 'Exit': 14, 'Ergebnis': 14, 'PnL (USDT)': 14, 'Kapital': 16,
     }
 
@@ -768,7 +821,7 @@ def _generate_trades_excel(final_sim: dict, portfolio: list, capital: float,
             cell.border    = thin_border
             cell.alignment = Alignment(horizontal='center', vertical='center')
             if key in ('Entry', 'Exit', 'PnL (USDT)', 'Kapital'):
-                cell.number_format = '#,##0.0000'
+                cell.number_format = '#,##0.000000'
         ws.row_dimensions[r_idx].height = 18
 
     # Zusammenfassung

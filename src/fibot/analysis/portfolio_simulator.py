@@ -121,13 +121,17 @@ def run_portfolio_simulation(start_capital: float,
                 net_pnl = raw_pnl - fees
                 equity += net_pnl
 
+                sl_dist_pct = abs(pos['entry'] - pos['sl']) / pos['entry'] * 100 if pos['entry'] else 0
                 trade_history.append({
-                    'fname':     fname,
-                    'direction': pos['direction'],
-                    'entry':     pos['entry'],
-                    'exit':      exit_price,
-                    'pnl':       net_pnl,
-                    'ts':        ts,
+                    'fname':      fname,
+                    'direction':  pos['direction'],
+                    'entry':      pos['entry'],
+                    'exit':       exit_price,
+                    'pnl':        net_pnl,
+                    'ts':         ts,
+                    'notional':   pos['notional'],
+                    'leverage':   pos.get('leverage', 1),
+                    'sl_dist_pct': sl_dist_pct,
                 })
                 del open_positions[fname]
 
