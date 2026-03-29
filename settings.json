@@ -12,13 +12,8 @@
         "active": true
       },
       {
-        "symbol": "ETH/USDT:USDT",
-        "timeframe": "2h",
-        "active": true
-      },
-      {
-        "symbol": "ADA/USDT:USDT",
-        "timeframe": "6h",
+        "symbol": "BNB/USDT:USDT",
+        "timeframe": "4h",
         "active": true
       },
       {
@@ -27,8 +22,8 @@
         "active": true
       },
       {
-        "symbol": "BTC/USDT:USDT",
-        "timeframe": "1d",
+        "symbol": "ETH/USDT:USDT",
+        "timeframe": "6h",
         "active": true
       }
     ]
