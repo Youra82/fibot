@@ -239,15 +239,19 @@ def run_backtest(df: pd.DataFrame, config: dict,
         if price_risk <= 0:
             continue
 
-        # Notional check
+        # Position sizing (wie live: auf Exchange-Minimum anheben wenn nötig)
         risk_amount = capital * risk_pct / 100
         contracts   = risk_amount / price_risk
+        if min_contracts > 0 and contracts < min_contracts:
+            contracts = min_contracts
         notional    = contracts * entry
         if notional < MIN_NOTIONAL_USDT:
             logger.debug(f"[{ts}] Notional zu klein: {notional:.2f} USDT")
             continue
-        if min_contracts > 0 and contracts < min_contracts:
-            logger.debug(f"[{ts}] Contracts {contracts:.6f} < Exchange-Minimum {min_contracts}")
+        # Margin-Check: isolierte Margin darf Kapital nicht übersteigen
+        margin = notional / leverage
+        if margin > capital:
+            logger.debug(f"[{ts}] Margin {margin:.2f} > Kapital {capital:.2f}")
             continue
 
         direction_str = 'long' if sig_dir_arr[i] == 1 else 'short'

@@ -79,12 +79,14 @@ def update_performance(path: str, result: str, logger):
 # ---------------------------------------------------------------------------
 
 def calc_position_size(balance: float, risk_pct: float, entry: float,
-                        sl: float, leverage: int, logger) -> float:
+                        sl: float, leverage: int, logger,
+                        min_contracts: float = 0.0) -> float:
     """
     Risikobased Sizing:
       risk_amount = balance * risk_pct/100
       contracts   = risk_amount / |entry - sl|
-    Capped by leverage and minimum notional.
+    Wird auf Exchange-Minimum angehoben wenn nötig (wie vbot).
+    Capped by leverage, margin check, minimum notional.
     """
     risk_amount = balance * risk_pct / 100
     price_risk  = abs(entry - sl)
@@ -92,14 +94,28 @@ def calc_position_size(balance: float, risk_pct: float, entry: float,
         logger.error("SL = Entry, Size-Berechnung unmöglich.")
         return 0.0
     contracts = risk_amount / price_risk
+
+    # Auf Exchange-Minimum anheben wenn nötig (statt Trade zu skippen)
+    if min_contracts > 0 and contracts < min_contracts:
+        logger.info(f"Contracts {contracts:.6f} < Exchange-Minimum {min_contracts}, hebe auf Minimum an.")
+        contracts = min_contracts
+
     # Cap: max notional = balance * leverage
     max_notional = balance * leverage
     max_contracts = max_notional / entry
     contracts = min(contracts, max_contracts)
+
     notional = contracts * entry
     if notional < MIN_NOTIONAL_USDT:
         logger.warning(f"Notional {notional:.2f} USDT < Minimum {MIN_NOTIONAL_USDT} USDT. Kein Trade.")
         return 0.0
+
+    # Margin-Check: isolierte Margin darf Kapital nicht übersteigen
+    margin = notional / leverage
+    if margin > balance:
+        logger.warning(f"Margin {margin:.2f} USDT > Kapital {balance:.2f} USDT. Kein Trade.")
+        return 0.0
+
     logger.info(f"Size: {contracts:.6f} Contracts | Notional: {notional:.2f} USDT | Risiko: {risk_amount:.2f} USDT")
     return contracts
 
@@ -177,14 +193,11 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         return
 
     # --- Calc size ---
-    contracts = calc_position_size(
-        balance, risk_pct, signal.entry_price, signal.sl_price, leverage, logger)
-    if contracts <= 0:
-        return
-
     min_amount = exchange.markets.get(symbol, {}).get('limits', {}).get('amount', {}).get('min', 0.0)
-    if contracts < min_amount:
-        logger.error(f"Ordergröße {contracts:.6f} < Mindestbetrag {min_amount} für {symbol}. Kein Trade.")
+    contracts = calc_position_size(
+        balance, risk_pct, signal.entry_price, signal.sl_price, leverage, logger,
+        min_contracts=min_amount)
+    if contracts <= 0:
         return
 
     contracts_str = exchange.amount_to_precision(symbol, contracts)
