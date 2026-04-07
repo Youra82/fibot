@@ -1,28 +1,28 @@
 {
   "market": {
-    "symbol": "ETH/USDT:USDT",
-    "timeframe": "6h"
+    "symbol": "LINK/USDT:USDT",
+    "timeframe": "1d"
   },
   "strategy": {
     "swing_lookback": 30,
-    "pivot_left": 3,
-    "pivot_right": 3,
+    "pivot_left": 8,
+    "pivot_right": 2,
     "structure_lookback": 60,
     "fib_entry_min": 0.382,
     "fib_entry_max": 0.618,
     "fib_sl_level": 0.786,
     "fib_tp1_level": 1.0,
     "fib_tp2_level": 1.272,
-    "fib_tolerance_atr_mult": 0.9,
-    "structure_tolerance_atr_mult": 0.4,
+    "fib_tolerance_atr_mult": 0.3,
+    "structure_tolerance_atr_mult": 0.2,
     "rsi_period": 14,
-    "rsi_oversold": 39.0,
-    "rsi_overbought": 53.0,
-    "volume_ratio_min": 1.6,
-    "min_rr": 1.2,
+    "rsi_oversold": 31.0,
+    "rsi_overbought": 59.0,
+    "volume_ratio_min": 1.4,
+    "min_rr": 2.4,
     "atr_period": 14,
-    "atr_sl_multiplier": 1.2,
-    "min_signal_score": 6.0,
+    "atr_sl_multiplier": 0.5,
+    "min_signal_score": 3.5,
     "candle_limit": 500
   },
   "risk": {
@@ -31,11 +31,11 @@
     "margin_mode": "isolated"
   },
   "_backtest": {
-    "pnl_pct": 257.45,
-    "win_rate": 51.9,
-    "total_trades": 27,
-    "max_drawdown": 22.29,
-    "avg_rr": 1.68,
+    "pnl_pct": 242.08,
+    "win_rate": 28.9,
+    "total_trades": 45,
+    "max_drawdown": 11.24,
+    "avg_rr": 2.16,
     "start_date": "2023-04-08",
     "end_date": "2026-04-07",
     "capital": 15.0

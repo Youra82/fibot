@@ -1,27 +1,27 @@
 {
   "market": {
-    "symbol": "SOL/USDT:USDT",
-    "timeframe": "4h"
+    "symbol": "BNB/USDT:USDT",
+    "timeframe": "6h"
   },
   "strategy": {
-    "swing_lookback": 40,
-    "pivot_left": 7,
-    "pivot_right": 2,
+    "swing_lookback": 120,
+    "pivot_left": 6,
+    "pivot_right": 1,
     "structure_lookback": 90,
     "fib_entry_min": 0.382,
     "fib_entry_max": 0.618,
     "fib_sl_level": 0.786,
     "fib_tp1_level": 1.0,
     "fib_tp2_level": 1.272,
-    "fib_tolerance_atr_mult": 0.7,
-    "structure_tolerance_atr_mult": 0.1,
+    "fib_tolerance_atr_mult": 0.9,
+    "structure_tolerance_atr_mult": 0.5,
     "rsi_period": 14,
-    "rsi_oversold": 42.0,
+    "rsi_oversold": 49.0,
     "rsi_overbought": 50.0,
-    "volume_ratio_min": 1.0,
-    "min_rr": 2.9,
+    "volume_ratio_min": 0.7,
+    "min_rr": 2.4,
     "atr_period": 14,
-    "atr_sl_multiplier": 1.7,
+    "atr_sl_multiplier": 0.5,
     "min_signal_score": 5.0,
     "candle_limit": 500
   },
@@ -31,12 +31,12 @@
     "margin_mode": "isolated"
   },
   "_backtest": {
-    "pnl_pct": 58.01,
-    "win_rate": 45.5,
-    "total_trades": 11,
-    "max_drawdown": 14.49,
-    "avg_rr": 2.06,
-    "start_date": "2024-04-07",
+    "pnl_pct": 71.63,
+    "win_rate": 11.8,
+    "total_trades": 102,
+    "max_drawdown": 23.49,
+    "avg_rr": 2.5,
+    "start_date": "2023-04-08",
     "end_date": "2026-04-07",
     "capital": 15.0
   }
