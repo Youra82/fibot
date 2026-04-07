@@ -363,13 +363,13 @@ def test_live_pepe_order_on_bitget(live_setup):
     time.sleep(2)
 
     # Prüfen was auf Bitget angekommen ist
-    open_orders   = exchange.fetch_open_orders(symbol)
+    open_orders    = exchange.fetch_open_orders(symbol)
     trigger_orders = exchange.fetch_open_trigger_orders(symbol)
-    entry_ids     = [o['id'] for o in open_orders]
+    entry_ids      = [o['id'] for o in open_orders]
 
     assert entry_id in entry_ids, f'FEHLER: Entry-Order {entry_id} nicht in offenen Orders.'
-    print(f'-> Entry-Order sichtbar auf Bitget [OK]')
-    print(f'-> {len(trigger_orders)} Trigger-Order(s) sichtbar auf Bitget [OK]')
+    print(f'-> Entry-Order sichtbar auf Bitget [OK]  (unter "Open Orders")')
+    print(f'-> {len(trigger_orders)} Trigger-Order(s) sichtbar auf Bitget [OK]  (unter "Trigger Orders")')
 
     leverage  = 5
     margin    = round((amount * entry_price) / leverage, 2)
@@ -377,20 +377,29 @@ def test_live_pepe_order_on_bitget(live_setup):
     now = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
     send_message(bot_token, chat_id,
-        f"\U0001f7e2 *NEUE ORDER GESETZT* (TEST)\n\n"
-        f"\U0001f4bc Account: Jurij\n"
-        f"\U0001f4ca Symbol: {symbol}\n"
-        f"\U0001f4c8 Richtung: LONG\n"
-        f"\U0001f4e6 Menge: {amount} Kontrakte\n"
-        f"\U0001f4b5 Entry-Preis: {entry_price:.8f} USDT\n"
-        f"\u26a1\ufe0f Hebel: {leverage}x\n"
-        f"\U0001f4b0 Margin: {margin:.2f} USDT\n"
-        f"\U0001f3af Take-Profit: {tp_price:.8f} USDT\n"
-        f"\U0001f6d1 Stop-Loss: {sl_price:.8f} USDT\n\n"
-        f"\U0001f550 Zeit: {now} UTC")
+        f"[TEST] FIBOT ORDER GESETZT\n\n"
+        f"Account: Jurij\n"
+        f"Symbol: {symbol}\n"
+        f"Richtung: LONG\n"
+        f"Menge: {amount} Kontrakte\n"
+        f"Entry: {entry_price:.8f} USDT (Limit, unter Markt)\n"
+        f"Hebel: {leverage}x | Margin: {margin:.2f} USDT\n"
+        f"Take-Profit: {tp_price:.8f} USDT\n"
+        f"Stop-Loss: {sl_price:.8f} USDT\n\n"
+        f"Zeit: {now} UTC")
     print('-> Telegram gesendet.')
 
-    time.sleep(10)  # 10s sichtbar auf Bitget
+    print('\n' + '='*60)
+    print('  JETZT BITGET PRUEFEN:')
+    print(f'  - "Open Orders"    -> Limit Entry @ {entry_price:.8f}')
+    print(f'  - "Trigger Orders" -> SL @ {sl_price:.8f}')
+    print(f'                        TP @ {tp_price:.8f}')
+    print('  Orders werden in 30 Sekunden storniert...')
+    print('='*60)
+
+    for remaining in range(30, 0, -5):
+        print(f'  -> Stornierung in {remaining}s...')
+        time.sleep(5)
 
     # --- Schritt 3: Aufräumen ---
     print(f'\n[Schritt 3/3] Storniere alle Orders...')
