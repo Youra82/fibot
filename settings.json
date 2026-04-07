@@ -2,21 +2,6 @@
   "live_trading_settings": {
     "active_strategies": [
       {
-        "symbol": "AAVE/USDT:USDT",
-        "timeframe": "1h",
-        "active": true
-      },
-      {
-        "symbol": "SOL/USDT:USDT",
-        "timeframe": "1h",
-        "active": true
-      },
-      {
-        "symbol": "BNB/USDT:USDT",
-        "timeframe": "4h",
-        "active": true
-      },
-      {
         "symbol": "XRP/USDT:USDT",
         "timeframe": "1h",
         "active": true
