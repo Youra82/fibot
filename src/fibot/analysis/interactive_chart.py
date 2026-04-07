@@ -17,6 +17,8 @@ import json
 import logging
 from datetime import date
 
+from fibot.analysis.optimizer import _fetch_min_contracts
+
 import pandas as pd
 import numpy as np
 
@@ -580,7 +582,8 @@ def run_interactive_chart(secrets: dict):
             }
 
         print("  Führe Backtest durch...")
-        result = run_backtest(df, config, start_capital, symbol, timeframe)
+        result = run_backtest(df, config, start_capital, symbol, timeframe,
+                              min_contracts=_fetch_min_contracts(symbol))
         print(f"  {result.total_trades} Trades | WR: {result.win_rate:.1f}% | "
               f"PnL: {result.pnl_pct:+.1f}% | MaxDD: {result.max_drawdown_pct:.1f}%")
 

@@ -14,6 +14,8 @@ import pandas as pd
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
+from fibot.analysis.optimizer import _fetch_min_contracts
+
 logging.basicConfig(level=logging.WARNING, format='%(levelname)s %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -68,7 +70,8 @@ def run_all_configs_isolated(date_from: str, date_to: str, capital: float):
             print(f"  {YELLOW}Keine Daten — übersprungen.{NC}")
             continue
 
-        result = run_backtest(df, config, capital, symbol, timeframe)
+        result = run_backtest(df, config, capital, symbol, timeframe,
+                              min_contracts=_fetch_min_contracts(symbol))
         results.append({
             'symbol':    symbol,
             'timeframe': timeframe,
@@ -132,7 +135,8 @@ def run_manual_portfolio(filenames: list, date_from: str, date_to: str, capital:
             print(f"  {YELLOW}Keine Daten — übersprungen.{NC}")
             continue
 
-        result = run_backtest(df, config, capital, symbol, timeframe)
+        result = run_backtest(df, config, capital, symbol, timeframe,
+                              min_contracts=_fetch_min_contracts(symbol))
         results.append({
             'symbol':    symbol,
             'timeframe': timeframe,
@@ -260,7 +264,8 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
         df = precompute_indicators(df, config)
         df = precompute_all_signals(df, config)
 
-        result = run_backtest(df, config, capital, symbol, timeframe)
+        result = run_backtest(df, config, capital, symbol, timeframe,
+                              min_contracts=_fetch_min_contracts(symbol))
 
         strategies_data[fname] = {
             'symbol':    symbol,

@@ -566,7 +566,16 @@ Beispiele:
     logger.info(f"Kerzen geladen: {len(df)} ({df.index[0]} → {df.index[-1]})")
 
     # --- Backtest ---
-    result = run_backtest(df, config, args.capital, args.symbol, args.timeframe)
+    try:
+        import ccxt as _ccxt
+        _exch = _ccxt.bitget({'options': {'defaultType': 'swap'}})
+        _markets = _exch.load_markets()
+        _min_contracts = float(
+            _markets.get(args.symbol, {}).get('limits', {}).get('amount', {}).get('min', 0.0) or 0.0)
+    except Exception:
+        _min_contracts = 0.0
+    result = run_backtest(df, config, args.capital, args.symbol, args.timeframe,
+                          min_contracts=_min_contracts)
     print("\n" + result.summary())
 
     out_dir = os.path.join(PROJECT_ROOT, 'artifacts', 'results')
