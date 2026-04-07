@@ -182,6 +182,11 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     if contracts <= 0:
         return
 
+    min_amount = exchange.markets.get(symbol, {}).get('limits', {}).get('amount', {}).get('min', 0.0)
+    if contracts < min_amount:
+        logger.error(f"Ordergröße {contracts:.6f} < Mindestbetrag {min_amount} für {symbol}. Kein Trade.")
+        return
+
     contracts_str = exchange.amount_to_precision(symbol, contracts)
     contracts = float(contracts_str)
 
