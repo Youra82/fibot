@@ -154,18 +154,87 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     positions = exchange.fetch_open_positions(symbol)
     if positions:
         pos = positions[0]
-        side = pos.get('side', 'unknown')
+        pos_side = pos.get('side', 'long')
         size_key = 'contracts' if 'contracts' in pos else 'contractSize'
-        size = float(pos.get(size_key, 0))
+        contracts_pos = float(pos.get(size_key, 0))
         entry_price = float(pos.get('entryPrice', 0))
         pnl = float(pos.get('unrealizedPnl', 0))
-        logger.info(f"Offene Position: {side.upper()} {size} @ {entry_price:.4f} | PnL {pnl:.2f} USDT")
+        logger.info(f"Offene Position: {pos_side.upper()} {contracts_pos} @ {entry_price:.4f} | PnL {pnl:.2f} USDT")
 
-        # Check if TP/SL orders still exist; if not, re-place them
-        open_triggers = exchange.fetch_open_trigger_orders(symbol)
-        if not open_triggers:
-            logger.warning("Keine offenen TP/SL-Orders gefunden. Versuche erneut zu setzen...")
-            _reattach_tp_sl(exchange, pos, params, logger)
+        # --- Self-Repair: SL/TP prüfen und ggf. neu platzieren (wie vbot) ---
+        try:
+            tracker_data   = read_tracker(tracker_path)
+            trigger_orders = exchange.fetch_open_trigger_orders(symbol)
+            open_order_ids = {str(o.get('id', '')) for o in trigger_orders}
+            close_side     = 'sell' if pos_side == 'long' else 'buy'
+
+            saved_sl_id  = str(tracker_data.get('sl_order_id', ''))
+            saved_tp_id  = str(tracker_data.get('tp_order_id', ''))
+            sl_price_val = tracker_data.get('sl_price')
+            tp_price_val = tracker_data.get('tp1_price')
+
+            if saved_sl_id and saved_tp_id:
+                # ID-basierte Erkennung (zuverlässig)
+                sl_exists = saved_sl_id in open_order_ids
+                tp_exists = saved_tp_id in open_order_ids
+                logger.info(f"ID-Check — SL={sl_exists} (ID:{saved_sl_id}) TP={tp_exists} (ID:{saved_tp_id})")
+            else:
+                # Preis-Fallback: SL/TP anhand Entry-Preis-Relation erkennen
+                sl_exists = False
+                tp_exists = False
+                if entry_price > 0:
+                    for order in trigger_orders:
+                        trig_raw = (order.get('stopPrice') or order.get('triggerPrice')
+                                    or order.get('info', {}).get('triggerPrice')
+                                    or order.get('info', {}).get('planPrice'))
+                        try:
+                            trig = float(trig_raw)
+                        except (ValueError, TypeError):
+                            continue
+                        if pos_side == 'long':
+                            if trig < entry_price:
+                                sl_exists = True
+                            elif trig > entry_price:
+                                tp_exists = True
+                        else:
+                            if trig > entry_price:
+                                sl_exists = True
+                            elif trig < entry_price:
+                                tp_exists = True
+                    logger.info(f"Preis-Fallback — SL={sl_exists} TP={tp_exists} | {len(trigger_orders)} Trigger-Orders")
+
+            if not sl_exists or not tp_exists:
+                logger.warning(f"Self-Repair: SL={sl_exists} TP={tp_exists} — platziere fehlende Orders neu")
+                if not sl_exists and sl_price_val and contracts_pos > 0:
+                    try:
+                        sl_resp = exchange.place_trigger_market_order(
+                            symbol, close_side, contracts_pos, float(sl_price_val), reduce=True)
+                        new_sl_id = str(sl_resp.get('id', '')) if sl_resp else ''
+                        tracker_data['sl_order_id'] = new_sl_id
+                        logger.info(f"SL repariert @ {sl_price_val:.4f} (neue ID: {new_sl_id})")
+                    except Exception as e:
+                        logger.error(f"SL-Reparatur fehlgeschlagen: {e}")
+                elif not sl_exists and not sl_price_val:
+                    logger.error("SL fehlt aber SL-Preis unbekannt — manuelle Intervention nötig!")
+
+                if not tp_exists and tp_price_val and contracts_pos > 0:
+                    try:
+                        tp_resp = exchange.place_trigger_market_order(
+                            symbol, close_side, contracts_pos, float(tp_price_val), reduce=True)
+                        new_tp_id = str(tp_resp.get('id', '')) if tp_resp else ''
+                        tracker_data['tp_order_id'] = new_tp_id
+                        logger.info(f"TP repariert @ {tp_price_val:.4f} (neue ID: {new_tp_id})")
+                    except Exception as e:
+                        logger.error(f"TP-Reparatur fehlgeschlagen: {e}")
+                elif not tp_exists and not tp_price_val:
+                    logger.error("TP fehlt aber TP-Preis unbekannt — manuelle Intervention nötig!")
+
+                write_tracker(tracker_path, tracker_data)
+                send_message(bot_token, chat_id,
+                             f"FiBot Self-Repair ({symbol}): SL={sl_exists} TP={tp_exists} — Orders neu gesetzt.")
+        except Exception as e:
+            logger.error(f"Fehler beim Self-Repair-Check: {e}")
+
         return  # Position läuft — nichts weiter tun
 
     # --- No open position → look for new signal ---
@@ -234,9 +303,10 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     if filled_order and filled_order.get('status') == 'closed':
         actual_entry = float(filled_order.get('average', signal.entry_price))
         logger.info(f"Entry gefüllt @ {actual_entry:.4f}")
-        _place_tp_sl(exchange, symbol, entry_side, contracts,
-                     actual_entry, signal, logger)
-        _save_trade_state(tracker_path, signal, actual_entry, contracts, entry_order_id)
+        sl_order_id, tp_order_id = _place_tp_sl(exchange, symbol, entry_side, contracts,
+                                                  actual_entry, signal, logger)
+        _save_trade_state(tracker_path, signal, actual_entry, contracts, entry_order_id,
+                          sl_order_id=sl_order_id, tp_order_id=tp_order_id)
         summary = signal_summary(signal, symbol, timeframe)
         send_message(bot_token, chat_id,
                      f"FiBot ENTRY\n{summary}\n\nFill: {actual_entry:.4f}")
@@ -256,9 +326,11 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
 
 def _place_tp_sl(exchange: Exchange, symbol: str, entry_side: str,
                   contracts: float, actual_entry: float,
-                  signal: FibSignal, logger):
-    """Places TP1 and SL trigger-market orders."""
+                  signal: FibSignal, logger) -> tuple:
+    """Places TP1 and SL trigger-market orders. Returns (sl_order_id, tp_order_id)."""
     close_side = 'sell' if entry_side == 'buy' else 'buy'
+    sl_order_id = ''
+    tp_order_id = ''
 
     # SL
     try:
@@ -267,7 +339,8 @@ def _place_tp_sl(exchange: Exchange, symbol: str, entry_side: str,
             trigger_price=signal.sl_price,
             reduce=True
         )
-        logger.info(f"SL Order platziert @ {signal.sl_price:.4f} | ID: {sl_order.get('id')}")
+        sl_order_id = str(sl_order.get('id', '')) if sl_order else ''
+        logger.info(f"SL Order platziert @ {signal.sl_price:.4f} | ID: {sl_order_id}")
     except Exception as e:
         logger.error(f"SL-Order fehlgeschlagen: {e}")
 
@@ -280,9 +353,12 @@ def _place_tp_sl(exchange: Exchange, symbol: str, entry_side: str,
             trigger_price=signal.tp1_price,
             reduce=True
         )
-        logger.info(f"TP1 Order platziert @ {signal.tp1_price:.4f} | ID: {tp_order.get('id')}")
+        tp_order_id = str(tp_order.get('id', '')) if tp_order else ''
+        logger.info(f"TP1 Order platziert @ {signal.tp1_price:.4f} | ID: {tp_order_id}")
     except Exception as e:
         logger.error(f"TP1-Order fehlgeschlagen: {e}")
+
+    return sl_order_id, tp_order_id
 
 
 def _reattach_tp_sl(exchange: Exchange, position: dict, params: dict, logger):
@@ -327,7 +403,8 @@ def _reattach_tp_sl(exchange: Exchange, position: dict, params: dict, logger):
 # ---------------------------------------------------------------------------
 
 def _save_trade_state(path: str, signal: FibSignal, entry: float,
-                       contracts: float, order_id: str, status: str = "open"):
+                       contracts: float, order_id: str, status: str = "open",
+                       sl_order_id: str = '', tp_order_id: str = ''):
     data = read_tracker(path)
     data.update({
         'status':       status,
@@ -338,6 +415,8 @@ def _save_trade_state(path: str, signal: FibSignal, entry: float,
         'tp2_price':    signal.tp2_price,
         'contracts':    contracts,
         'order_id':     order_id,
+        'sl_order_id':  sl_order_id,
+        'tp_order_id':  tp_order_id,
         'signal_score': signal.score,
         'reason':       signal.reason,
         'timestamp':    datetime.utcnow().isoformat(),
