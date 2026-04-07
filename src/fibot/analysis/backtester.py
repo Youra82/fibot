@@ -124,7 +124,8 @@ class BacktestResult:
 def run_backtest(df: pd.DataFrame, config: dict,
                   start_capital: float = 1000.0,
                   symbol: str = "UNKNOWN",
-                  timeframe: str = "4h") -> BacktestResult:
+                  timeframe: str = "4h",
+                  min_contracts: float = 0.0) -> BacktestResult:
     """
     Walk-forward backtest on df.
     For each bar (after warm-up), generate a signal on df[:i].
@@ -244,6 +245,9 @@ def run_backtest(df: pd.DataFrame, config: dict,
         notional    = contracts * entry
         if notional < MIN_NOTIONAL_USDT:
             logger.debug(f"[{ts}] Notional zu klein: {notional:.2f} USDT")
+            continue
+        if min_contracts > 0 and contracts < min_contracts:
+            logger.debug(f"[{ts}] Contracts {contracts:.6f} < Exchange-Minimum {min_contracts}")
             continue
 
         direction_str = 'long' if sig_dir_arr[i] == 1 else 'short'

@@ -12,6 +12,7 @@ import math
 from datetime import date
 
 import pandas as pd
+import ccxt
 
 try:
     import optuna
@@ -31,6 +32,27 @@ warnings.filterwarnings('ignore')
 logger = logging.getLogger(__name__)
 
 CONFIGS_DIR = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
+
+# ---------------------------------------------------------------------------
+# Exchange-Minimum abrufen (kein API-Key nötig — öffentliche Marktdaten)
+# ---------------------------------------------------------------------------
+
+_min_amounts_cache: dict = {}
+
+def _fetch_min_contracts(symbol: str) -> float:
+    """Holt das Exchange-Minimum für Contracts von Bitget (kein API-Key nötig)."""
+    if symbol in _min_amounts_cache:
+        return _min_amounts_cache[symbol]
+    try:
+        exchange = ccxt.bitget({'options': {'defaultType': 'swap'}})
+        markets = exchange.load_markets()
+        min_amt = markets.get(symbol, {}).get('limits', {}).get('amount', {}).get('min', 0.0)
+        result = float(min_amt) if min_amt else 0.0
+    except Exception as e:
+        print(f"  WARNUNG: Konnte Exchange-Minimum für {symbol} nicht abrufen: {e}")
+        result = 0.0
+    _min_amounts_cache[symbol] = result
+    return result
 
 # Minimale Trades pro Timeframe: skaliert mit Anzahl Candles im Backtest-Zeitraum.
 # Faustformel: 1 Trade pro 300 Candles (bei typischen Fib-Setups ca. 0.3% Signal-Rate).
@@ -125,7 +147,7 @@ def _get_capital_ranges(capital: float, max_dd: float = 30.0) -> dict:
 # Objective für Optuna (Closure — thread-safe für n_jobs > 1)
 # ---------------------------------------------------------------------------
 
-def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats: list):
+def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, min_contracts, _stats: list):
     """
     _stats: gemeinsame Liste [max_trades_seen, n_valid_eff_risk, n_too_few_trades, n_high_dd]
     Wird von allen Trials aktualisiert — erlaubt Diagnose-Ausgabe nach Abschluss.
@@ -185,7 +207,8 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats: list
         }
 
         try:
-            result = run_backtest(df, config, capital, symbol, timeframe)
+            result = run_backtest(df, config, capital, symbol, timeframe,
+                                  min_contracts=min_contracts)
         except Exception:
             return -999.0
 
@@ -239,6 +262,10 @@ def optimize(symbol: str, timeframe: str,
     print(f"    max effective risk : {m:.1f}%  (aus max_dd={max_dd:.0f}%: nach ~30 Verlusten <= {max_dd:.0f}% DD)")
     print(f"    min trades         : {_min_trades(timeframe)}  (Timeframe: {timeframe})")
 
+    min_contracts = _fetch_min_contracts(symbol)
+    if min_contracts > 0:
+        print(f"  Exchange-Minimum : {min_contracts} Contracts für {symbol}")
+
     print(f"\n  Lade Daten: {symbol} ({timeframe}) [{start_date} → {end_date}]")
     df = load_ohlcv(symbol, timeframe, start_date, end_date)
     if df.empty or len(df) < 150:
@@ -254,7 +281,7 @@ def optimize(symbol: str, timeframe: str,
 
     # _stats: [max_trades_seen, n_eff_risk_pruned, n_too_few_trades, n_high_dd, best_dd_seen]
     _stats = [0, 0, 0, 0, float('inf')]
-    objective = _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, _stats)
+    objective = _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, min_contracts, _stats)
     cores_str = "alle Kerne" if n_jobs == -1 else f"{n_jobs} Kern(e)"
     print(f"  Optimiere {n_trials} Trials ({cores_str})...")
     study.optimize(objective, n_trials=n_trials, show_progress_bar=True, n_jobs=n_jobs)
@@ -312,7 +339,8 @@ def optimize(symbol: str, timeframe: str,
 
     # Backtest mit best config für finale Metriken
     try:
-        result = run_backtest(df, config, capital, symbol, timeframe)
+        result = run_backtest(df, config, capital, symbol, timeframe,
+                              min_contracts=min_contracts)
         config["_backtest"] = {
             "pnl_pct":       round(result.pnl_pct, 2),
             "win_rate":      round(result.win_rate, 1),
