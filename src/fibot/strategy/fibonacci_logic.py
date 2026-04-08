@@ -966,8 +966,10 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
         sl_fib  = fibs.levels["0.0"]     # 0% = swing_low: SL below this level for LONG
         sl_price = max(sl_atr, sl_fib)   # use the higher (tighter) SL
 
-        tp1_price = fibs.levels["100.0"]   # back to swing high
-        tp2_price = fibs.levels["127.2"]   # extension
+        tp1_key   = f"{fib_tp1_level * 100:.1f}"   # e.g. 1.0 → "100.0", 1.618 → "161.8"
+        tp2_key   = f"{fib_tp2_level * 100:.1f}"
+        tp1_price = fibs.levels[tp1_key]
+        tp2_price = fibs.levels[tp2_key]
 
         risk   = current_price - sl_price
         reward = tp1_price - current_price
@@ -1049,8 +1051,10 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
         sl_fib   = fibs.levels["0.0"]    # 0% = swing_high: SL above this level for SHORT
         sl_price = min(sl_atr, sl_fib)   # lower (tighter) SL
 
-        tp1_price = fibs.levels["100.0"]   # back to swing low
-        tp2_price = fibs.levels["127.2"]
+        tp1_key   = f"{fib_tp1_level * 100:.1f}"
+        tp2_key   = f"{fib_tp2_level * 100:.1f}"
+        tp1_price = fibs.levels[tp1_key]
+        tp2_price = fibs.levels[tp2_key]
 
         risk   = sl_price - current_price
         reward = current_price - tp1_price
