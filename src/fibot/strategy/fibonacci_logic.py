@@ -1097,17 +1097,13 @@ def signal_summary(sig: FibSignal, symbol: str, timeframe: str) -> str:
     fibs = sig.fib_levels
     sl_pct  = abs(sig.entry_price - sig.sl_price)  / sig.entry_price * 100
     tp1_pct = abs(sig.tp1_price   - sig.entry_price) / sig.entry_price * 100
-    tp2_pct = abs(sig.tp2_price   - sig.entry_price) / sig.entry_price * 100
-    tp1_label, _, _ = sig.fib_levels.closest_level(sig.tp1_price)
-    tp2_label, _, _ = sig.fib_levels.closest_level(sig.tp2_price)
 
     return (
         f"{arrow} FiBot Signal — {symbol} ({timeframe})\n"
         f"Richtung : {direction_str}\n"
         f"Entry    : {sig.entry_price:.4f} ({sig.entry_fib_name})\n"
         f"SL       : {sig.sl_price:.4f}  (-{sl_pct:.2f}%)\n"
-        f"TP1      : {sig.tp1_price:.4f} (+{tp1_pct:.2f}%) [Fib {tp1_label}%]\n"
-        f"TP2      : {sig.tp2_price:.4f} (+{tp2_pct:.2f}%) [Fib {tp2_label}%]\n"
+        f"TP       : {sig.tp1_price:.4f} (+{tp1_pct:.2f}%)\n"
         f"R:R      : 1:{sig.rr_ratio:.2f}\n"
         f"Score    : {sig.score:.1f}/10\n"
         f"Struktur : {sig.structure.type} ({sig.structure.bias})\n"
