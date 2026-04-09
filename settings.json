@@ -2,23 +2,59 @@
   "live_trading_settings": {
     "active_strategies": [
       {
+        "symbol": "SOL/USDT:USDT",
+        "timeframe": "30m",
+        "leverage": 2,
+        "margin_mode": "isolated",
+        "risk_per_entry_pct": 0.5,
+        "active": true
+      },
+      {
         "symbol": "BTC/USDT:USDT",
         "timeframe": "4h",
+        "leverage": 2,
+        "margin_mode": "isolated",
+        "risk_per_entry_pct": 0.5,
+        "active": true
+      },
+      {
+        "symbol": "XRP/USDT:USDT",
+        "timeframe": "2h",
+        "leverage": 2,
+        "margin_mode": "isolated",
+        "risk_per_entry_pct": 0.5,
+        "active": true
+      },
+      {
+        "symbol": "ADA/USDT:USDT",
+        "timeframe": "1d",
+        "leverage": 2,
+        "margin_mode": "isolated",
+        "risk_per_entry_pct": 0.5,
+        "active": true
+      },
+      {
+        "symbol": "AAVE/USDT:USDT",
+        "timeframe": "6h",
+        "leverage": 2,
+        "margin_mode": "isolated",
+        "risk_per_entry_pct": 0.5,
         "active": true
       },
       {
         "symbol": "BNB/USDT:USDT",
         "timeframe": "1h",
+        "leverage": 2,
+        "margin_mode": "isolated",
+        "risk_per_entry_pct": 0.5,
         "active": true
       },
       {
-        "symbol": "AVAX/USDT:USDT",
-        "timeframe": "1h",
-        "active": true
-      },
-      {
-        "symbol": "XRP/USDT:USDT",
-        "timeframe": "4h",
+        "symbol": "DOGE/USDT:USDT",
+        "timeframe": "1d",
+        "leverage": 2,
+        "margin_mode": "isolated",
+        "risk_per_entry_pct": 0.5,
         "active": true
       }
     ]
