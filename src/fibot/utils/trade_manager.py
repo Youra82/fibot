@@ -305,6 +305,17 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     contracts_str = exchange.amount_to_precision(symbol, contracts)
     contracts = float(contracts_str)
 
+    # Sicherheitsnetz: amount_to_precision rundet ggf. unter Exchange-Minimum
+    if min_amount > 0 and contracts < min_amount:
+        logger.info(f"Nach Precision-Rundung {contracts:.6f} < Minimum {min_amount} — hebe erneut an.")
+        contracts = min_amount
+        contracts_str = exchange.amount_to_precision(symbol, contracts)
+        contracts = float(contracts_str)
+        notional = contracts * signal.entry_price
+        if notional < MIN_NOTIONAL_USDT:
+            logger.warning(f"Notional {notional:.2f} USDT < Minimum {MIN_NOTIONAL_USDT} USDT nach Korrektur. Kein Trade.")
+            return
+
     # --- Place entry (Limit at signal price, consistent with backtester) ---
     entry_side = 'buy' if signal.direction == 'long' else 'sell'
 
