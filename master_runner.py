@@ -93,7 +93,7 @@ def main():
         cmd = [python_exe, run_script, '--symbol', symbol, '--timeframe', timeframe]
         proc = subprocess.Popen(cmd, cwd=SCRIPT_DIR)
         processes.append((symbol, timeframe, proc))
-        time.sleep(0.5)
+        time.sleep(2.0)
 
     # Wait for all to finish
     for symbol, timeframe, proc in processes:

@@ -323,6 +323,9 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     try:
         entry_order = exchange.place_limit_order(
             symbol, entry_side, contracts, signal.entry_price)
+    except ccxt.InsufficientFunds as e:
+        logger.warning(f"Nicht genug freie Margin für Entry (andere Position belegt Kapital). Kein Trade.")
+        return
     except Exception as e:
         logger.error(f"Entry-Order fehlgeschlagen: {e}")
         send_message(bot_token, chat_id, f"FiBot FEHLER ({symbol}): Entry fehlgeschlagen: {e}")
