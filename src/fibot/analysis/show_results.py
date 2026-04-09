@@ -6,6 +6,7 @@ import sys
 import json
 import logging
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from typing import Optional
 
@@ -18,6 +19,13 @@ from fibot.analysis.optimizer import _fetch_min_contracts
 
 logging.basicConfig(level=logging.WARNING, format='%(levelname)s %(message)s')
 logger = logging.getLogger(__name__)
+
+N_WORKERS = min(os.cpu_count() or 4, 8)
+
+
+def _calmar(pnl_pct: float, max_dd: float) -> float:
+    """Calmar Ratio: PnL% / MaxDD% — risiko-adjustierter Score (wie jaegerbot)."""
+    return pnl_pct / max_dd if max_dd > 0 else pnl_pct
 
 RESULTS_DIR = os.path.join(PROJECT_ROOT, 'artifacts', 'results')
 SETTINGS_FILE = os.path.join(PROJECT_ROOT, 'settings.json')
@@ -309,33 +317,37 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
         print(f"  TIPP: Max Drawdown auf mindestens {int(min_dd) + 5}% erhoehen.")
         return
 
-    # ── Schritt 2: Besten Einzelspieler wählen (validiert gegen Portfolio-Sim-DD) ──
-    valid.sort(key=lambda x: x['end_cap'], reverse=True)
+    # ── Schritt 2: Besten Einzelspieler wählen (Calmar Ratio, validiert gegen Portfolio-Sim-DD) ──
+    valid.sort(key=lambda x: _calmar(x['pnl_pct'], x['max_dd']), reverse=True)
 
     # Aktuelle Portfolio-Performance per Simulation
     def _simulate(filenames: list) -> dict | None:
         data = {fn: strategies_data[fn] for fn in filenames if fn in strategies_data}
         return run_portfolio_simulation(capital, data, start_date, end_date)
 
-    best_single  = None
-    best_sim     = None
-    best_end_cap = 0.0
-    best_dd      = 0.0
+    best_single   = None
+    best_sim      = None
+    best_end_cap  = 0.0
+    best_dd       = 0.0
+    best_calmar   = -999.0
 
-    print(f"\n2/3: Suche Basis-Strategie (Portfolio-Sim-DD muss <= {target_max_dd:.2f}%)...")
+    print(f"\n2/3: Suche Basis-Strategie (Calmar-Score, Sim-DD muss <= {target_max_dd:.2f}%)...")
     for candidate in valid:
-        sim = _simulate([candidate['filename']])
+        sim    = _simulate([candidate['filename']])
         sim_dd = sim['max_drawdown_pct'] if sim else candidate['max_dd']
         dd_ok  = sim_dd <= target_max_dd
         cap    = sim['end_capital'] if sim else candidate['end_cap']
+        pnl    = sim['total_pnl_pct'] if sim else candidate['pnl_pct']
+        calmar = _calmar(pnl, sim_dd)
         col    = GREEN if dd_ok else RED
         print(f"  {'OK' if dd_ok else '--'} {candidate['filename']:<44}  "
-              f"Sim: {cap:.2f} USDT  Sim-DD: {col}{sim_dd:.2f}%{NC}")
-        if dd_ok and (best_single is None or cap > best_end_cap):
+              f"Sim: {cap:.2f} USDT  Sim-DD: {col}{sim_dd:.2f}%{NC}  Calmar: {calmar:.2f}")
+        if dd_ok and calmar > best_calmar:
             best_single  = candidate
             best_sim     = sim
             best_end_cap = cap
             best_dd      = sim_dd
+            best_calmar  = calmar
 
     if best_single is None:
         print(f"\n{RED}Keine Einzelstrategie erfuellt {cond} auch in der Portfolio-Simulation.{NC}")
@@ -346,40 +358,49 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
     print(f"     Einzel-Backtest: {best_single['end_cap']:.2f} USDT, Max DD: {best_single['max_dd']:.2f}%")
     print(f"     Portfolio-Simulation: {best_end_cap:.2f} USDT, Sim-DD: {best_dd:.2f}%")
 
-    # ── Schritt 3: Greedy mit echter Portfolio-Simulation ────────────────────
-    print(f"\n3/3: Suche beste Team-Kollegen (echte Portfolio-Simulation, gemeinsames Kapital)...")
+    # ── Schritt 3: Greedy mit echter Portfolio-Simulation (parallel, Calmar-Score) ──
+    print(f"\n3/3: Suche beste Team-Kollegen "
+          f"(Calmar-Score, {N_WORKERS} Threads, gemeinsames Kapital)...")
 
     portfolio      = [best_single]
     used_coins     = {best_single['coin']}
     candidate_pool = [r for r in valid if r['filename'] != best_single['filename']]
 
-    print(f"     Verbesserungen werden relativ zur Basis-Simulation bewertet.")
+    print(f"     Verbesserungen werden per Calmar Ratio bewertet (PnL% / MaxDD%).")
 
     while True:
-        best_next    = None
-        best_cap_w   = best_end_cap
-        best_dd_w    = best_dd
+        best_next      = None
+        best_calmar_w  = best_calmar
+        best_cap_w     = best_end_cap
+        best_dd_w      = best_dd
 
-        for candidate in candidate_pool:
-            if candidate['coin'] in used_coins:
-                continue   # Coin-Kollision
+        # Kandidaten vorfiltern (Coin-Kollision + Einzel-DD)
+        eligible = [c for c in candidate_pool
+                    if c['coin'] not in used_coins and c['max_dd'] <= target_max_dd]
 
-            # Schnell-Check: Einzel-DD des Kandidaten muss <= target
-            if candidate['max_dd'] > target_max_dd:
-                continue
+        current_portfolio = list(portfolio)
 
-            filenames = [r['filename'] for r in portfolio] + [candidate['filename']]
+        def _eval(candidate, _portfolio=current_portfolio):
+            filenames = [r['filename'] for r in _portfolio] + [candidate['filename']]
             sim = _simulate(filenames)
-            if sim is None:
-                continue
-            if sim['liquidation_date'] is not None:
-                continue
+            if sim is None or sim['liquidation_date'] is not None:
+                return candidate, None
             if sim['max_drawdown_pct'] > target_max_dd:
-                continue
-            if sim['end_capital'] > best_cap_w:
-                best_cap_w = sim['end_capital']
-                best_dd_w  = sim['max_drawdown_pct']
-                best_next  = candidate
+                return candidate, None
+            return candidate, sim
+
+        with ThreadPoolExecutor(max_workers=N_WORKERS) as executor:
+            futures = {executor.submit(_eval, c): c for c in eligible}
+            for future in as_completed(futures):
+                candidate, sim = future.result()
+                if sim is None:
+                    continue
+                calmar = _calmar(sim['total_pnl_pct'], sim['max_drawdown_pct'])
+                if calmar > best_calmar_w:
+                    best_calmar_w = calmar
+                    best_cap_w    = sim['end_capital']
+                    best_dd_w     = sim['max_drawdown_pct']
+                    best_next     = candidate
 
         if best_next:
             portfolio.append(best_next)
@@ -387,10 +408,11 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
             candidate_pool.remove(best_next)
             best_end_cap = best_cap_w
             best_dd      = best_dd_w
+            best_calmar  = best_calmar_w
             print(f"-> Fuege hinzu: {best_next['filename']}"
-                  f"  (Neues Kapital: {best_cap_w:.2f} USDT, Max DD: {best_dd_w:.2f}%)")
+                  f"  (Kapital: {best_cap_w:.2f} USDT, MaxDD: {best_dd_w:.2f}%, Calmar: {best_calmar_w:.2f})")
         else:
-            print("Keine weitere Verbesserung moeglich (echte Simulation, DD & Coin-Kollision). "
+            print("Keine weitere Verbesserung moeglich (Calmar, DD & Coin-Kollision). "
                   "Optimierung beendet.")
             break
 
@@ -432,8 +454,10 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
     print(f"Endkapital:         {pnl_col}{port_end_cap:.2f} USDT{NC}")
     print(f"Gesamt PnL:         {pnl_col}{port_end_cap - capital:+.2f} USDT "
           f"({port_pnl_pct:.2f}%){NC}")
+    port_calmar = _calmar(port_pnl_pct, port_max_dd)
     print(f"Trades gesamt:      {port_trades}  |  Win-Rate: {port_wr:.1f}%")
     print(f"Portfolio Max DD:   {port_max_dd:.2f}%")
+    print(f"Calmar Score:       {port_calmar:.2f}  (PnL% / MaxDD% — hoeher = besser)")
     print(f"Liquidiert:         {'JA' if liquidated else 'NEIN'}")
     print(f"{'='*55}\n")
 
