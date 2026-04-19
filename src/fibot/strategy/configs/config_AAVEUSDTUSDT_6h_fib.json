@@ -4,25 +4,25 @@
     "timeframe": "6h"
   },
   "strategy": {
-    "swing_lookback": 50,
-    "pivot_left": 5,
-    "pivot_right": 1,
-    "structure_lookback": 90,
+    "swing_lookback": 20,
+    "pivot_left": 1,
+    "pivot_right": 2,
+    "structure_lookback": 50,
     "fib_entry_min": 0.382,
     "fib_entry_max": 0.618,
     "fib_sl_level": 0.786,
     "fib_tp1_level": 1.0,
     "fib_tp2_level": 1.272,
-    "fib_tolerance_atr_mult": 1.0,
-    "structure_tolerance_atr_mult": 0.5,
+    "fib_tolerance_atr_mult": 0.5,
+    "structure_tolerance_atr_mult": 0.9,
     "rsi_period": 14,
-    "rsi_oversold": 49.0,
-    "rsi_overbought": 63.0,
-    "volume_ratio_min": 1.6,
-    "min_rr": 2.4,
+    "rsi_oversold": 48.0,
+    "rsi_overbought": 50.0,
+    "volume_ratio_min": 0.3,
+    "min_rr": 2.8,
     "atr_period": 14,
     "atr_sl_multiplier": 0.6,
-    "min_signal_score": 4.0,
+    "min_signal_score": 2.5,
     "candle_limit": 500
   },
   "risk": {
@@ -31,13 +31,13 @@
     "margin_mode": "isolated"
   },
   "_backtest": {
-    "pnl_pct": 153.74,
-    "win_rate": 18.9,
-    "total_trades": 175,
-    "max_drawdown": 10.4,
-    "avg_rr": 2.22,
-    "start_date": "2023-03-24",
-    "end_date": "2026-03-23",
-    "capital": 25.0
+    "pnl_pct": 764.1,
+    "win_rate": 24.2,
+    "total_trades": 339,
+    "max_drawdown": 29.75,
+    "avg_rr": 1.86,
+    "start_date": "2023-04-16",
+    "end_date": "2026-04-15",
+    "capital": 15.0
   }
 }
