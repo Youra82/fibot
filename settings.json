@@ -61,6 +61,21 @@
   },
   "optimization_settings": {
     "enabled": true,
+    "_info": "symbols_to_optimize/timeframes_to_optimize: 'auto' liest active_strategies aus, oder explizite Liste wie ['BTC', 'ETH']",
+    "symbols_to_optimize": "auto",
+    "timeframes_to_optimize": "auto",
+    "lookback_days": "auto",
+    "start_capital": 15,
+    "num_trials": 500,
+    "cpu_cores": 1,
+    "mode": "best_profit",
+    "auto_clear_cache_days": 30,
+    "send_telegram_on_completion": true,
+    "constraints": {
+      "max_drawdown_pct": 30,
+      "min_win_rate_pct": 0,
+      "min_pnl_pct": 0
+    },
     "schedule": {
       "_info": "day_of_week: 0=Montag, 6=Sonntag | hour: 0-23 (24h Format)",
       "day_of_week": 2,
@@ -71,18 +86,6 @@
         "value": 7,
         "unit": "days"
       }
-    },
-    "symbols_to_optimize": "auto",
-    "timeframes_to_optimize": "auto",
-    "lookback_days": "auto",
-    "start_capital": 15,
-    "cpu_cores": 1,
-    "num_trials": 500,
-    "constraints": {
-      "max_drawdown_pct": 30,
-      "min_win_rate_pct": 0,
-      "min_pnl_pct": 0
-    },
-    "send_telegram_on_completion": true
+    }
   }
 }
