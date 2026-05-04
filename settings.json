@@ -1,5 +1,7 @@
 {
   "live_trading_settings": {
+    "max_open_positions": 7,
+    "use_auto_optimizer_results": true,
     "active_strategies": [
       {
         "symbol": "SOL/USDT:USDT",
@@ -61,20 +63,12 @@
   },
   "optimization_settings": {
     "enabled": true,
-    "_info": "symbols_to_optimize/timeframes_to_optimize: 'auto' liest active_strategies aus, oder explizite Liste wie ['BTC', 'ETH']",
-    "symbols_to_optimize": "auto",
-    "timeframes_to_optimize": "auto",
-    "lookback_days": "auto",
     "start_capital": 15,
-    "num_trials": 500,
-    "cpu_cores": 1,
-    "mode": "best_profit",
-    "auto_clear_cache_days": 30,
+    "start_date": "auto",
+    "end_date": "auto",
     "send_telegram_on_completion": true,
     "constraints": {
-      "max_drawdown_pct": 30,
-      "min_win_rate_pct": 0,
-      "min_pnl_pct": 0
+      "max_drawdown_pct": 30
     },
     "schedule": {
       "_info": "day_of_week: 0=Montag, 6=Sonntag | hour: 0-23 (24h Format)",

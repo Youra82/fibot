@@ -17,14 +17,11 @@ SCRIPT_DIR       = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT     = SCRIPT_DIR
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-SETTINGS_FILE    = os.path.join(PROJECT_ROOT, 'settings.json')
-OPT_RESULTS_FILE = os.path.join(PROJECT_ROOT, 'artifacts', 'results', 'optimization_results.json')
-CONFIGS_DIR      = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
-LAST_RUN_FILE    = os.path.join(PROJECT_ROOT, '.last_optimization_run')
-IN_PROGRESS_FILE = os.path.join(PROJECT_ROOT, '.optimization_in_progress')
-PYTHON_EXE       = os.path.join(PROJECT_ROOT, '.venv', 'bin', 'python3')
-SHOW_RESULTS     = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'analysis', 'show_results.py')
-OPTIMIZER_PY     = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'analysis', 'optimizer.py')
+SETTINGS_FILE     = os.path.join(PROJECT_ROOT, 'settings.json')
+CONFIGS_DIR       = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
+LAST_RUN_FILE     = os.path.join(PROJECT_ROOT, '.last_optimization_run')
+IN_PROGRESS_FILE  = os.path.join(PROJECT_ROOT, '.optimization_in_progress')
+PORTFOLIO_SCRIPT  = os.path.join(PROJECT_ROOT, 'run_portfolio_optimizer.py')
 
 log_dir = os.path.join(PROJECT_ROOT, 'logs')
 os.makedirs(log_dir, exist_ok=True)
@@ -205,185 +202,73 @@ def main():
     open(IN_PROGRESS_FILE, 'w').close()
 
     start_time = datetime.now()
+    if send_tg:
+        _telegram_send(bot_token, chat_id,
+            f"🔍 FiBot Portfolio-Optimizer GESTARTET\n"
+            f"Start: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"Führt frische Backtests aller Configs durch und wählt bestes Portfolio.")
+
+    # In-progress Marker setzen
+    open(IN_PROGRESS_FILE, 'w').close()
+
     try:
         constraints = opt_cfg.get('constraints', {})
-        capital   = float(opt_cfg.get('start_capital',          1000))
-        max_dd    = float(constraints.get('max_drawdown_pct',     30))
-        min_wr    = float(constraints.get('min_win_rate_pct',      0))
-        min_pnl   = float(constraints.get('min_pnl_pct',           0))
-        n_trials  = int(opt_cfg.get('num_trials',                200))
-        cpu_cores = int(opt_cfg.get('cpu_cores',                   1))
+        capital    = float(opt_cfg.get('start_capital', 100))
+        max_dd     = float(constraints.get('max_drawdown_pct', 30))
+        start_date = opt_cfg.get('start_date', 'auto')
+        end_date   = opt_cfg.get('end_date',   'auto')
 
-        # Symbols / Timeframes: "auto" → aus active_strategies lesen
-        sym_setting = opt_cfg.get('symbols_to_optimize',    'auto')
-        tf_setting  = opt_cfg.get('timeframes_to_optimize', 'auto')
-
-        active_pairs = []  # list of (symbol, timeframe)
-        if str(sym_setting).lower() == 'auto' or str(tf_setting).lower() == 'auto':
-            for s in settings.get('live_trading_settings', {}).get('active_strategies', []):
-                sym = s.get('symbol', '')
-                tf  = s.get('timeframe', '')
-                if sym and tf:
-                    active_pairs.append((sym, tf))
-        else:
-            # Explizite Listen: alle Kombinationen
-            syms = sym_setting if isinstance(sym_setting, list) else [sym_setting]
-            tfs  = tf_setting  if isinstance(tf_setting,  list) else [tf_setting]
-            for sym in syms:
-                if '/' not in sym:
-                    sym = f"{sym.upper()}/USDT:USDT"
-                for tf in tfs:
-                    active_pairs.append((sym, tf))
-
-        if not active_pairs:
-            log.error("Keine Paare für Optimierung gefunden.")
-            return
-        log.info(f"Paare: {[f'{s}/{t}' for s,t in active_pairs]}")
-
-        # Lookback
-        lookback_setting = opt_cfg.get('lookback_days', 'auto')
-        if str(lookback_setting).lower() == 'auto':
-            from fibot.analysis.backtester import auto_days_for_timeframe
-            lookback = max(auto_days_for_timeframe(tf) for _, tf in active_pairs)
-            log.info(f"Lookback auto: {lookback} Tage")
-        else:
-            lookback = int(lookback_setting)
-
-        date_from = (datetime.now() - timedelta(days=lookback)).strftime('%Y-%m-%d')
-        date_to   = datetime.now().strftime('%Y-%m-%d')
-
-        log.info(f"Kapital={capital} USDT | MaxDD={max_dd}% | MinWR={min_wr}% | "
-                 f"MinPnL={min_pnl}% | Trials={n_trials} | Jobs={cpu_cores} | "
-                 f"Zeitraum: {date_from} → {date_to}")
-
-        pairs_str = ', '.join(f"{sym.split('/')[0]}/{tf}" for sym, tf in active_pairs)
-
-        if send_tg:
-            _telegram_send(bot_token, chat_id,
-                f"🚀 FiBot Auto-Optimizer GESTARTET\n"
-                f"Paare: {pairs_str}\n"
-                f"Trials: {n_trials}\n"
-                f"Start: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-
-        # Alte Ergebnisse lesen BEVOR show_results.py sie überschreibt
-        old_pnl = {}
-        if os.path.exists(OPT_RESULTS_FILE):
-            try:
-                with open(OPT_RESULTS_FILE) as f:
-                    old_data = json.load(f)
-                for r in old_data.get('all_results', []):
-                    old_pnl[r['filename']] = r.get('pnl_pct', 0.0)
-            except Exception:
-                pass
-
-        # ── Schritt 1: Optuna-Optimizer pro Paar ──────────────────────────
-        # optimizer.py schützt selbst gegen schlechtere Ergebnisse
-        log.info(f"Starte Optuna-Optimierung für {len(active_pairs)} Paar(e) "
-                 f"({n_trials} Trials, {cpu_cores} CPU-Kern(e))...")
-
-        opt_failed = []
-        for sym, tf in active_pairs:
-            opt_cmd = [
-                PYTHON_EXE, OPTIMIZER_PY,
-                '--symbols',    sym,
-                '--timeframes', tf,
-                '--from',       date_from,
-                '--to',         date_to,
-                '--capital',    str(capital),
-                '--trials',     str(n_trials),
-                '--jobs',       str(cpu_cores),
-                '--max-dd',     str(max_dd),
-                '--min-wr',     str(min_wr),
-            ]
-            log.info(f"  Optimiere {sym} ({tf}) ...")
-            opt_proc = subprocess.run(
-                opt_cmd, cwd=PROJECT_ROOT,
-                capture_output=True, text=True, timeout=7200,
-            )
-            if opt_proc.returncode != 0:
-                log.error(f"  optimizer.py Fehler für {sym}/{tf} "
-                          f"(rc={opt_proc.returncode}):\n{opt_proc.stderr[-500:]}")
-                opt_failed.append(f"{sym}/{tf}")
-            else:
-                log.info(f"  {sym} ({tf}) — Optimierung abgeschlossen.")
-                out = opt_proc.stdout[-2000:] if len(opt_proc.stdout) > 2000 else opt_proc.stdout
-                log.debug(f"  Output:\n{out}")
-
-        if opt_failed:
-            log.warning(f"Optimizer fehlgeschlagen für: {opt_failed} — "
-                        f"fahre mit vorhandenen Configs fort.")
-
-        # Configs nach Optimierung neu ermitteln (optimizer.py schreibt sie frisch)
-        active_configs = []
-        for sym, tf in active_pairs:
-            safe  = f"{sym.replace('/', '').replace(':', '')}_{tf}"
-            fname = f"config_{safe}_fib.json"
-            if os.path.exists(os.path.join(CONFIGS_DIR, fname)):
-                active_configs.append(fname)
-            else:
-                log.warning(f"Config nach Optimierung nicht gefunden: {fname} — übersprungen")
-
-        if not active_configs:
-            log.error("Keine Configs nach Optimierung verfügbar.")
-            return
+        cmd = [sys.executable, PORTFOLIO_SCRIPT,
+               '--capital', str(capital), '--max-dd', str(max_dd), '--auto-write']
+        if start_date not in ('auto', '', None):
+            cmd += ['--start-date', start_date]
+        if end_date not in ('auto', '', None):
+            cmd += ['--end-date', end_date]
+        log.info(f"Starte Portfolio-Optimizer: {' '.join(str(x) for x in cmd)}")
+        proc = subprocess.run(cmd, cwd=PROJECT_ROOT, timeout=7200)
+        rc   = proc.returncode
+        log.info(f"Portfolio-Optimizer beendet (rc={rc}).")
 
         elapsed = (datetime.now() - start_time).total_seconds()
+        h = int(elapsed // 3600)
+        m = int((elapsed % 3600) // 60)
+        s = int(elapsed % 60)
+        dur_str = f"{h}h {m}m {s}s" if h else f"{m}m {s}s"
 
         # Last-run Timestamp speichern
         with open(LAST_RUN_FILE, 'w') as f:
             f.write(datetime.now().isoformat())
 
         if send_tg:
-            h = int(elapsed // 3600)
-            m = int((elapsed % 3600) // 60)
-            s = int(elapsed % 60)
-            dur_str = f"{h}h {m}m {s}s" if h else f"{m}m {s}s"
-            total = len(active_pairs)
+            if rc == 0:
+                try:
+                    with open(SETTINGS_FILE) as sf:
+                        stg = json.load(sf)
+                    active = [s for s in stg.get('live_trading_settings', {})
+                              .get('active_strategies', []) if s.get('active')]
+                    lines = [f"✅ FiBot Portfolio-Optimizer abgeschlossen (Dauer: {dur_str})"]
+                    if active:
+                        lines.append(f"\n✔ Aktives Portfolio ({len(active)} Strategie(n)):")
+                        for s in active:
+                            lines.append(f"• {s['symbol'].split('/')[0]}/{s['timeframe']}")
+                    _telegram_send(bot_token, chat_id, '\n'.join(lines))
+                except Exception:
+                    _telegram_send(bot_token, chat_id,
+                        f"✅ FiBot Portfolio-Optimizer abgeschlossen (Dauer: {dur_str})")
+            else:
+                _telegram_send(bot_token, chat_id,
+                    f"❌ FiBot Portfolio-Optimizer FEHLER (rc={rc}, Dauer: {dur_str})")
 
-            lines = [f"✅ FiBot Auto-Optimizer abgeschlossen (Dauer: {dur_str})", ""]
-
-            kept_lines   = []
-            failed_lines = []
-            for sym, tf in active_pairs:
-                safe = f"{sym.replace('/', '').replace(':', '')}_{tf}"
-                fn   = f"config_{safe}_fib.json"
-                coin = sym.split('/')[0]
-                new_pnl_val = None
-                cfg_path = os.path.join(CONFIGS_DIR, fn)
-                if os.path.exists(cfg_path):
-                    try:
-                        with open(cfg_path) as cf:
-                            new_pnl_val = json.load(cf).get('_backtest', {}).get('pnl_pct')
-                    except Exception:
-                        pass
-                old_val = old_pnl.get(fn)
-                if f"{sym}/{tf}" in opt_failed or new_pnl_val is None:
-                    failed_lines.append(f"• {coin}/{tf}: Optimizer fehlgeschlagen")
-                elif old_val is not None and new_pnl_val < old_val:
-                    failed_lines.append(f"• {coin}/{tf}: existing_better_{old_val:.2f}pct")
-                else:
-                    sign = '+' if new_pnl_val >= 0 else ''
-                    kept_lines.append(f"• {coin}/{tf}: {sign}{new_pnl_val:.2f}% → {fn}")
-
-            lines.append(f"✔ Gespeichert ({len(kept_lines)}/{total}):")
-            lines.extend(kept_lines if kept_lines else ["  — keine Verbesserung"])
-            if failed_lines:
-                lines.append("")
-                lines.append(f"❌ Fehlgeschlagen ({len(failed_lines)}/{total}):")
-                lines.extend(failed_lines)
-
-            _telegram_send(bot_token, chat_id, '\n'.join(lines))
-
-        log.info(f"Auto-Optimierung erfolgreich abgeschlossen in {elapsed / 60:.1f} min.")
+        log.info(f"Auto-Optimierung abgeschlossen in {elapsed / 60:.1f} min.")
 
     except subprocess.TimeoutExpired:
-        log.error("Timeout: Optimierung hat zu lange gedauert (>60 min).")
+        log.error("Timeout: Portfolio-Optimizer hat zu lange gedauert.")
         if send_tg:
-            _telegram_send(bot_token, chat_id, "FiBot Auto-Optimierung: Timeout!")
+            _telegram_send(bot_token, chat_id, "FiBot Portfolio-Optimierung: Timeout!")
     except Exception as e:
         log.error(f"Unerwarteter Fehler: {e}", exc_info=True)
         if send_tg:
-            _telegram_send(bot_token, chat_id, f"FiBot Auto-Optimierung FEHLER: {e}")
+            _telegram_send(bot_token, chat_id, f"FiBot Portfolio-Optimierung FEHLER: {e}")
     finally:
         if os.path.exists(IN_PROGRESS_FILE):
             os.remove(IN_PROGRESS_FILE)
