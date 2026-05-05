@@ -21,7 +21,7 @@ SETTINGS_FILE     = os.path.join(PROJECT_ROOT, 'settings.json')
 CONFIGS_DIR       = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
 LAST_RUN_FILE     = os.path.join(PROJECT_ROOT, '.last_optimization_run')
 IN_PROGRESS_FILE  = os.path.join(PROJECT_ROOT, '.optimization_in_progress')
-PORTFOLIO_SCRIPT  = os.path.join(PROJECT_ROOT, 'run_portfolio_optimizer.py')
+PORTFOLIO_SCRIPT  = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'analysis', 'show_results.py')
 
 log_dir = os.path.join(PROJECT_ROOT, 'logs')
 os.makedirs(log_dir, exist_ok=True)
@@ -219,11 +219,12 @@ def main():
         end_date   = opt_cfg.get('end_date',   'auto')
 
         cmd = [sys.executable, PORTFOLIO_SCRIPT,
-               '--capital', str(capital), '--max-dd', str(max_dd), '--auto-write']
+               '--mode', '3', '--auto',
+               '--capital', str(capital), '--target-max-dd', str(max_dd)]
         if start_date not in ('auto', '', None):
-            cmd += ['--start-date', start_date]
+            cmd += ['--from', start_date]
         if end_date not in ('auto', '', None):
-            cmd += ['--end-date', end_date]
+            cmd += ['--to', end_date]
         log.info(f"Starte Portfolio-Optimizer: {' '.join(str(x) for x in cmd)}")
         proc = subprocess.run(cmd, cwd=PROJECT_ROOT, timeout=7200)
         rc   = proc.returncode

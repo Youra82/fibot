@@ -487,6 +487,31 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
         }, f, indent=2)
     print(f"{GREEN}Optimales Portfolio in '{OPT_RESULTS}' gespeichert.{NC}")
 
+    # ── settings.json im Auto-Modus schreiben ────────────────────────────────
+    if auto:
+        try:
+            new_strategies = []
+            for fname in final_filenames:
+                sd  = strategies_data.get(fname, {})
+                cfg = sd.get('config', {})
+                risk = cfg.get('risk', {})
+                new_strategies.append({
+                    'symbol':             sd.get('symbol', ''),
+                    'timeframe':          sd.get('timeframe', ''),
+                    'leverage':           risk.get('leverage', 10),
+                    'margin_mode':        risk.get('margin_mode', 'isolated'),
+                    'risk_per_entry_pct': risk.get('risk_per_entry_pct', 1.0),
+                    'active':             True,
+                })
+            with open(SETTINGS_FILE) as f:
+                _s = json.load(f)
+            _s.setdefault('live_trading_settings', {})['active_strategies'] = new_strategies
+            with open(SETTINGS_FILE, 'w') as f:
+                json.dump(_s, f, indent=2)
+            print(f'{GREEN}✓ settings.json aktualisiert — {len(new_strategies)} Strategie(n).{NC}')
+        except Exception as _e:
+            print(f'{YELLOW}  settings.json konnte nicht geschrieben werden: {_e}{NC}')
+
     # ── Chart & Excel anbieten ────────────────────────────────────────────────
     if final_sim:
         # Nur Portfolio-Strategien in Chart & Excel
