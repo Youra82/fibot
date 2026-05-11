@@ -4,24 +4,8 @@
     "use_auto_optimizer_results": true,
     "active_strategies": [
       {
-        "symbol": "SOL/USDT:USDT",
-        "timeframe": "30m",
-        "leverage": 2,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 0.5,
-        "active": true
-      },
-      {
-        "symbol": "BTC/USDT:USDT",
-        "timeframe": "4h",
-        "leverage": 2,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 0.5,
-        "active": true
-      },
-      {
-        "symbol": "XRP/USDT:USDT",
-        "timeframe": "2h",
+        "symbol": "AVAX/USDT:USDT",
+        "timeframe": "6h",
         "leverage": 2,
         "margin_mode": "isolated",
         "risk_per_entry_pct": 0.5,
@@ -29,7 +13,7 @@
       },
       {
         "symbol": "ADA/USDT:USDT",
-        "timeframe": "1d",
+        "timeframe": "6h",
         "leverage": 2,
         "margin_mode": "isolated",
         "risk_per_entry_pct": 0.5,
@@ -44,16 +28,16 @@
         "active": true
       },
       {
-        "symbol": "BNB/USDT:USDT",
-        "timeframe": "1h",
+        "symbol": "SOL/USDT:USDT",
+        "timeframe": "6h",
         "leverage": 2,
         "margin_mode": "isolated",
         "risk_per_entry_pct": 0.5,
         "active": true
       },
       {
-        "symbol": "DOGE/USDT:USDT",
-        "timeframe": "1d",
+        "symbol": "ETH/USDT:USDT",
+        "timeframe": "6h",
         "leverage": 2,
         "margin_mode": "isolated",
         "risk_per_entry_pct": 0.5,
@@ -63,7 +47,7 @@
   },
   "optimization_settings": {
     "enabled": true,
-    "start_capital": 15,
+    "start_capital": 100,
     "start_date": "2025-01-01",
     "end_date": "auto",
     "send_telegram_on_completion": true,
