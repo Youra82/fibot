@@ -75,6 +75,44 @@ def update_performance(path: str, result: str, logger):
 
 
 # ---------------------------------------------------------------------------
+# Housekeeper
+# ---------------------------------------------------------------------------
+
+def housekeeper_routine(exchange: Exchange, symbol: str, tracker_path: str, logger) -> bool:
+    """Storniert offene Orders, schließt verwaiste Positionen, leert den Tracker.
+    Wird aufgerufen wenn keine offene Position existiert (nach SL/TP oder Pending-Cancel)."""
+    try:
+        logger.info(f"Housekeeper: Starte Aufräumroutine für {symbol}...")
+        exchange.cancel_all_orders_for_symbol(symbol)
+        time.sleep(1)
+
+        # Sicherheitsnetz: verwaiste Position schließen
+        positions = exchange.fetch_open_positions(symbol)
+        if positions:
+            pos        = positions[0]
+            close_side = 'sell' if pos['side'] == 'long' else 'buy'
+            contracts  = float(pos.get('contracts', 0))
+            logger.warning(f"Housekeeper: Verwaiste Position ({pos['side']} {contracts}) — schließe...")
+            exchange.place_market_order(symbol, close_side, contracts, reduce=True)
+            time.sleep(3)
+            if exchange.fetch_open_positions(symbol):
+                logger.error("Housekeeper: Position konnte nicht geschlossen werden!")
+                return False
+
+        # Tracker leeren falls ein abgeschlossener Trade drin steht
+        tracker_data = read_tracker(tracker_path)
+        if tracker_data.get('status') in ('open', 'pending_entry'):
+            write_tracker(tracker_path, {})
+            logger.info(f"Housekeeper: Tracker für {symbol} geleert.")
+
+        logger.info(f"Housekeeper: {symbol} ist sauber.")
+        return True
+    except Exception as e:
+        logger.error(f"Housekeeper-Fehler: {e}", exc_info=True)
+        return False
+
+
+# ---------------------------------------------------------------------------
 # Position sizing
 # ---------------------------------------------------------------------------
 
@@ -270,7 +308,8 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
 
         return  # Position läuft — nichts weiter tun
 
-    # --- No open position → look for new signal ---
+    # --- No open position → Aufräumen + neues Signal suchen ---
+    housekeeper_routine(exchange, symbol, tracker_path, logger)
     logger.info("Keine offene Position. Suche Fib-Signal...")
 
     df = exchange.fetch_recent_ohlcv(symbol, timeframe, limit=candle_limit)

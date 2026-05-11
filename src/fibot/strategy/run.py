@@ -17,6 +17,7 @@ sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 from fibot.utils.exchange import Exchange
 from fibot.utils.telegram import send_message
 from fibot.utils.trade_manager import full_trade_cycle
+from fibot.utils.guardian import guardian_decorator
 
 
 # ---------------------------------------------------------------------------
@@ -105,22 +106,16 @@ def main():
         logger.critical(f"Initialisierungsfehler: {e}", exc_info=True)
         sys.exit(1)
 
+    guarded_cycle = guardian_decorator(full_trade_cycle)
+
     for account in accounts:
         account_name = account.get('name', 'Standard')
         logger.info(f"Starte FiBot für {symbol} ({timeframe}) | Account: {account_name}")
         try:
             exchange = Exchange(account)
-            full_trade_cycle(exchange, params, telegram_cfg, logger)
+            guarded_cycle(exchange, params, telegram_cfg, logger)
         except ccxt.AuthenticationError:
             logger.critical("Authentifizierungsfehler! API-Keys prüfen.")
-            sys.exit(1)
-        except Exception as e:
-            logger.error(f"Fehler in Trade-Cycle: {e}", exc_info=True)
-            send_message(
-                telegram_cfg.get('bot_token', ''),
-                telegram_cfg.get('chat_id', ''),
-                f"FiBot KRITISCHER FEHLER ({symbol} {timeframe}): {e}"
-            )
             sys.exit(1)
 
     logger.info(f">>> FiBot Lauf abgeschlossen: {symbol} ({timeframe}) <<<")
