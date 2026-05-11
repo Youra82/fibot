@@ -47,6 +47,7 @@
   },
   "optimization_settings": {
     "enabled": true,
+    "num_trials": 100,
     "start_capital": 100,
     "start_date": "2025-01-01",
     "end_date": "auto",
