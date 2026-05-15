@@ -338,13 +338,18 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
                     except Exception as ce:
                         logger.warning(f"Cancel-Orders fehlgeschlagen (ignoriert): {ce}")
                     exchange.place_market_order(symbol, close_side, contracts_pos, reduce=True)
-                    write_tracker(tracker_path, {})
+                    time.sleep(2)
+                    remaining = exchange.fetch_open_positions(symbol)
+                    if not remaining:
+                        write_tracker(tracker_path, {})
+                        logger.info(f"Position {symbol} geschlossen — Tracker geleert.")
+                    else:
+                        logger.error(f"Notschliessung {symbol}: Position noch offen nach Market-Order — Tracker bleibt!")
                     send_message(
                         bot_token, chat_id,
                         f"FiBot NOTSCHLIESSUNG ({symbol}): Preis {current_price:.6f} hat "
                         f"{reason} ({level:.6f}) überschritten. Position geschlossen."
                     )
-                    logger.info(f"Position {symbol} geschlossen — Tracker geleert.")
             except Exception as e:
                 logger.error(f"Fehler beim Preis-Overshoot-Check: {e}")
 
