@@ -283,12 +283,13 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
                             except (ValueError, TypeError):
                                 continue
                     if entry_val and sl_price_val and contracts_pos > 0:
+                        rr = float(params.get('strategy', {}).get('min_rr', 2.0))
                         sl_dist = abs(float(entry_val) - float(sl_price_val))
                         if pos_side == 'long':
-                            recovered_tp = float(entry_val) + 2 * sl_dist
+                            recovered_tp = float(entry_val) + rr * sl_dist
                         else:
-                            recovered_tp = float(entry_val) - 2 * sl_dist
-                        logger.warning(f"TP-Preis rekonstruiert aus Entry/SL (1:2 R:R): {recovered_tp:.4f}")
+                            recovered_tp = float(entry_val) - rr * sl_dist
+                        logger.warning(f"TP-Preis rekonstruiert aus Entry/SL (min_rr={rr}): {recovered_tp:.4f}")
                         try:
                             tp_resp = exchange.place_trigger_market_order(
                                 symbol, close_side, contracts_pos, recovered_tp, reduce=True)
