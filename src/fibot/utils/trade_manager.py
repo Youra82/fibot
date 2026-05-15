@@ -265,7 +265,33 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
                     except Exception as e:
                         logger.error(f"TP-Reparatur fehlgeschlagen: {e}")
                 elif not tp_exists and not tp_price_val:
-                    logger.error("TP fehlt aber TP-Preis unbekannt — manuelle Intervention nötig!")
+                    # Fallback: TP aus Entry + SL rekonstruieren (1:2 R:R)
+                    entry_val = tracker_data.get('entry_price')
+                    if entry_val and sl_price_val and contracts_pos > 0:
+                        sl_dist = abs(float(entry_val) - float(sl_price_val))
+                        if pos_side == 'long':
+                            recovered_tp = float(entry_val) + 2 * sl_dist
+                        else:
+                            recovered_tp = float(entry_val) - 2 * sl_dist
+                        logger.warning(f"TP-Preis rekonstruiert aus Entry/SL (1:2 R:R): {recovered_tp:.4f}")
+                        try:
+                            tp_resp = exchange.place_trigger_market_order(
+                                symbol, close_side, contracts_pos, recovered_tp, reduce=True)
+                            new_tp_id = str(tp_resp.get('id', '')) if tp_resp else ''
+                            tracker_data['tp_order_id'] = new_tp_id
+                            tracker_data['tp1_price'] = recovered_tp
+                            logger.info(f"TP rekonstruiert & repariert @ {recovered_tp:.4f} (ID: {new_tp_id})")
+                            send_message(bot_token, chat_id,
+                                         f"FiBot TP-Rekonstruktion ({symbol}): kein tp1_price im Tracker, "
+                                         f"TP neu berechnet @ {recovered_tp:.4f} (1:2 R:R) und gesetzt.")
+                        except Exception as e:
+                            logger.error(f"TP-Rekonstruktion fehlgeschlagen: {e}")
+                            send_message(bot_token, chat_id,
+                                         f"FiBot ALARM ({symbol}): TP fehlt, Rekonstruktion fehlgeschlagen: {e}")
+                    else:
+                        logger.error("TP fehlt und auch Entry/SL-Preis unbekannt — manuelle Intervention nötig!")
+                        send_message(bot_token, chat_id,
+                                     f"FiBot ALARM ({symbol}): TP fehlt, Preis unbekannt — manuelle Intervention!")
 
                 write_tracker(tracker_path, tracker_data)
                 send_message(bot_token, chat_id,

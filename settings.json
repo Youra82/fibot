@@ -28,7 +28,7 @@
         "active": true
       },
       {
-        "symbol": "SOL/USDT:USDT",
+        "symbol": "ETH/USDT:USDT",
         "timeframe": "6h",
         "leverage": 2,
         "margin_mode": "isolated",
@@ -36,7 +36,7 @@
         "active": true
       },
       {
-        "symbol": "ETH/USDT:USDT",
+        "symbol": "SOL/USDT:USDT",
         "timeframe": "6h",
         "leverage": 2,
         "margin_mode": "isolated",
