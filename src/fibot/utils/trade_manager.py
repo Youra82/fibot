@@ -266,7 +266,22 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
                         logger.error(f"TP-Reparatur fehlgeschlagen: {e}")
                 elif not tp_exists and not tp_price_val:
                     # Fallback: TP aus Entry + SL rekonstruieren (1:2 R:R)
-                    entry_val = tracker_data.get('entry_price')
+                    # entry_val: Tracker bevorzugt, sonst direkt aus Position
+                    entry_val = tracker_data.get('entry_price') or (entry_price if entry_price > 0 else None)
+                    # sl_price_val: Tracker bevorzugt, sonst aus dem noch vorhandenen SL-Trigger-Order
+                    if not sl_price_val and sl_exists:
+                        for _o in trigger_orders:
+                            _trig = (_o.get('stopPrice') or _o.get('triggerPrice')
+                                     or _o.get('info', {}).get('triggerPrice')
+                                     or _o.get('info', {}).get('planPrice'))
+                            try:
+                                _trig_f = float(_trig)
+                                if (pos_side == 'long' and _trig_f < entry_price) or \
+                                   (pos_side == 'short' and _trig_f > entry_price):
+                                    sl_price_val = _trig_f
+                                    break
+                            except (ValueError, TypeError):
+                                continue
                     if entry_val and sl_price_val and contracts_pos > 0:
                         sl_dist = abs(float(entry_val) - float(sl_price_val))
                         if pos_side == 'long':
