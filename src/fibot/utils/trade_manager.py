@@ -291,27 +291,48 @@ def _generate_fib_chart_png(df: pd.DataFrame, signal: FibSignal, symbol: str,
     _price_tag(entry, 'Entry', '#ffd700')
     _price_tag(sl,    'SL',    '#ff1744')
 
-    # 8. Info-Box oben links
+    # 8. Struktur-Trendlinien
+    struct = signal.structure
+    n_struct = struct.n_bars  # Anzahl Bars im Struktur-Fenster (z.B. 60)
+    if n_struct > 0 and struct.type != 'none':
+        # Offset: Struktur-Index des ersten sichtbaren Display-Bars
+        struct_offset = n_struct - n_candles
+        xs = list(range(n))
+        upper_ys = [struct.upper_slope * (i + struct_offset) + struct.upper_intercept for i in xs]
+        lower_ys = [struct.lower_slope * (i + struct_offset) + struct.lower_intercept for i in xs]
+        # Nur zeichnen wo Werte im Y-Bereich liegen
+        ax.plot(xs, upper_ys, color='#ef9a9a', linewidth=0.9, linestyle='--',
+                alpha=0.6, zorder=5, label='Resistance')
+        ax.plot(xs, lower_ys, color='#a5d6a7', linewidth=0.9, linestyle='--',
+                alpha=0.6, zorder=5, label='Support')
+
+    # 9. Info-Box oben links mit Signal-Kriterien
     side_label = 'LONG ▲' if side == 'long' else 'SHORT ▼'
     sl_pct  = abs(entry - sl) / entry * 100
     tp_pct  = abs(tp - entry) / entry * 100
     rr      = tp_pct / sl_pct if sl_pct > 0 else 0
-    struct  = signal.structure
+
+    # Signal-Kriterien aus reason parsen ("SHORT | K1 | K2 | ..." → ["K1", "K2", ...])
+    reason_parts = signal.reason.split(' | ') if signal.reason else []
+    # Erstes Element ist die Richtung ("LONG"/"SHORT") → überspringen
+    criteria = [p for p in reason_parts[1:] if p and not p.startswith('R:R')]
+    criteria = criteria[:4]  # max 4 Zeilen
+
     info_lines = [
-        f"{side_label}   Score: {signal.score:.1f}/10",
-        f"R:R:     1:{rr:.1f}",
+        f"{side_label}   Score: {signal.score:.1f}/10   R:R 1:{rr:.1f}",
         f"Struktur: {struct.type} ({struct.bias})",
-        f"Swing H: {fibs.swing_high:.6g}",
-        f"Swing L: {fibs.swing_low:.6g}",
+        "─" * 32,
+    ] + [f"✓ {c}" for c in criteria] + [
+        f"Swing H: {fibs.swing_high:.6g}   Swing L: {fibs.swing_low:.6g}",
     ]
     ax.text(0.01, 0.98, '\n'.join(info_lines),
-            transform=ax.transAxes, fontsize=8, va='top', ha='left',
+            transform=ax.transAxes, fontsize=7.5, va='top', ha='left',
             color='#cccccc', fontfamily='monospace',
             bbox=dict(facecolor='#1a2332', edgecolor='#2a3a4a',
                       alpha=0.88, boxstyle='round,pad=0.5'),
             zorder=9)
 
-    # 9. Styling
+    # 11. Styling
     ax.set_title(
         f"FIBOT  |  {symbol}  {timeframe}  |  {side_label}  |  letzte {n} Kerzen",
         color='#e0e0e0', fontsize=11, pad=10,
