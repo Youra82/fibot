@@ -17,7 +17,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
 from fibot.utils.exchange import Exchange
-from fibot.utils.telegram import send_message
+from fibot.utils.telegram import send_message, send_photo
 from fibot.strategy.fibonacci_logic import generate_signal, signal_summary, FibSignal
 
 TRACKER_DIR = os.path.join(PROJECT_ROOT, 'artifacts', 'tracker')
@@ -156,6 +156,206 @@ def calc_position_size(balance: float, risk_pct: float, entry: float,
 
     logger.info(f"Size: {contracts:.6f} Contracts | Notional: {notional:.2f} USDT | Risiko: {risk_amount:.2f} USDT")
     return contracts
+
+
+# ---------------------------------------------------------------------------
+# Chart-Generierung: Fibonacci-Kerzendiagramm mit Levels + Entry/SL/TP
+# ---------------------------------------------------------------------------
+
+def _generate_fib_chart_png(df: pd.DataFrame, signal: FibSignal, symbol: str,
+                              timeframe: str, n_candles: int = 40) -> Optional[str]:
+    """
+    Zeichnet Kerzendiagramm mit Fibonacci-Grid, Entry-Zone und Entry/SL/TP-Tags.
+    Gibt Pfad zur temporaeren PNG-Datei zurueck (oder None bei Fehler).
+    """
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+    except ImportError:
+        return None
+
+    if df is None or df.empty:
+        return None
+
+    from datetime import timezone
+
+    display_df = df[['open', 'high', 'low', 'close']].iloc[-n_candles:].reset_index(drop=True)
+    n = len(display_df)
+    if n == 0:
+        return None
+
+    opens  = display_df['open'].values
+    highs  = display_df['high'].values
+    lows   = display_df['low'].values
+    closes = display_df['close'].values
+
+    entry  = signal.entry_price
+    sl     = signal.sl_price
+    tp     = signal.tp1_price
+    fibs   = signal.fib_levels
+    side   = signal.direction
+
+    fig, ax = plt.subplots(figsize=(14, 7))
+    fig.patch.set_facecolor('#0d1117')
+    ax.set_facecolor('#0d1117')
+
+    bar_w = 0.6
+
+    # 1. Kerzen
+    for i in range(n):
+        o, h, l, c = opens[i], highs[i], lows[i], closes[i]
+        color = '#26a69a' if c >= o else '#ef5350'
+        ax.plot([i, i], [l, h], color=color, linewidth=0.8, zorder=2)
+        body_h = max(abs(c - o), (h - l) * 0.005)
+        ax.add_patch(mpatches.FancyBboxPatch(
+            (i - bar_w / 2, min(o, c)), bar_w, body_h,
+            boxstyle="square,pad=0", linewidth=0, facecolor=color, zorder=3,
+        ))
+
+    # 2. Y-Limits
+    y_min = float(lows.min())
+    y_max = float(highs.max())
+    for p in [entry, sl, tp, fibs.swing_high, fibs.swing_low]:
+        if p:
+            y_min = min(y_min, float(p) * 0.999)
+            y_max = max(y_max, float(p) * 1.001)
+    margin = (y_max - y_min) * 0.15
+    y_lo, y_hi = y_min - margin, y_max + margin
+    ax.set_xlim(-1, n + 1)
+    ax.set_ylim(y_lo, y_hi)
+
+    def _in_range(price):
+        return y_lo < float(price) < y_hi
+
+    # 3. Fibonacci-Grid
+    FIB_STYLE = {
+        '0.0':   ('#ffffff', 0.5, '--'),
+        '23.6':  ('#90caf9', 0.4, ':'),
+        '38.2':  ('#ffd700', 0.7, '--'),
+        '50.0':  ('#ce93d8', 0.5, '--'),
+        '61.8':  ('#ffd700', 0.7, '--'),
+        '78.6':  ('#90caf9', 0.4, ':'),
+        '100.0': ('#ffffff', 0.5, '--'),
+        '127.2': ('#80cbc4', 0.4, ':'),
+        '161.8': ('#00e676', 0.6, '--'),
+    }
+    for key, price in fibs.levels.items():
+        if not _in_range(price):
+            continue
+        color, alpha, ls = FIB_STYLE.get(key, ('#888888', 0.3, ':'))
+        ax.axhline(price, color=color, linewidth=0.7, linestyle=ls, alpha=alpha, zorder=4)
+        ax.text(n + 0.2, price, f' {key}%', color=color, fontsize=7,
+                va='center', alpha=0.85, zorder=5)
+
+    # 4. Entry-Zone shading (38.2–61.8% des Fib-Grids)
+    if side == 'long':
+        zone_lo = fibs.levels.get('38.2', 0)
+        zone_hi = fibs.levels.get('61.8', 0)
+    else:
+        zone_lo = fibs.levels.get('61.8', 0)
+        zone_hi = fibs.levels.get('38.2', 0)
+    if zone_lo and zone_hi:
+        ax.axhspan(min(zone_lo, zone_hi), max(zone_lo, zone_hi),
+                   color='#ffd700', alpha=0.06, zorder=1)
+
+    # 5. Risiko/Reward-Zonen
+    ax.axhspan(min(sl, entry), max(sl, entry), color='#ff1744', alpha=0.07, zorder=1)
+    ax.axhspan(min(tp, entry), max(tp, entry), color='#00c853', alpha=0.07, zorder=1)
+
+    # 6. Swing High / Low Marker
+    if _in_range(fibs.swing_high):
+        ax.axhline(fibs.swing_high, color='#ef9a9a', linewidth=0.6,
+                   linestyle=':', alpha=0.5, zorder=4)
+        ax.text(0.2, fibs.swing_high, ' Swing H', color='#ef9a9a',
+                fontsize=7, va='bottom', alpha=0.75, zorder=5)
+    if _in_range(fibs.swing_low):
+        ax.axhline(fibs.swing_low, color='#a5d6a7', linewidth=0.6,
+                   linestyle=':', alpha=0.5, zorder=4)
+        ax.text(0.2, fibs.swing_low, ' Swing L', color='#a5d6a7',
+                fontsize=7, va='top', alpha=0.75, zorder=5)
+
+    # 7. Entry/SL/TP Preis-Tags
+    def _price_tag(price, label, color, lw=1.5, ls='--'):
+        if not _in_range(price):
+            return
+        ax.axhline(price, color=color, linewidth=lw, linestyle=ls, zorder=6)
+        ax.text(n - 0.3, price, f'  {label}: {price:.6g}  ',
+                color='#0d1117', fontsize=8.5, va='center', ha='right',
+                fontweight='bold', zorder=8,
+                bbox=dict(facecolor=color, edgecolor='none', alpha=0.92,
+                          boxstyle='square,pad=0.25'))
+
+    _price_tag(tp,    'TP',    '#00c853')
+    _price_tag(entry, 'Entry', '#ffd700')
+    _price_tag(sl,    'SL',    '#ff1744')
+
+    # 8. Info-Box oben links
+    side_label = 'LONG ▲' if side == 'long' else 'SHORT ▼'
+    sl_pct  = abs(entry - sl) / entry * 100
+    tp_pct  = abs(tp - entry) / entry * 100
+    rr      = tp_pct / sl_pct if sl_pct > 0 else 0
+    struct  = signal.structure
+    info_lines = [
+        f"{side_label}   Score: {signal.score:.1f}/10",
+        f"R:R:     1:{rr:.1f}",
+        f"Struktur: {struct.type} ({struct.bias})",
+        f"Swing H: {fibs.swing_high:.6g}",
+        f"Swing L: {fibs.swing_low:.6g}",
+    ]
+    ax.text(0.01, 0.98, '\n'.join(info_lines),
+            transform=ax.transAxes, fontsize=8, va='top', ha='left',
+            color='#cccccc', fontfamily='monospace',
+            bbox=dict(facecolor='#1a2332', edgecolor='#2a3a4a',
+                      alpha=0.88, boxstyle='round,pad=0.5'),
+            zorder=9)
+
+    # 9. Styling
+    ax.set_title(
+        f"FIBOT  |  {symbol}  {timeframe}  |  {side_label}  |  letzte {n} Kerzen",
+        color='#e0e0e0', fontsize=11, pad=10,
+    )
+    ax.tick_params(colors='#888888', labelsize=8)
+    for spine in ax.spines.values():
+        spine.set_edgecolor('#2a3a4a')
+    ax.set_xticks([])
+    ax.yaxis.tick_right()
+    ax.grid(axis='y', color='#1e2a3a', linewidth=0.4, zorder=0)
+    plt.tight_layout()
+
+    tmp_dir = os.path.join(PROJECT_ROOT, 'artifacts', 'tmp')
+    os.makedirs(tmp_dir, exist_ok=True)
+    from datetime import datetime, timezone
+    ts       = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+    sym_safe = symbol.replace('/', '-').replace(':', '-')
+    path     = os.path.join(tmp_dir, f'fib_entry_{sym_safe}_{timeframe}_{ts}.png')
+    fig.savefig(path, dpi=130, bbox_inches='tight', facecolor=fig.get_facecolor())
+    plt.close(fig)
+    return path
+
+
+def _send_fib_chart(df: pd.DataFrame, signal: FibSignal, symbol: str, timeframe: str,
+                     telegram_config: dict, logger):
+    """Generiert Fibonacci-Chart-PNG und sendet es via Telegram."""
+    bot_token = telegram_config.get('bot_token', '')
+    chat_id   = telegram_config.get('chat_id', '')
+    if not bot_token or not chat_id:
+        return
+    try:
+        path = _generate_fib_chart_png(df, signal, symbol, timeframe)
+        if path and os.path.exists(path):
+            side_label = 'LONG' if signal.direction == 'long' else 'SHORT'
+            caption = (
+                f"FIBOT | {symbol} ({timeframe})\n"
+                f"{side_label} @ {signal.entry_price:.6g}  |  "
+                f"SL: {signal.sl_price:.6g}  |  TP: {signal.tp1_price:.6g}  |  "
+                f"Score: {signal.score:.1f}/10"
+            )
+            send_photo(bot_token, chat_id, path, caption)
+            os.remove(path)
+    except Exception as e:
+        logger.warning(f"Fib-Chart senden fehlgeschlagen: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -449,6 +649,7 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         summary = signal_summary(signal, symbol, timeframe)
         send_message(bot_token, chat_id,
                      f"FiBot ENTRY\n{summary}\n\nFill: {actual_entry:.4f}")
+        _send_fib_chart(df, signal, symbol, timeframe, telegram_config, logger)
     else:
         # Order pending — save as pending, will be checked next cycle
         _save_trade_state(tracker_path, signal, signal.entry_price, contracts,
@@ -457,6 +658,7 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         summary = signal_summary(signal, symbol, timeframe)
         send_message(bot_token, chat_id,
                      f"FiBot ORDER GESETZT\n{summary}\n\nOrder ID: {entry_order_id}")
+        _send_fib_chart(df, signal, symbol, timeframe, telegram_config, logger)
 
 
 # ---------------------------------------------------------------------------
