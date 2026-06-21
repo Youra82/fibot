@@ -777,6 +777,25 @@ tail -f logs/auto_optimizer.log
 grep -i "ERROR" logs/fibot_BTCUSDTUSDT_4h.log
 ```
 
+#### Chart-Simulation
+
+Aktuellen Fibonacci-Chart mit Fib-Grid, Struktur-Trendlinien und simulierten Entry/SL/TP-Levels per Telegram senden — **ohne echten Trade**. Zeigt die Signal-Kriterien (RSI, Volumen, Struktur, Breakout) und die Trendlinien des erkannten Musters (Wedge, Triangle, Channel).
+
+```bash
+# Alle aktiven Strategien aus settings.json
+.venv/bin/python show_chart.py
+
+# Einzelnes Symbol/Timeframe
+.venv/bin/python show_chart.py --symbol ETH/USDT:USDT --timeframe 6h
+
+# Richtung erzwingen (ignoriert echtes Fib-Signal)
+.venv/bin/python show_chart.py --symbol ETH/USDT:USDT --timeframe 6h --side short
+```
+
+Gibt es ein echtes Fib-Signal, werden die tatsächlichen Entry/SL/TP-Werte verwendet. Andernfalls wird mit ATR-basiertem SL/TP simuliert.
+
+---
+
 #### Manuell testen
 
 ```bash
