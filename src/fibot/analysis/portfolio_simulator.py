@@ -167,14 +167,17 @@ def run_portfolio_simulation(start_capital: float,
 
                 # Notional aus aktuellem equity × risk_pct / sl_pct (dynamisch, wie Einzel-Backtester)
                 notional = (equity * risk_pct) / sl_pct
-                margin   = notional / leverage
+
+                # Margin-Cap: auf verfügbare Margin kappen (wie live bot)
+                used_margin      = sum(p['margin'] for p in open_positions.values())
+                available_margin = equity - used_margin
+                if available_margin <= 0:
+                    continue
+                max_notional = available_margin * leverage
+                notional     = min(notional, max_notional)
+                margin       = notional / leverage
 
                 if notional < MIN_NOTIONAL:
-                    continue
-
-                # Margin-Check: neue Position + bereits belegte Margin darf equity nicht überschreiten
-                used_margin = sum(p['margin'] for p in open_positions.values())
-                if used_margin + margin > equity:
                     continue
 
                 open_positions[fname] = {
