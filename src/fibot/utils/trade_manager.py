@@ -300,7 +300,9 @@ def _generate_fib_chart_png(df: pd.DataFrame, signal: FibSignal, symbol: str,
         xs = list(range(n))
         upper_ys = [struct.upper_slope * (i + struct_offset) + struct.upper_intercept for i in xs]
         lower_ys = [struct.lower_slope * (i + struct_offset) + struct.lower_intercept for i in xs]
-        # Nur zeichnen wo Werte im Y-Bereich liegen
+        # NaN für Werte außerhalb des Y-Bereichs → Linie bricht ab statt aus dem Chart zu schießen
+        upper_ys = [y if y_lo <= y <= y_hi else float('nan') for y in upper_ys]
+        lower_ys = [y if y_lo <= y <= y_hi else float('nan') for y in lower_ys]
         ax.plot(xs, upper_ys, color='#ef9a9a', linewidth=0.9, linestyle='--',
                 alpha=0.6, zorder=5, label='Resistance')
         ax.plot(xs, lower_ys, color='#a5d6a7', linewidth=0.9, linestyle='--',
