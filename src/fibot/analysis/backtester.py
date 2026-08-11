@@ -25,6 +25,38 @@ logger = logging.getLogger(__name__)
 MIN_NOTIONAL_USDT = 5.0
 FEE_PCT           = 0.06 / 100   # Bitget Taker-Gebühr (je Seite)
 
+# Feinere Timeframe je Strategie-Timeframe fuer die SL/TP-Intrabar-Reihenfolgen-
+# Aufloesung (oraclebot-Muster).
+FINE_TF_MAP = {
+    '5m': '1m', '15m': '1m', '30m': '1m',
+    '1h': '5m', '2h': '5m',
+    '4h': '15m', '6h': '15m',
+    '1d': '1h',
+}
+
+
+def _resolve_ambiguous_exit(fine_slice, sl_price, tp_price, side):
+    """
+    Wenn eine Coarse-Kerze SOWOHL SL als auch TP beruehrt haette, per feineren
+    Kerzen die tatsaechliche Reihenfolge aufloesen, statt SL blind zu
+    bevorzugen (bisherige Konvention).
+    Rueckgabe: (exit_price, result_str) oder (None, None).
+    """
+    if fine_slice is None or fine_slice.empty:
+        return None, None
+    for _, bar in fine_slice.iterrows():
+        if side == 'long':
+            if bar['low'] <= sl_price:
+                return sl_price, 'loss'
+            if bar['high'] >= tp_price:
+                return tp_price, 'win'
+        else:
+            if bar['high'] >= sl_price:
+                return sl_price, 'loss'
+            if bar['low'] <= tp_price:
+                return tp_price, 'win'
+    return None, None
+
 
 # ---------------------------------------------------------------------------
 # Trade record
@@ -125,7 +157,8 @@ def run_backtest(df: pd.DataFrame, config: dict,
                   start_capital: float = 1000.0,
                   symbol: str = "UNKNOWN",
                   timeframe: str = "4h",
-                  min_contracts: float = 0.0) -> BacktestResult:
+                  min_contracts: float = 0.0,
+                  fine_data: pd.DataFrame = None) -> BacktestResult:
     """
     Walk-forward backtest on df.
     For each bar (after warm-up), generate a signal on df[:i].
@@ -169,6 +202,7 @@ def run_backtest(df: pd.DataFrame, config: dict,
     sig_tp1_arr   = df['_sig_tp1'].values
     sig_score_arr = df['_sig_score'].values
     timestamps    = df.index
+    coarse_duration = df.index[1] - df.index[0] if len(df.index) >= 2 else None
 
     for i in range(candle_warmup, len(df)):
         ts = timestamps[i]
@@ -178,23 +212,29 @@ def run_backtest(df: pd.DataFrame, config: dict,
             high_i = high_arr[i]
             low_i  = low_arr[i]
 
-            hit_sl  = False
-            hit_tp  = False
-
             if open_trade.direction == 'long':
-                if low_i  <= open_trade.sl:
-                    hit_sl = True
-                    exit_p = open_trade.sl
-                elif high_i >= open_trade.tp1:
-                    hit_tp = True
-                    exit_p = open_trade.tp1
+                hit_sl = low_i  <= open_trade.sl
+                hit_tp = high_i >= open_trade.tp1
             else:  # short
-                if high_i >= open_trade.sl:
-                    hit_sl = True
-                    exit_p = open_trade.sl
-                elif low_i  <= open_trade.tp1:
-                    hit_tp = True
-                    exit_p = open_trade.tp1
+                hit_sl = high_i >= open_trade.sl
+                hit_tp = low_i  <= open_trade.tp1
+
+            if hit_sl and hit_tp:
+                # Beide Level in derselben Kerze moeglich -- per Fein-Daten
+                # (falls vorhanden) real aufloesen statt SL blind zu bevorzugen
+                # (oraclebot-Muster).
+                exit_p = None
+                if fine_data is not None and coarse_duration is not None:
+                    fine_slice = fine_data.loc[(fine_data.index >= ts) & (fine_data.index < ts + coarse_duration)]
+                    exit_p, _resolved = _resolve_ambiguous_exit(fine_slice, open_trade.sl, open_trade.tp1, open_trade.direction)
+                    hit_tp = (_resolved == 'win')
+                if exit_p is None:
+                    exit_p = open_trade.sl  # Fallback: alte SL-first-Konvention
+                    hit_tp = False
+            elif hit_sl:
+                exit_p = open_trade.sl
+            elif hit_tp:
+                exit_p = open_trade.tp1
 
             if hit_sl or hit_tp:
                 price_diff = exit_p - open_trade.entry
@@ -575,8 +615,19 @@ Beispiele:
             _markets.get(args.symbol, {}).get('limits', {}).get('amount', {}).get('min', 0.0) or 0.0)
     except Exception:
         _min_contracts = 0.0
+
+    _fine_data = None
+    _fine_tf = FINE_TF_MAP.get(args.timeframe)
+    if _fine_tf:
+        try:
+            _fine_data = load_ohlcv(args.symbol, _fine_tf, start_date, end_date)
+            if _fine_data is None or _fine_data.empty:
+                _fine_data = None
+        except Exception:
+            _fine_data = None
+
     result = run_backtest(df, config, args.capital, args.symbol, args.timeframe,
-                          min_contracts=_min_contracts)
+                          min_contracts=_min_contracts, fine_data=_fine_data)
     print("\n" + result.summary())
 
     out_dir = os.path.join(PROJECT_ROOT, 'artifacts', 'results')

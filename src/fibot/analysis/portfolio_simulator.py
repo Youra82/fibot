@@ -18,6 +18,29 @@ FEE_PCT     = 0.06 / 100   # Bitget Taker-Gebühr (je Seite)
 MIN_NOTIONAL = 5.0          # Bitget Minimum
 
 
+def _resolve_ambiguous_exit(fine_slice, sl_price, tp_price, side):
+    """
+    Wenn eine Coarse-Kerze SOWOHL SL als auch TP beruehrt haette, per feineren
+    Kerzen die tatsaechliche Reihenfolge aufloesen, statt SL blind zu
+    bevorzugen (bisherige Konvention, oraclebot-Muster).
+    Rueckgabe: exit_price oder None.
+    """
+    if fine_slice is None or fine_slice.empty:
+        return None
+    for _, bar in fine_slice.iterrows():
+        if side == 'long':
+            if bar['low'] <= sl_price:
+                return sl_price
+            if bar['high'] >= tp_price:
+                return tp_price
+        else:
+            if bar['high'] >= sl_price:
+                return sl_price
+            if bar['low'] <= tp_price:
+                return tp_price
+    return None
+
+
 def run_portfolio_simulation(start_capital: float,
                               strategies_data: dict,
                               start_date: str,
@@ -57,11 +80,16 @@ def run_portfolio_simulation(start_capital: float,
             except Exception:
                 continue
 
+        fine_df = strat.get('fine_df')
+        coarse_duration = df.index[1] - df.index[0] if len(df.index) >= 2 else None
+
         processed[fname] = {
             'symbol':    strat['symbol'],
             'timeframe': strat['timeframe'],
             'df':        df,
             'risk':      strat['config'].get('risk', {}),
+            'fine_df':   fine_df,
+            'coarse_duration': coarse_duration,
         }
 
     if not processed:
@@ -102,13 +130,29 @@ def run_portfolio_simulation(start_capital: float,
             if ts <= pos['entry_ts']:
                 continue
 
-            exit_price = None
             if pos['direction'] == 'long':
-                if candle['low']  <= pos['sl']:  exit_price = pos['sl']
-                elif candle['high'] >= pos['tp']: exit_price = pos['tp']
+                hit_sl = candle['low']  <= pos['sl']
+                hit_tp = candle['high'] >= pos['tp']
             else:
-                if candle['high'] >= pos['sl']:  exit_price = pos['sl']
-                elif candle['low']  <= pos['tp']: exit_price = pos['tp']
+                hit_sl = candle['high'] >= pos['sl']
+                hit_tp = candle['low']  <= pos['tp']
+
+            exit_price = None
+            if hit_sl and hit_tp:
+                # Beide Level in derselben Kerze moeglich -- per Fein-Daten
+                # (falls vorhanden) real aufloesen statt SL blind zu bevorzugen
+                # (oraclebot-Muster).
+                fine_df = strat.get('fine_df')
+                coarse_duration = strat.get('coarse_duration')
+                if fine_df is not None and coarse_duration is not None:
+                    fine_slice = fine_df.loc[(fine_df.index >= ts) & (fine_df.index < ts + coarse_duration)]
+                    exit_price = _resolve_ambiguous_exit(fine_slice, pos['sl'], pos['tp'], pos['direction'])
+                if exit_price is None:
+                    exit_price = pos['sl']  # Fallback: alte SL-first-Konvention
+            elif hit_sl:
+                exit_price = pos['sl']
+            elif hit_tp:
+                exit_price = pos['tp']
 
             if exit_price is not None:
                 lev = pos.get('leverage', 1)

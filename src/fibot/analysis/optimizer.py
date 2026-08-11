@@ -24,7 +24,7 @@ except ImportError:
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from fibot.analysis.backtester import run_backtest, load_ohlcv, auto_days_for_timeframe
+from fibot.analysis.backtester import run_backtest, load_ohlcv, auto_days_for_timeframe, FINE_TF_MAP
 
 logging.basicConfig(level=logging.WARNING, format='%(levelname)s %(message)s')
 logging.getLogger('optuna').setLevel(logging.WARNING)
@@ -147,7 +147,7 @@ def _get_capital_ranges(capital: float, max_dd: float = 30.0) -> dict:
 # Objective für Optuna (Closure — thread-safe für n_jobs > 1)
 # ---------------------------------------------------------------------------
 
-def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, min_contracts, _stats: list):
+def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, min_contracts, _stats: list, fine_data=None):
     """
     _stats: gemeinsame Liste [max_trades_seen, n_valid_eff_risk, n_too_few_trades, n_high_dd]
     Wird von allen Trials aktualisiert — erlaubt Diagnose-Ausgabe nach Abschluss.
@@ -208,7 +208,7 @@ def _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, min_contract
 
         try:
             result = run_backtest(df, config, capital, symbol, timeframe,
-                                  min_contracts=min_contracts)
+                                  min_contracts=min_contracts, fine_data=fine_data)
         except Exception:
             return -999.0
 
@@ -273,6 +273,19 @@ def optimize(symbol: str, timeframe: str,
         return None
     print(f"  {len(df)} Kerzen geladen.")
 
+    fine_data = None
+    fine_tf = FINE_TF_MAP.get(timeframe)
+    if fine_tf:
+        try:
+            fine_data = load_ohlcv(symbol, fine_tf, start_date, end_date)
+            if fine_data is None or fine_data.empty:
+                fine_data = None
+            else:
+                print(f"  Fein-Daten geladen: {fine_tf} ({len(fine_data)} Kerzen).")
+        except Exception as _e:
+            print(f"  Warnung: Fein-Daten-Abruf ({fine_tf}) fehlgeschlagen ({_e}).")
+            fine_data = None
+
     study = optuna.create_study(
         direction="maximize",
         sampler=optuna.samplers.TPESampler(seed=42),
@@ -281,7 +294,7 @@ def optimize(symbol: str, timeframe: str,
 
     # _stats: [max_trades_seen, n_eff_risk_pruned, n_too_few_trades, n_high_dd, best_dd_seen]
     _stats = [0, 0, 0, 0, float('inf')]
-    objective = _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, min_contracts, _stats)
+    objective = _make_objective(df, symbol, timeframe, capital, max_dd, min_wr, min_contracts, _stats, fine_data=fine_data)
     cores_str = "alle Kerne" if n_jobs == -1 else f"{n_jobs} Kern(e)"
     print(f"  Optimiere {n_trials} Trials ({cores_str})...")
     study.optimize(objective, n_trials=n_trials, show_progress_bar=True, n_jobs=n_jobs)
@@ -340,7 +353,7 @@ def optimize(symbol: str, timeframe: str,
     # Backtest mit best config für finale Metriken
     try:
         result = run_backtest(df, config, capital, symbol, timeframe,
-                              min_contracts=min_contracts)
+                              min_contracts=min_contracts, fine_data=fine_data)
         config["_backtest"] = {
             "pnl_pct":       round(result.pnl_pct, 2),
             "win_rate":      round(result.win_rate, 1),

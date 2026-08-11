@@ -49,7 +49,7 @@ def _scan_configs() -> list:
 
 
 def _build_strategies_data(config_files: list, start_date: str, end_date: str) -> dict:
-    from fibot.analysis.backtester import load_ohlcv
+    from fibot.analysis.backtester import load_ohlcv, FINE_TF_MAP
     strategies_data = {}
     for path in tqdm(config_files, desc='Lade Configs & Daten'):
         fname = os.path.basename(path)
@@ -65,11 +65,21 @@ def _build_strategies_data(config_files: list, start_date: str, end_date: str) -
             if df is None or df.empty or len(df) < 50:
                 print(f"  {Y}Uebersprungen (keine Daten): {fname}{NC}")
                 continue
+            fine_df = None
+            fine_tf = FINE_TF_MAP.get(timeframe)
+            if fine_tf:
+                try:
+                    fine_df = load_ohlcv(symbol, fine_tf, start_date, end_date)
+                    if fine_df is None or fine_df.empty:
+                        fine_df = None
+                except Exception:
+                    fine_df = None
             strategies_data[fname] = {
                 'symbol':    symbol,
                 'timeframe': timeframe,
                 'df':        df,
                 'config':    config,
+                'fine_df':   fine_df,
             }
         except Exception as e:
             print(f"  {Y}Fehler bei {fname}: {e}{NC}")
