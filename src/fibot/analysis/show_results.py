@@ -43,7 +43,7 @@ NC     = '\033[0m'
 # ---------------------------------------------------------------------------
 
 def run_all_configs_isolated(date_from: str, date_to: str, capital: float):
-    from fibot.analysis.backtester import run_backtest, load_ohlcv, FINE_TF_MAP
+    from fibot.analysis.backtester import run_backtest, load_ohlcv, FINE_TF_MAP, LazyFineData
 
     if not os.path.isdir(CONFIGS_DIR):
         print(f"{RED}Kein Configs-Verzeichnis: {CONFIGS_DIR}{NC}")
@@ -78,15 +78,8 @@ def run_all_configs_isolated(date_from: str, date_to: str, capital: float):
             print(f"  {YELLOW}Keine Daten — übersprungen.{NC}")
             continue
 
-        fine_data = None
         fine_tf = FINE_TF_MAP.get(timeframe)
-        if fine_tf:
-            try:
-                fine_data = load_ohlcv(symbol, fine_tf, date_from, date_to)
-                if fine_data is None or fine_data.empty:
-                    fine_data = None
-            except Exception:
-                fine_data = None
+        fine_data = LazyFineData(symbol, fine_tf) if fine_tf else None
 
         result = run_backtest(df, config, capital, symbol, timeframe,
                               min_contracts=_fetch_min_contracts(symbol), fine_data=fine_data)
@@ -125,7 +118,7 @@ def run_all_configs_isolated(date_from: str, date_to: str, capital: float):
 # ---------------------------------------------------------------------------
 
 def run_manual_portfolio(filenames: list, date_from: str, date_to: str, capital: float):
-    from fibot.analysis.backtester import run_backtest, load_ohlcv, FINE_TF_MAP
+    from fibot.analysis.backtester import run_backtest, load_ohlcv, FINE_TF_MAP, LazyFineData
 
     print(f"\n--- FiBot Manuelle Portfolio-Simulation ---")
     print(f"Zeitraum: {date_from} bis {date_to} | Startkapital: {capital:.0f} USDT\n")
@@ -153,15 +146,8 @@ def run_manual_portfolio(filenames: list, date_from: str, date_to: str, capital:
             print(f"  {YELLOW}Keine Daten — übersprungen.{NC}")
             continue
 
-        fine_data = None
         fine_tf = FINE_TF_MAP.get(timeframe)
-        if fine_tf:
-            try:
-                fine_data = load_ohlcv(symbol, fine_tf, date_from, date_to)
-                if fine_data is None or fine_data.empty:
-                    fine_data = None
-            except Exception:
-                fine_data = None
+        fine_data = LazyFineData(symbol, fine_tf) if fine_tf else None
 
         result = run_backtest(df, config, capital, symbol, timeframe,
                               min_contracts=_fetch_min_contracts(symbol), fine_data=fine_data)
@@ -227,7 +213,7 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
                pro Kandidat: gemeinsames Kapital, chronologisch, Margin-Check.
     Coin-Kollision: kein Coin doppelt (BTC 4h + BTC 1h = blockiert).
     """
-    from fibot.analysis.backtester import run_backtest, load_ohlcv, FINE_TF_MAP
+    from fibot.analysis.backtester import run_backtest, load_ohlcv, FINE_TF_MAP, LazyFineData
     from fibot.strategy.fibonacci_logic import precompute_indicators, precompute_all_signals
     from fibot.analysis.portfolio_simulator import run_portfolio_simulation
 
@@ -292,15 +278,8 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
         df = precompute_indicators(df, config)
         df = precompute_all_signals(df, config)
 
-        fine_data = None
         fine_tf = FINE_TF_MAP.get(timeframe)
-        if fine_tf:
-            try:
-                fine_data = load_ohlcv(symbol, fine_tf, start_date, end_date)
-                if fine_data is None or fine_data.empty:
-                    fine_data = None
-            except Exception:
-                fine_data = None
+        fine_data = LazyFineData(symbol, fine_tf) if fine_tf else None
 
         result = run_backtest(df, config, capital, symbol, timeframe,
                               min_contracts=_fetch_min_contracts(symbol), fine_data=fine_data)

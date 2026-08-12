@@ -26,7 +26,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
 from fibot.analysis.backtester import (
-    run_backtest, load_ohlcv, auto_days_for_timeframe, BacktestResult, FINE_TF_MAP
+    run_backtest, load_ohlcv, auto_days_for_timeframe, BacktestResult, FINE_TF_MAP, LazyFineData
 )
 from fibot.strategy.fibonacci_logic import (
     find_significant_swings, compute_fib_levels, detect_structure,
@@ -581,15 +581,8 @@ def run_interactive_chart(secrets: dict):
                 "risk": {"leverage": 10, "risk_per_entry_pct": 1.0, "margin_mode": "isolated"},
             }
 
-        fine_data = None
         fine_tf = FINE_TF_MAP.get(timeframe)
-        if fine_tf:
-            try:
-                fine_data = load_ohlcv(symbol, fine_tf, sd, ed)
-                if fine_data is None or fine_data.empty:
-                    fine_data = None
-            except Exception:
-                fine_data = None
+        fine_data = LazyFineData(symbol, fine_tf) if fine_tf else None
 
         print("  Führe Backtest durch...")
         result = run_backtest(df, config, start_capital, symbol, timeframe,

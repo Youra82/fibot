@@ -14,6 +14,8 @@ import pandas as pd
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
+from fibot.analysis.backtester import _get_fine_slice
+
 FEE_PCT     = 0.06 / 100   # Bitget Taker-Gebühr (je Seite)
 MIN_NOTIONAL = 5.0          # Bitget Minimum
 
@@ -145,7 +147,7 @@ def run_portfolio_simulation(start_capital: float,
                 fine_df = strat.get('fine_df')
                 coarse_duration = strat.get('coarse_duration')
                 if fine_df is not None and coarse_duration is not None:
-                    fine_slice = fine_df.loc[(fine_df.index >= ts) & (fine_df.index < ts + coarse_duration)]
+                    fine_slice = _get_fine_slice(fine_df, ts, ts + coarse_duration)
                     exit_price = _resolve_ambiguous_exit(fine_slice, pos['sl'], pos['tp'], pos['direction'])
                 if exit_price is None:
                     exit_price = pos['sl']  # Fallback: alte SL-first-Konvention
