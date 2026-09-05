@@ -78,6 +78,9 @@ fibot/
 ├── settings.json                      # Aktive Strategien + Auto-Optimizer-Einstellungen
 ├── secret.json                        # API-Keys (nicht in Git)
 │
+├── daten/
+│   └── compare_live_vs_backtest.py    # Live-Trades (Bitget) vs. Backtest + Korrelation
+│
 └── src/fibot/
     ├── strategy/
     │   ├── fibonacci_logic.py         # KERN: Swing, Fib, Struktur, Signal
@@ -705,6 +708,52 @@ Zeigt für alle aktiven Strategien aus `settings.json`:
   Trades         : 243
   Kapital        : 25 USDT
 ```
+
+---
+
+## Live vs. Backtest vergleichen
+
+```bash
+.venv/bin/python3 daten/compare_live_vs_backtest.py
+```
+
+Holt alle geschlossenen Positionen des Live-Kontos direkt von Bitget
+(`order/fill-history`, in 7-Tage-Fenstern paginiert — die `position/history-position`-API
+erlaubt nur 90 Tage Rückblick) und vergleicht sie mit einem frisch berechneten Backtest
+der aktuell in `settings.json` aktiven Configs. Liest die Coins/Timeframes automatisch
+aus `settings.json` — läuft unverändert weiter, auch wenn der Auto-Optimizer das
+Portfolio umbaut.
+
+Optional:
+
+```bash
+.venv/bin/python3 daten/compare_live_vs_backtest.py --start 2026-05-01 --end 2026-09-05 --capital 100
+```
+
+| Parameter | Standard | Erklärung |
+|---|---|---|
+| `--start` | `2026-05-01` | Startdatum des Vergleichs |
+| `--end` | heute | Enddatum des Vergleichs |
+| `--capital` | `100` | Backtest-Startkapital je Coin (isoliert) |
+
+Ausgabe (Beispiel):
+
+```
+Coin       Live Trades  BT Trades   Trend-r  Wochen-r
+-------------------------------------------------------
+AAVEUSDT            45         44     +0.78     +0.13
+ETHUSDT             14          4     +0.82     +0.12
+...
+-------------------------------------------------------
+Portfolio-Trendkorrelation (kumuliert):  r = +0.95
+Portfolio-Wochenkorrelation:              r = +0.31
+```
+
+`Trend-r` = Korrelation der kumulierten PnL-Kurven (läuft der Account insgesamt in
+dieselbe Richtung wie der Backtest — Drawdown oder Aufwärtstrend gemeinsam).
+`Wochen-r` = Korrelation der einzelnen Wochen-PnL-Werte (stimmt auch das Timing der
+guten/schlechten Wochen überein, oder nur der grobe Trend). Braucht `secret.json`
+mit Live-API-Zugriff, ist reiner Lesezugriff und verändert keine Positionen.
 
 ---
 
