@@ -561,6 +561,18 @@ def run_signal_check(symbol: str, timeframe: str):
         print(f"{RED}Keine Daten geladen.{NC}")
         return
 
+    # Bei end_date=heute liefert load_ohlcv die aktuell noch laufende Kerze mit.
+    # generate_signal() würde sonst einen Live-Wick statt eines bestätigten
+    # Kurses als "aktuellen Preis" behandeln (siehe trade_manager.py-Fix).
+    import ccxt
+    tf_seconds = ccxt.bitget().parse_timeframe(timeframe)
+    candle_close_time = df.index[-1] + pd.Timedelta(seconds=tf_seconds)
+    if candle_close_time > pd.Timestamp.now(tz='UTC'):
+        df = df.iloc[:-1]
+        if df.empty:
+            print(f"{RED}Keine abgeschlossenen Kerzen nach Entfernen der offenen Kerze.{NC}")
+            return
+
     safe     = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
     cfg_path = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs',
                             f"config_{safe}_fib.json")
