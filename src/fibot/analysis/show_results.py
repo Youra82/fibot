@@ -186,7 +186,7 @@ def run_manual_portfolio(filenames: list, date_from: str, date_to: str, capital:
     port_pnl = (port_end - capital) / capital * 100
     port_dd  = max(r['max_dd'] for r in results)
     col      = GREEN if port_pnl >= 0 else RED
-    print(f"{'─'*W}")
+    print(f"{'-'*W}")
     print(f"  Portfolio ({n} Strategie(n), je {per_cap:.2f} USDT):  "
           f"{col}{port_pnl:+.2f}%{NC}  |  End: {col}{port_end:.2f} USDT{NC}  |  MaxDD: {port_dd:.2f}%")
     print(f"{'='*W}")
@@ -948,7 +948,7 @@ def _print_result(result, compact: bool = False):
 
     print(f"{'═'*55}")
     print(f"{BOLD}Backtest: {result.symbol} ({result.timeframe}){NC}")
-    print(f"{'─'*55}")
+    print(f"{'-'*55}")
     print(f"  Kapital     : {result.start_capital:.2f} → "
           f"{pnl_color}{result.end_capital:.2f} USDT{NC} "
           f"({pnl_color}{result.pnl_pct:+.2f}%{NC})")
@@ -973,7 +973,7 @@ def _print_json_result(d: dict):
     pnl_color = GREEN if d.get('pnl_pct', 0) >= 0 else RED
     print(f"\n{'═'*55}")
     print(f"{BOLD}{d['symbol']} ({d['timeframe']}){NC}")
-    print(f"{'─'*55}")
+    print(f"{'-'*55}")
     print(f"  Kapital    : {d['start_capital']:.2f} → "
           f"{pnl_color}{d['end_capital']:.2f} USDT{NC} "
           f"({pnl_color}{d['pnl_pct']:+.2f}%{NC})")
@@ -986,7 +986,7 @@ def _print_json_result(d: dict):
     if trades:
         print(f"\n  Letzte 5 Trades:")
         print(f"  {'Datum':<22} {'Dir':<7} {'Entry':>10} {'Exit':>10} {'PnL':>9} {'Erg'}")
-        print(f"  {'─'*65}")
+        print(f"  {'-'*65}")
         for t in trades[-5:]:
             color  = GREEN if t['result'] == 'win' else (RED if t['result'] == 'loss' else NC)
             result_str = '✓' if t['result'] == 'win' else ('✗' if t['result'] == 'loss' else '…')

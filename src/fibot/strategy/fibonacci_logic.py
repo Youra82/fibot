@@ -102,7 +102,8 @@ class FibLevels:
 
 @dataclass
 class StructureInfo:
-    type: str           # "wedge_down", "wedge_up", "triangle", "channel_down", "channel_up", "none"
+    type: str           # "wedge_down", "wedge_up", "triangle", "channel_down", "channel_up",
+                        # "broadening_down", "broadening_up", "none"
     bias: str           # "bearish", "bullish", "neutral"
     upper_slope: float  # slope of upper trendline (price per bar)
     lower_slope: float  # slope of lower trendline
@@ -295,15 +296,16 @@ def _quick_structure_precomputed(
     support_at    = lo_coeffs[0] * cur + lo_coeffs[1]
     tolerance     = struct_tol_mult * atr
 
-    # Bias: both slopes same direction = trend
-    up_dir = up_coeffs[0] > 0
-    lo_dir = lo_coeffs[0] > 0
-    if up_dir and lo_dir:
-        bias = "bullish"
-    elif not up_dir and not lo_dir:
-        bias = "bearish"
-    else:
-        bias = "neutral"
+    # Dieselbe Klassifikation wie detect_structure() (live) -- muss identisch
+    # bleiben, sonst weicht die Backtest-Struktur-Bewertung von live ab.
+    # Pivot-Positionen sind hier absolute Bar-Indizes (nicht fensterrelativ wie
+    # in detect_structure), daher spread_start am Fensteranfang (win_start)
+    # auswerten statt am Intercept (x=0 waere der Start des GESAMTEN Arrays).
+    spread_start = float((up_coeffs[0] * win_start + up_coeffs[1])
+                         - (lo_coeffs[0] * win_start + lo_coeffs[1]))
+    spread_end   = float(resistance_at - support_at)
+    _type, bias = _classify_structure_type_bias(
+        float(up_coeffs[0]), float(lo_coeffs[0]), spread_start, spread_end)
 
     # Breakout
     last_close = closes[i]
@@ -370,17 +372,17 @@ def precompute_all_signals(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     vol_arr    = df['_vol_ratio'].values if '_vol_ratio' in df.columns else np.ones(n)
 
     # ── Schritt 1: Pivots EINMAL auf dem vollen Array berechnen ──────────────
+    # Dieselben Pivots (gleicher order=pivot_left/pivot_right) werden fuer
+    # Swing- UND Struktur-Erkennung verwendet -- genau wie im Live-Pfad
+    # (detect_structure() bekommt von generate_signal() dieselben pivot_left/
+    # pivot_right wie find_significant_swings()). Vorher nutzte der Backtest
+    # hier bewusst eine kleinere, eigene Pivot-Bestaetigung ("um genug Punkte
+    # zu bekommen") -- das liess Live und Backtest durch unterschiedliche
+    # Punkte fitten und teils zu anderen Struktur-Ergebnissen kommen.
     ph_pos = argrelmax(highs, order=order)[0]
     pl_pos = argrelmin(lows,  order=order)[0]
     ph_val = highs[ph_pos]
     pl_val = lows[pl_pos]
-
-    # Separate (smaller) order for structure pivots to get enough points
-    struct_order = max(3, order // 2)
-    sph_pos = argrelmax(highs, order=struct_order)[0]
-    spl_pos = argrelmin(lows,  order=struct_order)[0]
-    sph_val = highs[sph_pos]
-    spl_val = lows[spl_pos]
 
     # ── Ergebnis-Arrays ───────────────────────────────────────────────────────
     sig_dir   = np.zeros(n, dtype=np.int8)
@@ -457,8 +459,8 @@ def precompute_all_signals(df: pd.DataFrame, config: dict) -> pd.DataFrame:
             # Structure (only for bars that pass tight zone)
             bias, breakout, confluence = _quick_structure_precomputed(
                 highs, lows, closes,
-                sph_pos, spl_pos, sph_val, spl_val,
-                i, struct_lookback, struct_order,
+                ph_pos, pl_pos, ph_val, pl_val,
+                i, struct_lookback, order,
                 atr, struct_tol_mult, direction,
             )
             if bias in ("bullish", "neutral"):
@@ -515,8 +517,8 @@ def precompute_all_signals(df: pd.DataFrame, config: dict) -> pd.DataFrame:
             # Structure
             bias, breakout, confluence = _quick_structure_precomputed(
                 highs, lows, closes,
-                sph_pos, spl_pos, sph_val, spl_val,
-                i, struct_lookback, struct_order,
+                ph_pos, pl_pos, ph_val, pl_val,
+                i, struct_lookback, order,
                 atr, struct_tol_mult, direction,
             )
             if bias in ("bearish", "neutral"):
@@ -629,6 +631,58 @@ def _fit_line(x: np.ndarray, y: np.ndarray) -> Tuple[float, float]:
     return float(coeffs[0]), float(coeffs[1])
 
 
+# Zwei gleichgerichtete Trendlinien gelten nur dann als "Kanal", wenn ihre
+# Steigungen nicht mehr als diesen Anteil auseinanderliegen (relativ zur
+# kleineren Steigung). Liegen sie weiter auseinander, laufen die Linien
+# auseinander (Broadening) statt parallel -- kein sauberer Kanal.
+_CHANNEL_PARALLEL_TOL = 0.35
+
+
+def _is_parallel(slope_a: float, slope_b: float, tol: float = _CHANNEL_PARALLEL_TOL) -> bool:
+    a, b = abs(slope_a), abs(slope_b)
+    bigger, smaller = max(a, b), min(a, b)
+    if smaller == 0:
+        return bigger == 0
+    return (bigger - smaller) / smaller <= tol
+
+
+def _classify_structure_type_bias(up_slope: float, lo_slope: float,
+                                   spread_start: float, spread_end: float) -> Tuple[str, str]:
+    """
+    Klassifiziert Struktur-Typ + Bias aus den beiden Trendlinien-Steigungen.
+
+    Gemeinsame Logik fuer Live (detect_structure) UND Backtest
+    (_quick_structure_precomputed) -- muss identisch bleiben, sonst weicht
+    die Live-Struktur-Bewertung vom Backtest ab.
+
+    Gleichgerichtete Linien (beide fallend oder beide steigend) sind nur dann
+    ein "channel", wenn sie auch tatsaechlich in etwa parallel laufen
+    (_is_parallel). Laufen sie erkennbar auseinander, ist es eine Broadening-
+    Formation -- die hat keine so klare Richtung wie ein sauberer Kanal,
+    daher bias="neutral" statt bullish/bearish.
+    """
+    up_dir = "up" if up_slope > 0 else "down"
+    lo_dir = "up" if lo_slope > 0 else "down"
+
+    if up_dir == "down" and lo_dir == "down":
+        if spread_end < spread_start * 0.85:
+            return "wedge_down", "bullish"
+        if _is_parallel(up_slope, lo_slope):
+            return "channel_down", "bearish"
+        return "broadening_down", "neutral"
+
+    if up_dir == "up" and lo_dir == "up":
+        if spread_end < spread_start * 0.85:
+            return "wedge_up", "bearish"
+        if _is_parallel(up_slope, lo_slope):
+            return "channel_up", "bullish"
+        return "broadening_up", "neutral"
+
+    # Entgegengesetzte Richtung -> Linien laufen zusammen oder kreuzen sich (Dreieck)
+    bias = "bearish" if abs(up_slope) > abs(lo_slope) else "bullish"
+    return "triangle", bias
+
+
 def detect_structure(df: pd.DataFrame, lookback: int = 60,
                      pivot_left: int = 3, pivot_right: int = 3,
                      tolerance_atr_mult: float = 0.3,
@@ -646,30 +700,42 @@ def detect_structure(df: pd.DataFrame, lookback: int = 60,
       Wenn übergeben, wird calc_atr() übersprungen (spart ~100µs pro Aufruf).
     """
     n_df  = len(df)
-    start = max(0, n_df - lookback)
-    n     = n_df - start
+    i     = n_df - 1                     # aktueller Bar, absolute Position -- wie im Backtest
+    win_start = max(0, i - lookback)
+    n     = i - win_start + 1            # Fenstergroesse (fuer Chart-Offset, wie bisher)
 
-    # Numpy-Arrays direkt statt DataFrame-Copy + reset_index — spart ~50µs
-    highs = df['high'].values[start:]
-    lows  = df['low'].values[start:]
+    order = max(pivot_left, pivot_right, 1)
 
     # ATR: vorberechneten Wert nehmen wenn vorhanden, sonst berechnen
     if atr_override is not None:
         atr = float(atr_override)
     else:
-        atr = calc_atr(df.iloc[start:], period=min(14, n - 1))
-
-    order  = max(pivot_left, pivot_right, 1)
-    ph_pos = argrelmax(highs, order=order)[0].astype(float)
-    pl_pos = argrelmin(lows,  order=order)[0].astype(float)
+        atr = calc_atr(df.iloc[win_start:], period=min(14, n - 1))
 
     tolerance = tolerance_atr_mult * atr
+
+    # Pivots auf dem GESAMTEN verfuegbaren Array berechnen, dann auf das
+    # Fenster [win_start, i-order] filtern -- IDENTISCH zum Backtest-Pfad
+    # (_quick_structure_precomputed). Vorher wurde hier zuerst auf die
+    # letzten `lookback` Bars geschnitten und ERST DANACH argrelmax
+    # aufgerufen -- das liefert an den Fensterraendern andere Pivots als
+    # der Backtest (der immer auf dem vollen Array sucht und danach
+    # filtert), weil argrelmax vom sichtbaren Kontext links/rechts abhaengt.
+    highs_full = df['high'].values
+    lows_full  = df['low'].values
+    ph_pos_full = argrelmax(highs_full, order=order)[0]
+    pl_pos_full = argrelmin(lows_full,  order=order)[0]
+
+    ph_mask = (ph_pos_full >= win_start) & (ph_pos_full <= i - order)
+    pl_mask = (pl_pos_full >= win_start) & (pl_pos_full <= i - order)
+    ph_pos = ph_pos_full[ph_mask].astype(float)
+    pl_pos = pl_pos_full[pl_mask].astype(float)
 
     # Need at least 2 pivot highs and 2 pivot lows for meaningful lines
     if len(ph_pos) < 2 or len(pl_pos) < 2:
         logger.debug("Nicht genug Pivots für Strukturerkennung.")
-        s = float(lows[-1])
-        r = float(highs[-1])
+        s = float(lows_full[i])
+        r = float(highs_full[i])
         return StructureInfo(
             type="none", bias="neutral",
             upper_slope=0, lower_slope=0,
@@ -681,16 +747,22 @@ def detect_structure(df: pd.DataFrame, lookback: int = 60,
             breakout="none", breakout_strength=0.0
         )
 
-    ph_prices = highs[ph_pos.astype(int)]
-    pl_prices = lows[pl_pos.astype(int)]
+    ph_prices = highs_full[ph_pos.astype(int)]
+    pl_prices = lows_full[pl_pos.astype(int)]
 
-    up_slope, up_intercept = _fit_line(ph_pos, ph_prices)
-    lo_slope, lo_intercept = _fit_line(pl_pos, pl_prices)
+    # Fit auf absoluten Bar-Positionen (wie im Backtest) ...
+    up_slope, up_intercept_abs = _fit_line(ph_pos, ph_prices)
+    lo_slope, lo_intercept_abs = _fit_line(pl_pos, pl_prices)
 
-    # Current trendline values (at bar n-1)
-    cur = float(n - 1)
-    resistance_at = up_slope * cur + up_intercept
-    support_at    = lo_slope * cur + lo_intercept
+    resistance_at = up_slope * float(i) + up_intercept_abs
+    support_at    = lo_slope * float(i) + lo_intercept_abs
+
+    # ... aber fensterrelativ (x=0 am Fensteranfang) zurueckgeben, damit
+    # bestehende Chart-Renderer (trade_manager.py, interactive_chart.py)
+    # unveraendert weiterlaufen. Steigung bleibt bei reiner x-Verschiebung
+    # gleich, nur der Intercept verschiebt sich.
+    up_intercept = up_slope * win_start + up_intercept_abs
+    lo_intercept = lo_slope * win_start + lo_intercept_abs
 
     # Toleranzzonen um die Trendlinien
     support_zone_low    = support_at    - tolerance
@@ -698,31 +770,10 @@ def detect_structure(df: pd.DataFrame, lookback: int = 60,
     resistance_zone_low = resistance_at - tolerance
     resistance_zone_high= resistance_at + tolerance
 
-    # Classify
-    up_dir = "up"   if up_slope > 0 else "down"
-    lo_dir = "up"   if lo_slope > 0 else "down"
-
-    if up_dir == "down" and lo_dir == "down":
-        spread_start = (up_slope * 0 + up_intercept) - (lo_slope * 0 + lo_intercept)
-        spread_end   = resistance_at - support_at
-        if spread_end < spread_start * 0.85:
-            structure_type = "wedge_down"
-            bias = "bullish"
-        else:
-            structure_type = "channel_down"
-            bias = "bearish"
-    elif up_dir == "up" and lo_dir == "up":
-        spread_start = (up_slope * 0 + up_intercept) - (lo_slope * 0 + lo_intercept)
-        spread_end   = resistance_at - support_at
-        if spread_end < spread_start * 0.85:
-            structure_type = "wedge_up"
-            bias = "bearish"
-        else:
-            structure_type = "channel_up"
-            bias = "bullish"
-    else:
-        structure_type = "triangle"
-        bias = "bearish" if abs(up_slope) > abs(lo_slope) else "bullish"
+    # Classify (gemeinsame Logik mit _quick_structure_precomputed / Backtest)
+    spread_start = (up_slope * 0 + up_intercept) - (lo_slope * 0 + lo_intercept)
+    spread_end   = resistance_at - support_at
+    structure_type, bias = _classify_structure_type_bias(up_slope, lo_slope, spread_start, spread_end)
 
     # Breakout detection:
     # Echter Breakout = letzter Close AUSSERHALB der Toleranzzone (nicht nur über der Linie)
