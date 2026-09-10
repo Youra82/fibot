@@ -587,6 +587,19 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         logger.warning(f"Zu wenig Daten: {len(df)} Kerzen.")
         return
 
+    # Die Exchange liefert die aktuell noch laufende Kerze immer als letzte Zeile mit.
+    # Pivot-Bestätigung und Swing-Werte würden dadurch live einen Tick zu früh greifen
+    # und Entry auf einen ungeschlossenen Wick statt auf einen bestätigten Kurs setzen —
+    # der Backtester sieht dagegen ausschließlich abgeschlossene Kerzen. Deshalb hier
+    # dieselbe Kerze verwerfen, solange sie noch nicht fertig ist.
+    tf_seconds = exchange.exchange.parse_timeframe(timeframe)
+    candle_close_time = df.index[-1] + pd.Timedelta(seconds=tf_seconds)
+    if candle_close_time > pd.Timestamp.now(tz='UTC'):
+        df = df.iloc[:-1]
+        if df.empty or len(df) < 150:
+            logger.warning("Zu wenig abgeschlossene Kerzen nach Entfernen der offenen Kerze.")
+            return
+
     signal: FibSignal = generate_signal(df, params)
 
     if signal.direction == "none":
