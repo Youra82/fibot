@@ -225,7 +225,116 @@ def test_secret_has_fibot_key():
 
 
 # ---------------------------------------------------------------------------
-# 6. Live Workflow Test — PEPE/USDT:USDT auf Bitget (wie dnabot)
+# 6. Struktur-Klassifikation — Live/Backtest muessen identisch bleiben
+# ---------------------------------------------------------------------------
+# detect_structure() (live) und _quick_structure_precomputed() (Backtest)
+# sind bewusst getrennte Implementierungen (Performance: der Backtest darf
+# kein detect_structure() pro Bar aufrufen). Sie sind bisher schon einmal
+# unbemerkt auseinandergedriftet -- diese Tests fixieren das gemeinsame
+# Verhalten, damit ein zukuenftiger Umbau das nicht wieder tut.
+
+def test_is_parallel_identical_slopes():
+    from fibot.strategy.fibonacci_logic import _is_parallel
+    assert _is_parallel(0.01, 0.01) is True
+
+
+def test_is_parallel_within_tolerance():
+    from fibot.strategy.fibonacci_logic import _is_parallel, _CHANNEL_PARALLEL_TOL
+    # 20% Unterschied liegt unter der 35%-Standardtoleranz
+    assert _is_parallel(0.012, 0.010, tol=_CHANNEL_PARALLEL_TOL) is True
+
+
+def test_is_parallel_beyond_tolerance():
+    from fibot.strategy.fibonacci_logic import _is_parallel
+    # Realer Fall (AVAX 6h, 2026-09-10): Widerstand steigt 77% schneller als Support
+    assert _is_parallel(0.016431, 0.009288, tol=0.35) is False
+
+
+def test_is_parallel_one_flat_one_not():
+    from fibot.strategy.fibonacci_logic import _is_parallel
+    assert _is_parallel(0.0, 0.01) is False
+
+
+def test_is_parallel_both_flat():
+    from fibot.strategy.fibonacci_logic import _is_parallel
+    assert _is_parallel(0.0, 0.0) is True
+
+
+def test_classify_channel_when_parallel():
+    from fibot.strategy.fibonacci_logic import _classify_structure_type_bias
+    # beide Linien steigen, fast gleiche Steigung, Abstand waechst nur leicht
+    t, b = _classify_structure_type_bias(0.010, 0.009, spread_start=1.0, spread_end=1.05)
+    assert t == "channel_up"
+    assert b == "bullish"
+
+
+def test_classify_broadening_when_diverging():
+    from fibot.strategy.fibonacci_logic import _classify_structure_type_bias
+    # AVAX-Fund: beide Linien steigen, aber staerker als 35% Unterschied -> kein sauberer Kanal
+    t, b = _classify_structure_type_bias(0.016431, 0.009288, spread_start=1.0, spread_end=1.3)
+    assert t == "broadening_up"
+    assert b == "neutral"
+
+
+def test_classify_wedge_when_narrowing():
+    from fibot.strategy.fibonacci_logic import _classify_structure_type_bias
+    # beide Linien fallen, Abstand verengt sich klar (< 85% des Start-Abstands)
+    t, b = _classify_structure_type_bias(-0.010, -0.009, spread_start=1.0, spread_end=0.5)
+    assert t == "wedge_down"
+    assert b == "bullish"
+
+
+def test_classify_triangle_when_opposite_direction():
+    from fibot.strategy.fibonacci_logic import _classify_structure_type_bias
+    t, b = _classify_structure_type_bias(0.02, -0.01, spread_start=1.0, spread_end=0.2)
+    assert t == "triangle"
+    assert b == "bearish"  # obere Linie (Widerstand) ist steiler
+
+
+def test_live_and_backtest_structure_agree():
+    """
+    Regressionstest fuer den Fund vom 10.09.2026: detect_structure() (live)
+    und _quick_structure_precomputed() (Backtest) muessen fuer dieselben
+    Kerzen denselben Bias liefern. Vor dem Fix stimmten nur 3/8 echte
+    Live-Coins ueberein (unterschiedliche Pivot-Ordnung + Fenster-Randeffekte).
+    """
+    import numpy as np
+    from scipy.signal import argrelmax, argrelmin
+    from fibot.strategy.fibonacci_logic import (
+        precompute_indicators, detect_structure, _quick_structure_precomputed,
+    )
+
+    df = _make_minimal_df(n=400)
+    config = _minimal_config()
+    df = precompute_indicators(df, config)
+
+    piv_l, piv_r = 3, 3
+    struct_lb = 60
+    struct_tol = 0.3
+    order = max(piv_l, piv_r, 1)
+
+    atr = float(df['_atr'].iloc[-1])
+    live_struct = detect_structure(df, struct_lb, piv_l, piv_r,
+                                   tolerance_atr_mult=struct_tol, atr_override=atr)
+
+    highs, lows, closes = df['high'].values, df['low'].values, df['close'].values
+    ph_pos = argrelmax(highs, order=order)[0]
+    pl_pos = argrelmin(lows, order=order)[0]
+    ph_val = highs[ph_pos]
+    pl_val = lows[pl_pos]
+    i = len(df) - 1
+    bt_bias, _, _ = _quick_structure_precomputed(
+        highs, lows, closes, ph_pos, pl_pos, ph_val, pl_val,
+        i, struct_lb, order, atr, struct_tol, direction="down")
+
+    assert live_struct.bias == bt_bias, (
+        f"Live-Bias '{live_struct.bias}' ({live_struct.type}) != "
+        f"Backtest-Bias '{bt_bias}' -- Struktur-Erkennung ist wieder auseinandergelaufen."
+    )
+
+
+# ---------------------------------------------------------------------------
+# 7. Live Workflow Test — PEPE/USDT:USDT auf Bitget (wie dnabot)
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope='module')
