@@ -51,6 +51,50 @@ def write_tracker(path: str, data: dict):
         logging.getLogger(__name__).error(f"Tracker-Schreibfehler: {e}")
 
 
+# ---------------------------------------------------------------------------
+# Same-Candle-Guard
+# ---------------------------------------------------------------------------
+# Der Backtester wertet jede abgeschlossene Kerze genau einmal aus und ueberspringt
+# Kerzen, die bei offener Position schliessen. Live laeuft der Cron dagegen alle
+# 15 min: ohne diese Bremse wurde nach einem Exit dieselbe (laengst verbrauchte)
+# Signalkerze bis zu 24x pro 6h-Kerze erneut gehandelt -- mit veraltetem Entry/SL,
+# Sofort-Schliessung per Overshoot-Check und doppelten Gebuehren (Sept. 2026:
+# 105 von 133 Live-Trades waren solche Re-Entries). Eigene Datei, damit
+# Housekeeper/Overshoot-Check (die den Tracker leeren) den Guard nicht loeschen.
+
+def _candle_guard_path(symbol: str, timeframe: str) -> str:
+    os.makedirs(TRACKER_DIR, exist_ok=True)
+    safe = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
+    return os.path.join(TRACKER_DIR, f"fibot_{safe}_candle_guard.json")
+
+
+def read_consumed_candle(symbol: str, timeframe: str) -> Optional[pd.Timestamp]:
+    data = read_tracker(_candle_guard_path(symbol, timeframe))
+    ts = data.get('consumed_candle_ts')
+    if not ts:
+        return None
+    try:
+        return pd.Timestamp(ts).tz_convert('UTC') if pd.Timestamp(ts).tzinfo else pd.Timestamp(ts, tz='UTC')
+    except Exception:
+        return None
+
+
+def mark_candle_consumed(symbol: str, timeframe: str, candle_ts: pd.Timestamp):
+    """Markiert candle_ts (Open-Zeit der Kerze) als verbraucht. Nur vorwaerts."""
+    candle_ts = pd.Timestamp(candle_ts)
+    candle_ts = candle_ts.tz_convert('UTC') if candle_ts.tzinfo else candle_ts.tz_localize('UTC')
+    current = read_consumed_candle(symbol, timeframe)
+    if current is not None and current >= candle_ts:
+        return
+    write_tracker(_candle_guard_path(symbol, timeframe), {'consumed_candle_ts': candle_ts.isoformat()})
+
+
+def last_closed_candle_ts(tf_seconds: int, now: Optional[pd.Timestamp] = None) -> pd.Timestamp:
+    """Open-Zeit der zuletzt abgeschlossenen Kerze (UTC-Raster wie Bitget)."""
+    now = now if now is not None else pd.Timestamp.now(tz='UTC')
+    return now.floor(f'{tf_seconds}s') - pd.Timedelta(seconds=tf_seconds)
+
+
 def update_performance(path: str, result: str, logger):
     """result: 'win' | 'loss' | 'breakeven'"""
     data = read_tracker(path)
@@ -413,7 +457,10 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
 
     # --- Check open positions ---
     positions = exchange.fetch_open_positions(symbol)
+    tf_seconds = exchange.exchange.parse_timeframe(timeframe)
     if positions:
+        # Kerzen, die bei offener Position schliessen, wertet der Backtester nicht aus
+        mark_candle_consumed(symbol, timeframe, last_closed_candle_ts(tf_seconds))
         pos = positions[0]
         pos_side = pos.get('side', 'long')
         size_key = 'contracts' if 'contracts' in pos else 'contractSize'
@@ -592,7 +639,6 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     # und Entry auf einen ungeschlossenen Wick statt auf einen bestätigten Kurs setzen —
     # der Backtester sieht dagegen ausschließlich abgeschlossene Kerzen. Deshalb hier
     # dieselbe Kerze verwerfen, solange sie noch nicht fertig ist.
-    tf_seconds = exchange.exchange.parse_timeframe(timeframe)
     candle_close_time = df.index[-1] + pd.Timedelta(seconds=tf_seconds)
     if candle_close_time > pd.Timestamp.now(tz='UTC'):
         df = df.iloc[:-1]
@@ -600,11 +646,21 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
             logger.warning("Zu wenig abgeschlossene Kerzen nach Entfernen der offenen Kerze.")
             return
 
+    signal_candle_ts = df.index[-1]
+    consumed_ts = read_consumed_candle(symbol, timeframe)
+    if consumed_ts is not None and signal_candle_ts <= consumed_ts:
+        logger.info(f"Signalkerze {signal_candle_ts} bereits verbraucht (Guard: {consumed_ts}) — warte auf neue Kerze.")
+        return
+
     signal: FibSignal = generate_signal(df, params)
 
     if signal.direction == "none":
         logger.info("Kein Signal.")
         return
+
+    # Ab hier ist die Kerze verbraucht -- egal ob Entry klappt, kein erneuter Versuch
+    # mit veraltetem Preis in den folgenden Cron-Ticks.
+    mark_candle_consumed(symbol, timeframe, signal_candle_ts)
 
     if signal.score < min_score:
         logger.info(f"Score {signal.score:.1f} < Minimum {min_score}. Signal ignoriert.")

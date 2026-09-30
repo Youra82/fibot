@@ -280,9 +280,14 @@ def _quick_structure_precomputed(
     slr = np.searchsorted(spl_pos, i - struct_order + 1)
     sll = np.searchsorted(spl_pos, win_start)
 
-    w_sph_pos = sph_pos[shl:shr].astype(float)
+    # Fensterrelativ fitten (x=0 am Fensteranfang): das Ergebnis darf nicht davon
+    # abhaengen, wie viel Historie VOR dem Fenster im Array liegt. Mit absoluten
+    # Indizes lieferte polyfit bei exakt flachen Linien (zwei gleich hohe Pivots)
+    # Rundungsrauschen +-1e-12, dessen VORZEICHEN je nach Array-Laenge kippte --
+    # live (499 Kerzen) und Backtest (volle Historie) bekamen so anderen Bias.
+    w_sph_pos = sph_pos[shl:shr].astype(float) - win_start
     w_sph_val = sph_val[shl:shr]
-    w_spl_pos = spl_pos[sll:slr].astype(float)
+    w_spl_pos = spl_pos[sll:slr].astype(float) - win_start
     w_spl_val = spl_val[sll:slr]
 
     if len(w_sph_pos) < 2 or len(w_spl_pos) < 2:
@@ -291,18 +296,13 @@ def _quick_structure_precomputed(
     up_coeffs = np.polyfit(w_sph_pos, w_sph_val, 1)
     lo_coeffs = np.polyfit(w_spl_pos, w_spl_val, 1)
 
-    cur          = float(i)
+    cur          = float(i - win_start)
     resistance_at = up_coeffs[0] * cur + up_coeffs[1]
     support_at    = lo_coeffs[0] * cur + lo_coeffs[1]
     tolerance     = struct_tol_mult * atr
 
-    # Dieselbe Klassifikation wie detect_structure() (live) -- muss identisch
-    # bleiben, sonst weicht die Backtest-Struktur-Bewertung von live ab.
-    # Pivot-Positionen sind hier absolute Bar-Indizes (nicht fensterrelativ wie
-    # in detect_structure), daher spread_start am Fensteranfang (win_start)
-    # auswerten statt am Intercept (x=0 waere der Start des GESAMTEN Arrays).
-    spread_start = float((up_coeffs[0] * win_start + up_coeffs[1])
-                         - (lo_coeffs[0] * win_start + lo_coeffs[1]))
+    # Dieselbe Klassifikation wie detect_structure() -- muss identisch bleiben.
+    spread_start = float(up_coeffs[1] - lo_coeffs[1])
     spread_end   = float(resistance_at - support_at)
     _type, bias = _classify_structure_type_bias(
         float(up_coeffs[0]), float(lo_coeffs[0]), spread_start, spread_end)
@@ -325,7 +325,7 @@ def _quick_structure_precomputed(
     return bias, breakout, confluence
 
 
-def precompute_all_signals(df: pd.DataFrame, config: dict) -> pd.DataFrame:
+def precompute_all_signals(df: pd.DataFrame, config: dict, last_only: bool = False) -> pd.DataFrame:
     """
     Vollständig vektorisierte Signal-Vorberechnung — O(N log N) statt O(N²).
 
@@ -340,6 +340,10 @@ def precompute_all_signals(df: pd.DataFrame, config: dict) -> pd.DataFrame:
       _sig_sl     float  — SL-Preis
       _sig_tp1    float  — TP1-Preis
       _sig_score  float  — Signal-Score (0 = kein Signal)
+      _sig_swing_high / _sig_swing_low  float — dominanter Swing des Signals
+
+    last_only=True wertet nur die letzte Kerze aus (Live-Pfad ueber
+    generate_signal) -- derselbe Code, dieselben Pivots wie im Backtest.
 
     Der Backtester-Loop greift danach nur noch mit O(1) auf numpy-Arrays zu.
     generate_signal() wird im Backtest nicht mehr aufgerufen.
@@ -390,10 +394,12 @@ def precompute_all_signals(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     sig_sl    = np.zeros(n, dtype=np.float64)
     sig_tp1   = np.zeros(n, dtype=np.float64)
     sig_score = np.zeros(n, dtype=np.float64)
+    sig_sw_hi = np.zeros(n, dtype=np.float64)
+    sig_sw_lo = np.zeros(n, dtype=np.float64)
 
     candle_warmup = swing_lookback + order + 10
 
-    for i in range(candle_warmup, n):
+    for i in range(max(candle_warmup, n - 1) if last_only else candle_warmup, n):
         atr = atr_arr[i]
         if atr <= 0 or not np.isfinite(atr):
             continue
@@ -488,6 +494,8 @@ def precompute_all_signals(df: pd.DataFrame, config: dict) -> pd.DataFrame:
             sig_sl[i]    = sl_price
             sig_tp1[i]   = tp1
             sig_score[i] = min(10.0, score)
+            sig_sw_hi[i] = swing_high
+            sig_sw_lo[i] = swing_low
 
         else:  # direction == "up"
             # SHORT setup (price rose, looking for rejection)
@@ -546,6 +554,8 @@ def precompute_all_signals(df: pd.DataFrame, config: dict) -> pd.DataFrame:
             sig_sl[i]    = sl_price
             sig_tp1[i]   = tp1
             sig_score[i] = min(10.0, score)
+            sig_sw_hi[i] = swing_high
+            sig_sw_lo[i] = swing_low
 
     df = df.copy()
     df['_sig_dir']   = sig_dir
@@ -553,6 +563,8 @@ def precompute_all_signals(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     df['_sig_sl']    = sig_sl
     df['_sig_tp1']   = sig_tp1
     df['_sig_score'] = sig_score
+    df['_sig_swing_high'] = sig_sw_hi
+    df['_sig_swing_low']  = sig_sw_lo
     return df
 
 
@@ -569,14 +581,21 @@ def find_significant_swings(df: pd.DataFrame, lookback: int = 100,
     """
     order = max(pivot_left, pivot_right, 1)
     n     = len(df)
-    start = max(0, n - lookback)
+    i     = n - 1
+    start = max(0, i - lookback)
 
-    # Direkte NumPy-Array-Views — kein Copy
-    highs = df['high'].values[start:]
-    lows  = df['low'].values[start:]
-
-    ph_pos = argrelmax(highs, order=order)[0]
-    pl_pos = argrelmin(lows,  order=order)[0]
+    # Pivots auf dem GESAMTEN Array suchen und erst danach auf [i-lookback, i-order]
+    # filtern -- identisch zu precompute_all_signals (Backtest). Vorher wurde erst
+    # auf die letzten `lookback` Bars geschnitten und dann argrelmax aufgerufen: am
+    # Fensteranfang fehlte der linke Kontext -> andere Swings als im Backtest.
+    highs_full = df['high'].values
+    lows_full  = df['low'].values
+    ph_full = argrelmax(highs_full, order=order)[0]
+    pl_full = argrelmin(lows_full,  order=order)[0]
+    ph_pos = ph_full[(ph_full >= start) & (ph_full <= i - order)] - start
+    pl_pos = pl_full[(pl_full >= start) & (pl_full <= i - order)] - start
+    highs = highs_full[start:]
+    lows  = lows_full[start:]
 
     if len(ph_pos) == 0 or len(pl_pos) == 0:
         logger.debug("Keine Pivot-Punkte gefunden.")
@@ -910,230 +929,65 @@ def generate_signal(df: pd.DataFrame, config: dict) -> FibSignal:
         entry_fib_name="", rr_ratio=0.0, reason="Kein Signal", score=0.0
     )
 
-    if len(df) < swing_lookback + pivot_left + pivot_right + 10:
+    order = max(pivot_left, pivot_right, 1)
+    if len(df) < swing_lookback + order + 11:
         logger.debug("Nicht genug Daten für Signal-Berechnung.")
         return no_signal
 
-    current_price = float(df['close'].iloc[-1])
+    # Live und Backtest nutzen EINE Signal-Implementierung: precompute_all_signals
+    # (Backtest-Pfad) fuer die letzte Kerze. Vorher hatte generate_signal eine eigene
+    # Swing-Suche (argrelmax auf abgeschnittenem Fenster) -> Sept. 2026 wichen 60 von
+    # 794 Kerzen live vom Backtest ab (Richtung, SL oder TP).
+    df_ind = df if all(c in df.columns for c in ('_atr', '_rsi', '_vol_ratio')) \
+        else precompute_indicators(df, config)
+    last = precompute_all_signals(df_ind, config, last_only=True).iloc[-1]
 
-    # -- Step 1: Swings --
-    swings = find_significant_swings(df, swing_lookback, pivot_left, pivot_right)
-    if swings is None:
+    sig_dir = int(last['_sig_dir'])
+    if sig_dir == 0:
         return no_signal
 
-    move_pct = abs(swings.high_price - swings.low_price) / swings.low_price * 100
-    if move_pct < 1.0:
-        logger.debug(f"Swing zu klein: {move_pct:.2f}%")
-        return no_signal
+    current_price = float(last['_sig_entry'])
+    sl_price      = float(last['_sig_sl'])
+    tp1_price     = float(last['_sig_tp1'])
+    score         = float(last['_sig_score'])
+    direction     = "long" if sig_dir == 1 else "short"
 
-    # -- Step 2: Fib levels --
-    fibs = compute_fib_levels(swings)
+    # Fib-Gitter: LONG-Setup = Abwaertsmove ("down"), SHORT-Setup = Aufwaertsmove ("up")
+    fibs = FibLevels(float(last['_sig_swing_high']), float(last['_sig_swing_low']),
+                     "down" if direction == "long" else "up")
+    diff = fibs.swing_high - fibs.swing_low
+    if direction == "long":
+        tp2_price = fibs.swing_low + fib_tp2_level * diff
+    else:
+        tp2_price = fibs.swing_high - fib_tp2_level * diff
 
-    # -- Step 3: ATR (vorberechnet, O(1)) für frühe Zonen-Prüfung --
-    atr = float(df['_atr'].iloc[-1]) if '_atr' in df.columns else calc_atr(df, atr_period)
-    fib_tolerance = fib_tol_mult * atr
-
-    # -- Step 4: Frühe Zonen-Prüfung VOR detect_structure --
-    # detect_structure ist teuer (argrelmax + polyfit). Nur aufrufen wenn
-    # der Preis tatsächlich in der Fibonacci-Zone liegt.
-    if swings.direction == "down":
-        _z_low  = fibs.levels["38.2"] - fib_tolerance
-        _z_high = fibs.levels["61.8"] + fib_tolerance
-    else:  # "up"
-        _z_low  = fibs.levels["61.8"] - fib_tolerance
-        _z_high = fibs.levels["38.2"] + fib_tolerance
-    if not (_z_low <= current_price <= _z_high):
-        return no_signal
-
-    # -- Step 5: Structure (mit ATR-basierter Toleranzzone) --
-    # Nur erreicht wenn Preis in der Fib-Zone liegt (~1-5% aller Bars).
-    # atr bereits aus precompute_indicators → kein weiteres calc_atr() nötig.
-    structure = detect_structure(df, structure_lookback, pivot_left, pivot_right,
+    # Struktur nur fuer Chart/Begruendung -- der Score kommt aus precompute_all_signals
+    structure = detect_structure(df_ind, structure_lookback, pivot_left, pivot_right,
                                  tolerance_atr_mult=struct_tol_mult,
-                                 atr_override=atr)
+                                 atr_override=float(df_ind['_atr'].iloc[-1]))
 
-    # -- Step 6: Restliche Indikatoren (vorberechnet, O(1)) --
-    rsi       = float(df['_rsi'].iloc[-1])       if '_rsi'       in df.columns else calc_rsi(df['close'], rsi_period)
-    vol_ratio = float(df['_vol_ratio'].iloc[-1])  if '_vol_ratio'  in df.columns else calc_volume_ratio(df)
+    risk   = abs(current_price - sl_price)
+    reward = abs(tp1_price - current_price)
+    rr     = reward / risk if risk > 0 else 0.0
+    reason = (f"{direction.upper()} | Struktur: {structure.type} ({structure.bias}) | "
+              f"RSI {float(df_ind['_rsi'].iloc[-1]):.1f} | Vol {float(df_ind['_vol_ratio'].iloc[-1]):.2f}x"
+              f" | R:R {rr:.2f}")
+    logger.info(f"[FibSignal] {direction.upper()} @ {current_price:.4f} | SL {sl_price:.4f} | "
+                f"TP1 {tp1_price:.4f} | Score {score:.1f}")
 
-    # -- Step 7: Entry zone (Scoring) --
-    score = 0.0
-    reason_parts = []
-
-    # LONG: swings.direction == "down" (price dropped → we look for bounce)
-    if swings.direction == "down":
-        entry_low  = fibs.levels["38.2"]
-        entry_high = fibs.levels["61.8"]
-
-        zone_low      = _z_low
-        zone_high     = _z_high
-        near_zone     = True   # bereits geprüft oben
-        price_in_zone = entry_low <= current_price <= entry_high
-
-        if not near_zone:
-            return no_signal
-
-        # RSI filter: nur blocken wenn klar überkauft (RSI >= rsi_overbought)
-        if rsi < rsi_oversold:
-            score += 2.0
-            reason_parts.append(f"RSI überverkauft ({rsi:.1f})")
-        elif rsi < rsi_overbought:
-            score += 1.0
-        else:
-            return no_signal
-
-        # Volume filter
-        if vol_ratio >= volume_ratio_min:
-            score += 1.5
-            reason_parts.append(f"Volumen {vol_ratio:.2f}x")
-
-        # Structure alignment
-        if structure.bias in ("bullish", "neutral"):
-            score += 1.5
-            reason_parts.append(f"Struktur: {structure.type} ({structure.bias})")
-
-        if structure.breakout == "up":
-            score += 2.0
-            reason_parts.append(f"Breakout UP (Stärke {structure.breakout_strength:.2f})")
-
-        # Fib-Zonen-Scoring: Kernzone (38.2–61.8) > Toleranzzone
-        if price_in_zone:
-            score += 1.5
-            reason_parts.append(f"Preis in Fib-Kernzone (38.2–61.8%)")
-        else:
-            score += 0.5   # Preis in Toleranzzone (außerhalb Kernzone)
-            reason_parts.append(f"Preis in Fib-Toleranzzone (±{fib_tolerance:.2f})")
-
-        # Support confluence: Preis in der ATR-Toleranzzone der Struktur-Trendlinie
-        if structure.support_zone_low <= current_price <= structure.support_zone_high:
-            score += 1.5
-            reason_parts.append(
-                f"Fib+Struktur-Confluence: Support-Zone "
-                f"({structure.support_zone_low:.2f}–{structure.support_zone_high:.2f})"
-            )
-
-        # ATR-based SL
-        sl_atr  = current_price - atr * atr_sl_mult
-        sl_fib  = fibs.levels["0.0"]     # 0% = swing_low: SL below this level for LONG
-        sl_price = max(sl_atr, sl_fib)   # use the higher (tighter) SL
-
-        tp1_key   = f"{fib_tp1_level * 100:.1f}"   # e.g. 1.0 → "100.0", 1.618 → "161.8"
-        tp2_key   = f"{fib_tp2_level * 100:.1f}"
-        tp1_price = fibs.levels[tp1_key]
-        tp2_price = fibs.levels[tp2_key]
-
-        risk   = current_price - sl_price
-        reward = tp1_price - current_price
-        if risk <= 0:
-            return no_signal
-        rr = reward / risk
-        if rr < min_rr:
-            reason_parts.append(f"R:R zu niedrig ({rr:.2f})")
-            return no_signal
-
-        score = min(10.0, score)
-        reason = "LONG | " + " | ".join(reason_parts) + f" | R:R {rr:.2f}"
-        logger.info(f"[FibSignal] LONG @ {current_price:.4f} | SL {sl_price:.4f} | TP1 {tp1_price:.4f} | Score {score:.1f}")
-
-        return FibSignal(
-            direction="long",
-            entry_price=current_price,
-            sl_price=sl_price,
-            tp1_price=tp1_price,
-            tp2_price=tp2_price,
-            fib_levels=fibs,
-            structure=structure,
-            entry_fib_name="38.2–61.8 Retracement",
-            rr_ratio=rr,
-            reason=reason,
-            score=score,
-        )
-
-    # SHORT: swings.direction == "up" (price rose → we look for rejection)
-    elif swings.direction == "up":
-        entry_low  = fibs.levels["61.8"]   # for UP-direction: 61.8 is the LOWER price
-        entry_high = fibs.levels["38.2"]   # for UP-direction: 38.2 is the HIGHER price
-
-        zone_low      = _z_low
-        zone_high     = _z_high
-        near_zone     = True   # bereits geprüft oben
-        price_in_zone = entry_low <= current_price <= entry_high
-
-        # RSI filter: nur blocken wenn klar überverkauft (RSI <= rsi_oversold)
-        if rsi > rsi_overbought:
-            score += 2.0
-            reason_parts.append(f"RSI überkauft ({rsi:.1f})")
-        elif rsi > rsi_oversold:
-            score += 1.0
-        else:
-            return no_signal
-
-        # Volume
-        if vol_ratio >= volume_ratio_min:
-            score += 1.5
-            reason_parts.append(f"Volumen {vol_ratio:.2f}x")
-
-        # Structure
-        if structure.bias in ("bearish", "neutral"):
-            score += 1.5
-            reason_parts.append(f"Struktur: {structure.type} ({structure.bias})")
-
-        if structure.breakout == "down":
-            score += 2.0
-            reason_parts.append(f"Breakout DOWN (Stärke {structure.breakout_strength:.2f})")
-
-        # Fib-Zonen-Scoring: Kernzone (38.2–61.8) > Toleranzzone
-        if price_in_zone:
-            score += 1.5
-            reason_parts.append(f"Preis in Fib-Kernzone (38.2–61.8%)")
-        else:
-            score += 0.5   # Preis in Toleranzzone (außerhalb Kernzone)
-            reason_parts.append(f"Preis in Fib-Toleranzzone (±{fib_tolerance:.2f})")
-
-        # Resistance confluence: Preis in der ATR-Toleranzzone der Struktur-Trendlinie
-        if structure.resistance_zone_low <= current_price <= structure.resistance_zone_high:
-            score += 1.5
-            reason_parts.append(
-                f"Fib+Struktur-Confluence: Resistance-Zone "
-                f"({structure.resistance_zone_low:.2f}–{structure.resistance_zone_high:.2f})"
-            )
-
-        sl_atr   = current_price + atr * atr_sl_mult
-        sl_fib   = fibs.levels["0.0"]    # 0% = swing_high: SL above this level for SHORT
-        sl_price = min(sl_atr, sl_fib)   # lower (tighter) SL
-
-        tp1_key   = f"{fib_tp1_level * 100:.1f}"
-        tp2_key   = f"{fib_tp2_level * 100:.1f}"
-        tp1_price = fibs.levels[tp1_key]
-        tp2_price = fibs.levels[tp2_key]
-
-        risk   = sl_price - current_price
-        reward = current_price - tp1_price
-        if risk <= 0:
-            return no_signal
-        rr = reward / risk
-        if rr < min_rr:
-            return no_signal
-
-        score = min(10.0, score)
-        reason = "SHORT | " + " | ".join(reason_parts) + f" | R:R {rr:.2f}"
-        logger.info(f"[FibSignal] SHORT @ {current_price:.4f} | SL {sl_price:.4f} | TP1 {tp1_price:.4f} | Score {score:.1f}")
-
-        return FibSignal(
-            direction="short",
-            entry_price=current_price,
-            sl_price=sl_price,
-            tp1_price=tp1_price,
-            tp2_price=tp2_price,
-            fib_levels=fibs,
-            structure=structure,
-            entry_fib_name="38.2–61.8 Retracement",
-            rr_ratio=rr,
-            reason=reason,
-            score=score,
-        )
-
-    return no_signal
+    return FibSignal(
+        direction=direction,
+        entry_price=current_price,
+        sl_price=sl_price,
+        tp1_price=tp1_price,
+        tp2_price=tp2_price,
+        fib_levels=fibs,
+        structure=structure,
+        entry_fib_name="38.2–61.8 Retracement",
+        rr_ratio=rr,
+        reason=reason,
+        score=score,
+    )
 
 
 # ---------------------------------------------------------------------------

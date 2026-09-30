@@ -29,6 +29,9 @@ echo ""
 
 # Änderungen prüfen
 git add "$CONFIGS_DIR"/config_*_fib.json
+# Aktives Portfolio (vom Auto-Optimizer auf dem VPS geschrieben) mitpushen, damit
+# Live-vs-Backtest-Vergleiche lokal gegen den echten Live-Stand laufen koennen.
+git add settings.json
 STAGED=$(git diff --cached --name-only)
 
 if [ -z "$STAGED" ]; then
