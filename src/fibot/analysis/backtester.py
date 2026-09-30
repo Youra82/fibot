@@ -80,52 +80,43 @@ class LazyFineData:
         self._exchange = None
 
     def _get_exchange(self):
-        if self._exchange is not None:
-            return self._exchange
-        try:
-            import ccxt
-            exchange = ccxt.bitget({'enableRateLimit': True, 'options': {'defaultType': 'swap'}})
-            exchange.load_markets()
-            self._exchange = exchange
-        except Exception:
-            self._exchange = None
+        if self._exchange is None:
+            self._exchange = _public_exchange()
         return self._exchange
 
     def _ensure_day(self, day):
+        # Rate-Limit/Netzwerkfehler werden per _with_retry wiederholt und danach
+        # weitergereicht -- vorher schluckte ein blankes except sie und die
+        # Ambiguitaet fiel still auf "SL zuerst" zurueck.
         if day in self._days:
             return
         exchange = self._get_exchange()
-        if exchange is None:
+        tf_ms    = exchange.parse_timeframe(self.fine_tf) * 1000
+        since_ms = int(day.timestamp() * 1000)
+        end_ms   = int((day + pd.Timedelta(days=1)).timestamp() * 1000)
+        all_ohlcv = []
+        cursor = since_ms
+        while cursor < end_ms:
+            ohlcv = _with_retry(lambda: exchange.fetch_ohlcv(self.symbol, self.fine_tf, cursor, 200),
+                                f"Fine-OHLCV {self.symbol} {self.fine_tf}")
+            if not ohlcv:
+                break
+            ohlcv = [c for c in ohlcv if c[0] <= end_ms]
+            if not ohlcv:
+                break
+            all_ohlcv.extend(ohlcv)
+            cursor = ohlcv[-1][0] + tf_ms
+            if len(ohlcv) < 200:
+                break
+        if not all_ohlcv:
             self._days[day] = None
             return
-        try:
-            tf_ms    = exchange.parse_timeframe(self.fine_tf) * 1000
-            since_ms = int(day.timestamp() * 1000)
-            end_ms   = int((day + pd.Timedelta(days=1)).timestamp() * 1000)
-            all_ohlcv = []
-            cursor = since_ms
-            while cursor < end_ms:
-                ohlcv = exchange.fetch_ohlcv(self.symbol, self.fine_tf, cursor, 200)
-                if not ohlcv:
-                    break
-                ohlcv = [c for c in ohlcv if c[0] <= end_ms]
-                if not ohlcv:
-                    break
-                all_ohlcv.extend(ohlcv)
-                cursor = ohlcv[-1][0] + tf_ms
-                if len(ohlcv) < 200:
-                    break
-            if not all_ohlcv:
-                self._days[day] = None
-                return
-            df = pd.DataFrame(all_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
-            df.set_index('timestamp', inplace=True)
-            df.sort_index(inplace=True)
-            df = df[~df.index.duplicated(keep='last')]
-            self._days[day] = df if not df.empty else None
-        except Exception:
-            self._days[day] = None
+        df = pd.DataFrame(all_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+        df.set_index('timestamp', inplace=True)
+        df.sort_index(inplace=True)
+        df = df[~df.index.duplicated(keep='last')]
+        self._days[day] = df if not df.empty else None
 
     def get_slice(self, start_ts, end_ts):
         if self.fine_tf is None:
@@ -501,12 +492,114 @@ def auto_days_for_timeframe(timeframe: str) -> int:
 # Data loading with cache
 # ---------------------------------------------------------------------------
 
+_PUBLIC_EXCHANGE = None
+
+
+def _with_retry(fn, what: str, attempts: int = 7):
+    """Wiederholt fn bei Rate-Limit/Netzwerkfehlern mit exponentiellem Backoff.
+    Nach dem letzten Versuch wird der Fehler weitergereicht -- NIE still mit
+    Teil-Daten weiterrechnen (Sept. 2026: 429-Welle beim Portfolio-Optimizer
+    brach Downloads ab, Backtests liefen auf abgeschnittener Historie)."""
+    import ccxt
+    import time as time_mod
+    delay = 2
+    for k in range(attempts):
+        try:
+            return fn()
+        except ccxt.NetworkError as e:   # umfasst DDoSProtection/RateLimitExceeded (429) + Timeouts
+            if k == attempts - 1:
+                raise
+            logger.warning(f"{what}: {type(e).__name__} — Retry {k + 1}/{attempts - 1} in {delay}s")
+            time_mod.sleep(delay)
+            delay = min(delay * 2, 60)
+
+
+def _public_exchange():
+    """Eine geteilte Bitget-Instanz: load_markets() (inkl. fetch_currencies) nur einmal
+    pro Prozess statt bei jedem Download."""
+    global _PUBLIC_EXCHANGE
+    if _PUBLIC_EXCHANGE is None:
+        import ccxt
+        exchange = ccxt.bitget({'enableRateLimit': True, 'options': {'defaultType': 'swap'}})
+        _with_retry(exchange.load_markets, "load_markets")
+        _PUBLIC_EXCHANGE = exchange
+    return _PUBLIC_EXCHANGE
+
+
+def _fetch_ohlcv_range(exchange, symbol: str, timeframe: str,
+                       since_ms: int, end_ms: int, tf_ms: int) -> list:
+    # Paginierung ueberlappend (naechste Seite ab der letzten erhaltenen Kerze statt
+    # +1 Kerze): mit "letzte + tf" verlor Bitget an manchen Seitengrenzen genau eine
+    # Kerze (ETH 4h: 3 Luecken in 21 Monaten, gleiche Bugklasse wie die 91-Tage-Luecke
+    # in ltbbot). Duplikate werden unten verworfen.
+    rows = []
+    skips = 0
+    last_ts = None
+    while since_ms <= end_ms:
+        try:
+            ohlcv = _with_retry(lambda: exchange.fetch_ohlcv(symbol, timeframe, since_ms, 200),
+                                f"OHLCV {symbol} {timeframe}")
+        except Exception as e:
+            # Bitget 40017: startTime vor Beginn der verfuegbaren Historie -> 30 Tage vor
+            if '40017' in str(e) and skips < 3:
+                logger.warning(f"Bitget startTime-Fehler — überspringe 30 Tage vorwärts. ({skips + 1}/3)")
+                since_ms += 30 * 24 * 3600 * 1000
+                skips += 1
+                continue
+            raise
+        if not ohlcv:
+            break
+        ohlcv = [c for c in ohlcv if c[0] <= end_ms and (last_ts is None or c[0] > last_ts)]
+        if not ohlcv:
+            break
+        rows.extend(ohlcv)
+        last_ts = ohlcv[-1][0]
+        if last_ts >= end_ms:
+            break
+        since_ms = last_ts
+    return rows
+
+
+def _repair_gaps(exchange, df: pd.DataFrame, symbol: str, timeframe: str, tf_ms: int) -> pd.DataFrame:
+    """Laedt fehlende Kerzen innerhalb von df gezielt nach (auch Altlasten im Cache)."""
+    tf_td = pd.Timedelta(milliseconds=tf_ms)
+    expected = pd.date_range(df.index.min(), df.index.max(), freq=tf_td)
+    missing = expected.difference(df.index)
+    if missing.empty:
+        return df
+    # zusammenhaengende Luecken zu Bereichen gruppieren
+    groups, start, prev = [], missing[0], missing[0]
+    for ts in missing[1:]:
+        if ts - prev > tf_td:
+            groups.append((start, prev))
+            start = ts
+        prev = ts
+    groups.append((start, prev))
+    parts = [df]
+    for a, b in groups:
+        rows = _fetch_ohlcv_range(exchange, symbol, timeframe,
+                                  int((a - tf_td).timestamp() * 1000), int(b.timestamp() * 1000), tf_ms)
+        if rows:
+            part = pd.DataFrame(rows, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            part['timestamp'] = pd.to_datetime(part['timestamp'], unit='ms', utc=True)
+            parts.append(part.set_index('timestamp'))
+    repaired = pd.concat(parts)
+    repaired = repaired[~repaired.index.duplicated(keep='last')].sort_index()
+    still = expected.difference(repaired.index)
+    logger.info(f"Lücken-Reparatur {symbol} ({timeframe}): {len(missing) - len(still)}/{len(missing)} "
+                f"Kerzen nachgeladen" + (f", {len(still)} fehlen auch bei Bitget" if len(still) else ""))
+    return repaired
+
+
 def load_ohlcv(symbol: str, timeframe: str,
                start_date: str, end_date: str) -> pd.DataFrame:
     """
-    Lädt OHLCV-Daten für einen Datumsbereich.
-    Nutzt einen lokalen CSV-Cache (data/cache/) um wiederholte Downloads zu vermeiden.
-    Cache wird automatisch ergänzt wenn der angefragte Zeitraum nicht abgedeckt ist.
+    Lädt OHLCV-Daten für einen Datumsbereich (nur abgeschlossene Kerzen).
+    Nutzt einen lokalen CSV-Cache (data/cache/) und lädt nur fehlende Stücke nach
+    (Anfang vor dem Cache, Ende nach der letzten Cache-Kerze).
+
+    Vorher galt der Cache nur als Treffer, wenn er bis end_date 23:59 reichte --
+    fuer "bis heute" nie erfuellbar, jeder Lauf lud die volle Historie neu.
 
     Args:
         symbol:     z.B. "BTC/USDT:USDT"
@@ -515,19 +608,20 @@ def load_ohlcv(symbol: str, timeframe: str,
         end_date:   "YYYY-MM-DD"  (inklusiv)
     """
     import ccxt
-    import time as time_mod
 
     cache_dir = os.path.join(PROJECT_ROOT, 'data', 'cache')
     os.makedirs(cache_dir, exist_ok=True)
     safe_symbol = symbol.replace('/', '-').replace(':', '-')
     cache_file  = os.path.join(cache_dir, f"{safe_symbol}_{timeframe}.csv")
 
+    tf_ms = ccxt.Exchange.parse_timeframe(timeframe) * 1000
+    tf_td = pd.Timedelta(milliseconds=tf_ms)
     req_start = pd.to_datetime(start_date, utc=True)
     req_end   = pd.to_datetime(end_date + 'T23:59:59Z', utc=True)
+    last_closed = pd.Timestamp.now(tz='UTC').floor(tf_td) - tf_td   # Open-Zeit der letzten fertigen Kerze
+    eff_end = min(req_end.floor(tf_td), last_closed)
 
     cached = pd.DataFrame()
-
-    # --- Versuch 1: Cache lesen ---
     if os.path.exists(cache_file):
         try:
             cached = pd.read_csv(cache_file, index_col='timestamp', parse_dates=True)
@@ -535,75 +629,59 @@ def load_ohlcv(symbol: str, timeframe: str,
                            else cached.index.tz_convert('UTC')
             cached.sort_index(inplace=True)
             cached = cached[~cached.index.duplicated(keep='last')]
-
-            if cached.index.min() <= req_start and cached.index.max() >= req_end:
-                logger.info(f"Cache-Hit: {symbol} ({timeframe}) [{start_date} → {end_date}]")
-                return cached.loc[req_start:req_end].copy()
-            else:
-                logger.info(f"Cache unvollständig — lade fehlende Daten nach.")
+            # Kerzen, die beim Speichern noch offen waren, sind unvollstaendig -> verwerfen
+            saved_at = pd.Timestamp(os.path.getmtime(cache_file), unit='s', tz='UTC')
+            cached = cached[cached.index + tf_td <= saved_at]
         except Exception as e:
             logger.warning(f"Cache-Lesefehler ({cache_file}): {e} — lade neu.")
             cached = pd.DataFrame()
 
-    # --- Versuch 2: Von Bitget herunterladen (kein API-Key nötig für OHLCV) ---
-    logger.info(f"Download: {symbol} ({timeframe}) [{start_date} → {end_date}] ...")
-    exchange = ccxt.bitget({'enableRateLimit': True, 'options': {'defaultType': 'swap'}})
-    exchange.load_markets()
-    tf_ms     = exchange.parse_timeframe(timeframe) * 1000
-    since_ms  = int(exchange.parse8601(start_date + 'T00:00:00Z'))
-    end_ms    = int(exchange.parse8601(end_date   + 'T23:59:59Z'))
-    all_ohlcv = []
-
-    retries = 0
-    while since_ms < end_ms:
-        try:
-            ohlcv = exchange.fetch_ohlcv(symbol, timeframe, since_ms, 200)
-            if not ohlcv:
-                break
-            ohlcv = [c for c in ohlcv if c[0] <= end_ms]
-            if not ohlcv:
-                break
-            all_ohlcv.extend(ohlcv)
-            since_ms = ohlcv[-1][0] + tf_ms
-            retries = 0
-            time_mod.sleep(exchange.rateLimit / 1000)
-        except Exception as e:
-            err_str = str(e)
-            # Bitget 40017: startTime zu weit zurück → 30 Tage nach vorne springen
-            if '40017' in err_str and retries < 3:
-                skip_ms = 30 * 24 * 3600 * 1000
-                logger.warning(f"Bitget startTime-Fehler — überspringe 30 Tage vorwärts. ({retries+1}/3)")
-                since_ms += skip_ms
-                retries += 1
-            else:
-                logger.warning(f"Download-Fehler: {e}")
-                break
-
-    if not all_ohlcv:
-        logger.error("Keine Daten heruntergeladen.")
-        return pd.DataFrame()
-
-    new_df = pd.DataFrame(all_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-    new_df['timestamp'] = pd.to_datetime(new_df['timestamp'], unit='ms', utc=True)
-    new_df.set_index('timestamp', inplace=True)
-    new_df.sort_index(inplace=True)
-    new_df = new_df[~new_df.index.duplicated(keep='last')]
-
-    # Cache aktualisieren (merge mit vorhandenem Cache)
-    if not cached.empty:
-        merged = pd.concat([cached, new_df])
-        merged = merged[~merged.index.duplicated(keep='last')]
-        merged.sort_index(inplace=True)
+    ranges = []
+    if cached.empty:
+        ranges.append((req_start, eff_end))
     else:
-        merged = new_df
+        if cached.index.min() > req_start + tf_td:
+            ranges.append((req_start, cached.index.min() - tf_td))
+        if cached.index.max() < eff_end:
+            ranges.append((cached.index.max() + tf_td, eff_end))
 
-    try:
-        merged.to_csv(cache_file)
-        logger.info(f"Cache gespeichert: {cache_file} ({len(merged)} Kerzen gesamt)")
-    except Exception as e:
-        logger.warning(f"Cache-Schreibfehler: {e}")
+    n_cached = len(cached)
+    if not ranges:
+        logger.info(f"Cache-Hit: {symbol} ({timeframe}) [{start_date} → {end_date}]")
+        merged = cached
+    else:
+        exchange = _public_exchange()
+        parts = [cached] if not cached.empty else []
+        for a, b in ranges:
+            if a > b:
+                continue
+            logger.info(f"Download: {symbol} ({timeframe}) [{a} → {b}] ...")
+            rows = _fetch_ohlcv_range(exchange, symbol, timeframe,
+                                      int(a.timestamp() * 1000), int(b.timestamp() * 1000), tf_ms)
+            if rows:
+                part = pd.DataFrame(rows, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                part['timestamp'] = pd.to_datetime(part['timestamp'], unit='ms', utc=True)
+                parts.append(part.set_index('timestamp'))
+        if not parts:
+            logger.error("Keine Daten heruntergeladen.")
+            return pd.DataFrame()
+        merged = pd.concat(parts)
+        merged = merged[~merged.index.duplicated(keep='last')].sort_index()
+        merged = merged[merged.index <= last_closed]
 
-    return new_df.loc[req_start:req_end].copy()
+    # Luecken innerhalb der Historie nachladen -- nur wenn noetig Netzwerk anfassen
+    expected_n = int((merged.index.max() - merged.index.min()) / tf_td) + 1
+    if len(merged) < expected_n:
+        merged = _repair_gaps(_public_exchange(), merged, symbol, timeframe, tf_ms)
+
+    if ranges or len(merged) != n_cached:
+        try:
+            merged.to_csv(cache_file)
+            logger.info(f"Cache gespeichert: {cache_file} ({len(merged)} Kerzen gesamt)")
+        except Exception as e:
+            logger.warning(f"Cache-Schreibfehler: {e}")
+
+    return merged.loc[req_start:req_end].copy()
 
 
 # ---------------------------------------------------------------------------

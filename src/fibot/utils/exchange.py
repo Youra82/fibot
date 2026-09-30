@@ -44,22 +44,34 @@ class Exchange:
         timeframe_duration_in_ms = self.exchange.parse_timeframe(timeframe) * 1000
         since = self.exchange.milliseconds() - timeframe_duration_in_ms * limit
         all_ohlcv = []
-        fetch_limit = 200 
+        fetch_limit = 200
+        last_ts = None
+        net_retries = 0
 
+        # Ueberlappend paginieren (naechste Seite ab der letzten erhaltenen Kerze):
+        # mit "letzte + tf" verlor Bitget an der Seitengrenze JEDES Mal genau eine
+        # Kerze (30.09.2026: 499 statt 500, bei allen Symbolen/Timeframes) -- das
+        # Live-Signal lief damit auf einem Fenster mit Loch, anders als der Backtest.
         while since < self.exchange.milliseconds():
             try:
                 ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe, since, fetch_limit)
-                if not ohlcv: break
-                all_ohlcv.extend(ohlcv)
-                since = ohlcv[-1][0] + timeframe_duration_in_ms
-                time.sleep(self.exchange.rateLimit / 1000) 
-            except ccxt.RateLimitExceeded as e:
-                logger.warning(f"Rate limit exceeded: {e}. Waiting...")
-                time.sleep(5)
+            except ccxt.NetworkError as e:   # inkl. 429 / RateLimitExceeded
+                net_retries += 1
+                if net_retries > 5:
+                    logger.error(f"OHLCV {symbol} ({timeframe}): {e} — gebe auf.")
+                    return pd.DataFrame()
+                logger.warning(f"OHLCV {symbol} ({timeframe}): {type(e).__name__} — Retry {net_retries}/5")
+                time.sleep(2 * net_retries)
+                continue
             except Exception as e:
                 logger.error(f"Error fetching OHLCV chunk for {symbol}: {e}")
-                time.sleep(1)
+                return pd.DataFrame()
+            ohlcv = [c for c in ohlcv if last_ts is None or c[0] > last_ts]
+            if not ohlcv:
                 break
+            all_ohlcv.extend(ohlcv)
+            last_ts = ohlcv[-1][0]
+            since = last_ts
 
         if not all_ohlcv:
             logger.warning(f"No OHLCV data fetched for {symbol} ({timeframe}).")
@@ -73,6 +85,14 @@ class Exchange:
 
         if len(df) > limit:
             df = df.iloc[-limit:]
+
+        # Nur warnen: fehlt eine Kerze auch bei Bitget selbst (Wartung), hat der
+        # Backtest dieselbe Luecke -- Aussetzen wuerde den Handel ueber die ganze
+        # Fensterlaenge blockieren.
+        gaps = df.index.to_series().diff().dropna()
+        n_gaps = int((gaps != pd.Timedelta(milliseconds=timeframe_duration_in_ms)).sum())
+        if n_gaps:
+            logger.warning(f"OHLCV {symbol} ({timeframe}): {n_gaps} Lücke(n) in den Kerzen.")
 
         return df
 

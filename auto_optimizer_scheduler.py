@@ -167,6 +167,14 @@ def main():
     opt_cfg  = settings.get('optimization_settings', {})
 
     if args.force:
+        # --force ueberspringt nur den Zeitplan, NICHT den Lock: zwei parallele Laeufe
+        # verdoppeln die Bitget-Last (429-Welle 2026-09-30) und schreiben beide
+        # settings.json.
+        if os.path.exists(IN_PROGRESS_FILE) and \
+                datetime.now().timestamp() - os.path.getmtime(IN_PROGRESS_FILE) < 7200:
+            log.warning("--force: Es laeuft bereits eine Optimierung (Lock "
+                        f"{IN_PROGRESS_FILE}) — Abbruch. Lock nur loeschen, wenn sicher kein Lauf aktiv ist.")
+            return
         log.info("--force gesetzt: Optimierung wird sofort gestartet.")
         reason = 'force'
     else:
