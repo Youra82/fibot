@@ -1,16 +1,8 @@
 {
   "live_trading_settings": {
-    "max_open_positions": 8,
+    "max_open_positions": 9,
     "use_auto_optimizer_results": false,
     "active_strategies": [
-      {
-        "symbol": "DOT/USDT:USDT",
-        "timeframe": "2h",
-        "leverage": 10,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 2.75,
-        "active": true
-      },
       {
         "symbol": "SAND/USDT:USDT",
         "timeframe": "1h",
@@ -28,11 +20,59 @@
         "active": true
       },
       {
-        "symbol": "XLM/USDT:USDT",
-        "timeframe": "30m",
-        "leverage": 3,
+        "symbol": "DOT/USDT:USDT",
+        "timeframe": "2h",
+        "leverage": 10,
         "margin_mode": "isolated",
-        "risk_per_entry_pct": 1.75,
+        "risk_per_entry_pct": 2.75,
+        "active": true
+      },
+      {
+        "symbol": "OP/USDT:USDT",
+        "timeframe": "1h",
+        "leverage": 9,
+        "margin_mode": "isolated",
+        "risk_per_entry_pct": 1.5,
+        "active": true
+      },
+      {
+        "symbol": "APT/USDT:USDT",
+        "timeframe": "1h",
+        "leverage": 10,
+        "margin_mode": "isolated",
+        "risk_per_entry_pct": 2.25,
+        "active": true
+      },
+      {
+        "symbol": "AVAX/USDT:USDT",
+        "timeframe": "1h",
+        "leverage": 8,
+        "margin_mode": "isolated",
+        "risk_per_entry_pct": 2.75,
+        "active": true
+      },
+      {
+        "symbol": "XRP/USDT:USDT",
+        "timeframe": "2h",
+        "leverage": 4,
+        "margin_mode": "isolated",
+        "risk_per_entry_pct": 1.0,
+        "active": true
+      },
+      {
+        "symbol": "XLM/USDT:USDT",
+        "timeframe": "2h",
+        "leverage": 10,
+        "margin_mode": "isolated",
+        "risk_per_entry_pct": 3.0,
+        "active": true
+      },
+      {
+        "symbol": "DOGE/USDT:USDT",
+        "timeframe": "1h",
+        "leverage": 7,
+        "margin_mode": "isolated",
+        "risk_per_entry_pct": 3.0,
         "active": true
       }
     ]
@@ -58,6 +98,8 @@
         "unit": "days"
       }
     },
-    "_start_date_info": "'oos' = jede Strategie ab ihrem eigenen OOS-Beginn (aus der Config); oder festes Datum JJJJ-MM-TT"
+    "_start_date_info": "'oos' = jede Strategie ab ihrem eigenen OOS-Beginn (aus der Config); oder festes Datum JJJJ-MM-TT",
+    "objective": "pnl",
+    "_objective_info": "'pnl' = hoechstes Endkapital mit MaxDD <= constraints.max_drawdown_pct; 'calmar' = bestes PnL/DD-Verhaeltnis"
   }
 }

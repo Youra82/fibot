@@ -348,7 +348,7 @@ Leere Eingaben bei Coin oder Timeframe brechen die Pipeline sofort ab.
 |---|---|
 | **1 Einzel-Analyse** | alle Configs isoliert, Tabelle nach PnL |
 | **2 Manuelles Portfolio** | Configs auswählen (`1 3 5` oder `alle`) |
-| **3 Auto-Portfolio** | Greedy-Auswahl nach Calmar (PnL / MaxDD), gemeinsames Kapital, kein Coin doppelt. Danach optional `settings.json` schreiben, Equity-Chart + Excel per Telegram |
+| **3 Auto-Portfolio** | Greedy-Auswahl, gemeinsames Kapital, kein Coin doppelt. Ziel laut `optimization_settings.objective`: `pnl` (Standard) = höchstes Endkapital mit MaxDD ≤ Grenze, `calmar` = bestes PnL/DD-Verhältnis. Danach optional `settings.json` schreiben, Equity-Chart + Excel per Telegram |
 | **4 Interaktive Charts** | Candlestick mit Entry/Exit und dem Kanal, wie er beim Fill bekannt war |
 
 ### 2b. Analysen — `run_analysis.sh`
@@ -429,7 +429,9 @@ fällig (Zeitplan aus `settings.json`, Standard Mittwoch 03:00, Mindestabstand 7
 show_results.py --mode 3 --auto --from oos
   ├─ alle Configs backtesten: jede Strategie ab IHREM OOS-Beginn (_backtest.oos.start_date) bis heute
   │    (Kanal-Vorlauf wird mitgeladen, Trades zählen erst ab OOS-Beginn; ohne OOS-Angabe ab 2025-01-01)
-  ├─ Greedy-Portfolio nach Calmar, MaxDD ≤ constraints.max_drawdown_pct
+  ├─ Greedy-Portfolio: objective "pnl" = max. Endkapital mit MaxDD ≤ constraints.max_drawdown_pct
+  │    (Calmar-Greedy blieb früher nach 4 Strategien bei 12,7 % DD stehen, obwohl 9 bei 21,8 % DD
+  │     deutlich mehr brachten — ein lokales Optimum)
   ├─ active_strategies in settings.json schreiben
   └─ Telegram: Portfolio, Equity-Chart (HTML), Trades (Excel)
 ```

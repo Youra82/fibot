@@ -243,7 +243,8 @@ OPT_RESULTS  = os.path.join(PROJECT_ROOT, 'artifacts', 'results', 'optimization_
 def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
                           start_date: str, end_date: str, auto: bool = False,
                           symbols: list | None = None,
-                          configs: list | None = None):
+                          configs: list | None = None,
+                          objective: str = 'pnl'):
     """
     Findet das optimale Fibonacci-Portfolio per Greedy-Algorithmus — stbot-Style.
 
@@ -382,17 +383,21 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
     best_dd       = 0.0
     best_calmar   = -999.0
 
-    print(f"\n2/3: Suche Basis-Strategie (Calmar-Score, Sim-DD muss <= {target_max_dd:.2f}%)...")
+    # Ziel: 'pnl' = hoechstes Endkapital mit MaxDD <= Grenze (die Grenze wird ausgenutzt);
+    #       'calmar' = bestes PnL/DD-Verhaeltnis (bleibt Schritt fuer Schritt oft weit unter der Grenze)
+    score = (lambda pnl, dd: pnl) if objective == 'pnl' else _calmar
+    obj_label = 'max. PnL bei DD-Grenze' if objective == 'pnl' else 'Calmar-Score'
+    print(f"\n2/3: Suche Basis-Strategie ({obj_label}, Sim-DD muss <= {target_max_dd:.2f}%)...")
     for candidate in valid:
         sim    = _simulate([candidate['filename']])
         sim_dd = sim['max_drawdown_pct'] if sim else candidate['max_dd']
         dd_ok  = sim_dd <= target_max_dd
         cap    = sim['end_capital'] if sim else candidate['end_cap']
         pnl    = sim['total_pnl_pct'] if sim else candidate['pnl_pct']
-        calmar = _calmar(pnl, sim_dd)
+        calmar = score(pnl, sim_dd)
         col    = GREEN if dd_ok else RED
         print(f"  {'OK' if dd_ok else '--'} {candidate['filename']:<44}  "
-              f"Sim: {cap:.2f} USDT  Sim-DD: {col}{sim_dd:.2f}%{NC}  Calmar: {calmar:.2f}")
+              f"Sim: {cap:.2f} USDT  Sim-DD: {col}{sim_dd:.2f}%{NC}  Score: {calmar:.2f}")
         if dd_ok and calmar > best_calmar:
             best_single  = candidate
             best_sim     = sim
@@ -417,7 +422,7 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
     used_coins     = {best_single['coin']}
     candidate_pool = [r for r in valid if r['filename'] != best_single['filename']]
 
-    print(f"     Verbesserungen werden per Calmar Ratio bewertet (PnL% / MaxDD%).")
+    print(f"     Verbesserungen werden bewertet nach: {obj_label}.")
 
     while True:
         best_next      = None
@@ -446,7 +451,7 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
                 candidate, sim = future.result()
                 if sim is None:
                     continue
-                calmar = _calmar(sim['total_pnl_pct'], sim['max_drawdown_pct'])
+                calmar = score(sim['total_pnl_pct'], sim['max_drawdown_pct'])
                 if calmar > best_calmar_w:
                     best_calmar_w = calmar
                     best_cap_w    = sim['end_capital']
@@ -461,9 +466,9 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
             best_dd      = best_dd_w
             best_calmar  = best_calmar_w
             print(f"-> Fuege hinzu: {best_next['filename']}"
-                  f"  (Kapital: {best_cap_w:.2f} USDT, MaxDD: {best_dd_w:.2f}%, Calmar: {best_calmar_w:.2f})")
+                  f"  (Kapital: {best_cap_w:.2f} USDT, MaxDD: {best_dd_w:.2f}%, Score: {best_calmar_w:.2f})")
         else:
-            print("Keine weitere Verbesserung moeglich (Calmar, DD & Coin-Kollision). "
+            print(f"Keine weitere Verbesserung moeglich ({obj_label}, DD & Coin-Kollision). "
                   "Optimierung beendet.")
             break
 
@@ -1070,11 +1075,19 @@ if __name__ == "__main__":
                         help="Min Win-Rate %% für Portfolio-Finder (Modus 3)")
     parser.add_argument('--auto',          action='store_true', default=False,
                         help="Nicht-interaktiver Modus (Auto-Optimizer): überspringt alle Prompts")
+    parser.add_argument('--objective',     choices=['pnl', 'calmar'], default=None,
+                        help="Modus 3: pnl = max. Gewinn innerhalb der DD-Grenze, calmar = bestes PnL/DD "
+                             "(Standard: optimization_settings.objective, sonst pnl)")
     parser.add_argument('--symbols',       default=None,
                         help="Nur diese Coins optimieren, z.B. 'BTC ETH ADA' (Modus 3)")
     args = parser.parse_args()
 
     today = date.today().isoformat()
+    if args.objective is None:
+        try:
+            args.objective = json.load(open(SETTINGS_FILE)).get('optimization_settings', {}).get('objective', 'pnl')
+        except Exception:
+            args.objective = 'pnl'
     start = args.date_from if args.date_from else '2024-01-01'
     end   = args.date_to   if args.date_to   else today
 
@@ -1092,7 +1105,8 @@ if __name__ == "__main__":
         symbols = args.symbols.split() if args.symbols else None
         configs = args.configs.split() if args.configs else None
         run_portfolio_finder(args.capital, args.target_max_dd, args.min_wr, start, end,
-                             auto=args.auto, symbols=symbols, configs=configs)
+                             auto=args.auto, symbols=symbols, configs=configs,
+                             objective=args.objective)
 
     elif args.mode == 4:
         from fibot.analysis.interactive_chart import run_interactive_chart
