@@ -77,8 +77,8 @@ def run_portfolio_simulation(start_capital: float,
 
         if '_sig_dir' not in df.columns:
             try:
-                from fibot.strategy.fibonacci_logic import precompute_all_signals
-                df = precompute_all_signals(df, strat['config'])
+                from fibot.strategy.signals import precompute_signals
+                df = precompute_signals(df, strat['config'])
             except Exception:
                 continue
 
@@ -90,6 +90,7 @@ def run_portfolio_simulation(start_capital: float,
             'timeframe': strat['timeframe'],
             'df':        df,
             'risk':      strat['config'].get('risk', {}),
+            'confluence': strat['config'].get('strategy', {}).get('type') == 'confluence',
             'fine_df':   fine_df,
             'coarse_duration': coarse_duration,
         }
@@ -120,6 +121,7 @@ def run_portfolio_simulation(start_capital: float,
             break
 
         # ── A) Offene Positionen schließen ──────────────────────────────
+        closed_now = set()
         for fname in list(open_positions.keys()):
             strat = processed[fname]
             if ts not in strat['df'].index:
@@ -159,9 +161,9 @@ def run_portfolio_simulation(start_capital: float,
             if exit_price is not None:
                 lev = pos.get('leverage', 1)
                 if pos['direction'] == 'long':
-                    raw_pnl = pos['notional'] * (exit_price - pos['entry']) / pos['entry'] * lev
+                    raw_pnl = pos['notional'] * (exit_price - pos['entry']) / pos['entry']
                 else:
-                    raw_pnl = pos['notional'] * (pos['entry'] - exit_price) / pos['entry'] * lev
+                    raw_pnl = pos['notional'] * (pos['entry'] - exit_price) / pos['entry']
 
                 fees    = pos['notional'] * FEE_PCT * 2
                 net_pnl = raw_pnl - fees
@@ -180,11 +182,15 @@ def run_portfolio_simulation(start_capital: float,
                     'sl_dist_pct': sl_dist_pct,
                 })
                 del open_positions[fname]
+                closed_now.add(fname)
 
         # ── B) Neue Positionen öffnen ────────────────────────────────────
         if equity > 0:
             for fname, strat in processed.items():
                 if fname in open_positions:
+                    continue
+                # Konfluenz: kein Limit-Fill in der Kerze, in der die Position schloss
+                if strat.get('confluence') and fname in closed_now:
                     continue
                 if ts not in strat['df'].index:
                     continue
@@ -237,6 +243,18 @@ def run_portfolio_simulation(start_capital: float,
                     'entry_ts':  ts,
                 }
 
+                # Konfluenz: Fuellkerze erreicht auch den SL -> sofort Verlust
+                if bool(row.get('_sig_instant', False)):
+                    fees = notional * FEE_PCT * 2
+                    net_pnl = -notional * sl_pct - fees
+                    equity += net_pnl
+                    trade_history.append({
+                        'fname': fname, 'direction': sig_dir, 'entry': entry, 'exit': sl,
+                        'pnl': net_pnl, 'ts': ts, 'notional': notional, 'leverage': leverage,
+                        'sl_dist_pct': sl_pct * 100,
+                    })
+                    del open_positions[fname]
+
         # ── C) Equity tracken (realized + unrealized) ────────────────────
         unrealized = 0.0
         for fname, pos in open_positions.items():
@@ -245,9 +263,9 @@ def run_portfolio_simulation(start_capital: float,
                 close_p = float(strat['df'].loc[ts, 'close'])
                 lev = pos.get('leverage', 1)
                 if pos['direction'] == 'long':
-                    unrealized += pos['notional'] * (close_p - pos['entry']) / pos['entry'] * lev
+                    unrealized += pos['notional'] * (close_p - pos['entry']) / pos['entry']
                 else:
-                    unrealized += pos['notional'] * (pos['entry'] - close_p) / pos['entry'] * lev
+                    unrealized += pos['notional'] * (pos['entry'] - close_p) / pos['entry']
 
         total_eq = equity + unrealized
         equity_curve.append({'timestamp': ts, 'equity': total_eq})

@@ -163,7 +163,19 @@ def create_chart(symbol: str, timeframe: str, df: pd.DataFrame,
     # ── Aktuelle Fib-Levels + Struktur über dem gesamten Chart ───────────────
     # Berechne für die letzten 100 Kerzen (live-equivalent)
     cfg_s = config.get('strategy', {})
-    swings = find_significant_swings(
+    confluence = cfg_s.get('type') == 'confluence'
+    if confluence:
+        # Konfluenz-Strategie: Kanal je Trade so zeichnen, wie er beim Fill bekannt war
+        from fibot.strategy.confluence_logic import channel_lines_for_fills
+        for k, cl in enumerate(channel_lines_for_fills(df, config)):
+            color = '#26a69a' if cl['direction'] == 'long' else '#ef5350'
+            for name, (y0, y1) in (('Kanal unten', cl['lower']), ('Kanal oben', cl['upper'])):
+                fig.add_trace(go.Scatter(
+                    x=[cl['x0'], cl['x1']], y=[y0, y1], mode='lines',
+                    line=dict(color=color, width=1.3), name=name, legendgroup='kanal',
+                    showlegend=(k == 0), hoverinfo='skip',
+                ), row=1, col=1, secondary_y=False)
+    swings = None if confluence else find_significant_swings(
         df,
         lookback=int(cfg_s.get('swing_lookback', 100)),
         pivot_left=int(cfg_s.get('pivot_left', 5)),
@@ -475,7 +487,7 @@ def create_chart(symbol: str, timeframe: str, df: pd.DataFrame,
         struct_label = f" | Struktur: {struct.type} ({struct.bias})"
 
     title = (
-        f"{symbol} {timeframe} — FiBot Fibonacci | "
+        f"{symbol} {timeframe} — FiBot {'Fibo-Kanal-Konfluenz' if confluence else 'Fibonacci'} | "
         f"Trades: {result.total_trades}  W:{result.wins} L:{result.losses} | "
         f"WR: {result.win_rate:.1f}% | "
         f"PnL: {sign}{pnl_pct:.1f}% | "

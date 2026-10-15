@@ -19,6 +19,7 @@ sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 from fibot.utils.exchange import Exchange
 from fibot.utils.telegram import send_message, send_photo
 from fibot.strategy.fibonacci_logic import generate_signal, signal_summary, FibSignal
+from fibot.strategy.confluence_logic import is_confluence
 
 TRACKER_DIR = os.path.join(PROJECT_ROOT, 'artifacts', 'tracker')
 MIN_NOTIONAL_USDT = 5.0
@@ -473,6 +474,15 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         try:
             tracker_data   = read_tracker(tracker_path)
             trigger_orders = exchange.fetch_open_trigger_orders(symbol)
+            if is_confluence(params):
+                # An die Entry gehaengte SL/TP liegen als Position-TP/SL (profit_loss) vor
+                trigger_orders = list(trigger_orders) + list(exchange.fetch_position_tpsl_orders(symbol))
+                if tracker_data.get('status') == 'pending_entry':
+                    tracker_data['status'] = 'open'
+                    write_tracker(tracker_path, tracker_data)
+                    send_message(bot_token, chat_id,
+                                 f"FiBot ENTRY gefuellt ({symbol} {timeframe}) @ {entry_price:.6g} | "
+                                 f"SL {tracker_data.get('sl_price')} | TP {tracker_data.get('tp1_price')}")
             open_order_ids = {str(o.get('id', '')) for o in trigger_orders}
             close_side     = 'sell' if pos_side == 'long' else 'buy'
 
@@ -626,6 +636,9 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         return  # Position läuft — nichts weiter tun
 
     # --- No open position → Aufräumen + neues Signal suchen ---
+    if is_confluence(params):
+        confluence_cycle(exchange, params, telegram_config, logger)
+        return
     housekeeper_routine(exchange, symbol, tracker_path, logger)
     logger.info("Keine offene Position. Suche Fib-Signal...")
 
@@ -751,6 +764,127 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         send_message(bot_token, chat_id,
                      f"FiBot ORDER GESETZT\n{summary}\n\nOrder ID: {entry_order_id}")
         _send_fib_chart(df, signal, symbol, timeframe, telegram_config, logger)
+
+
+# ---------------------------------------------------------------------------
+# Fibo-Kanal-Konfluenz: wartende Limit-Order am Konfluenzpunkt
+# ---------------------------------------------------------------------------
+
+def _confluence_size(exchange: Exchange, symbol: str, plan: dict, risk_pct: float,
+                     leverage: int, logger) -> float:
+    """Risiko auf das Gesamtkapital (wie im Backtest), Margin auf das freie Guthaben gekappt."""
+    equity = exchange.fetch_equity_usdt()
+    free = exchange.fetch_balance_usdt()
+    risk = abs(plan['limit'] - plan['sl'])
+    if equity <= 0 or risk <= 0:
+        return 0.0
+    contracts = equity * risk_pct / 100 / risk
+    max_by_margin = free * leverage * 0.95 / plan['limit']
+    if contracts > max_by_margin:
+        logger.warning(f"Margin-Kappung: {contracts:.6f} -> {max_by_margin:.6f} Contracts (frei {free:.2f} USDT)")
+        contracts = max_by_margin
+    min_amount = exchange.markets.get(symbol, {}).get('limits', {}).get('amount', {}).get('min', 0.0) or 0.0
+    contracts = float(exchange.amount_to_precision(symbol, max(contracts, min_amount)))
+    if contracts * plan['limit'] < MIN_NOTIONAL_USDT:
+        logger.warning(f"Notional {contracts * plan['limit']:.2f} USDT < {MIN_NOTIONAL_USDT} USDT. Keine Order.")
+        return 0.0
+    logger.info(f"Size: {contracts} Contracts | Kapital {equity:.2f} | Risiko {equity * risk_pct / 100:.2f} USDT")
+    return contracts
+
+
+def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, logger):
+    """Ohne offene Position: Limit-Order fuer die laufende Kerze planen, nachziehen oder entfernen.
+    Der Plan kommt aus plan_next_order() -- derselben Rechnung wie im Backtest."""
+    from fibot.strategy.confluence_logic import plan_next_order
+
+    symbol    = params['market']['symbol']
+    timeframe = params['market']['timeframe']
+    leverage  = int(params['risk'].get('leverage', 5))
+    risk_pct  = float(params['risk'].get('risk_per_entry_pct', 1.0))
+    bot_token = telegram_config.get('bot_token', '')
+    chat_id   = telegram_config.get('chat_id', '')
+    tracker_path = get_tracker_path(symbol, timeframe)
+    tracker = read_tracker(tracker_path)
+    tf_seconds = exchange.exchange.parse_timeframe(timeframe)
+
+    # 1) Position war offen und ist jetzt weg -> Reste aufraeumen
+    if tracker.get('status') == 'open':
+        logger.info("Position geschlossen (SL/TP). Raeume Rest-Orders auf.")
+        exchange.cancel_all_orders_for_symbol(symbol)
+        write_tracker(tracker_path, {})
+        send_message(bot_token, chat_id, f"FiBot ({symbol} {timeframe}): Position geschlossen.")
+        tracker = {}
+
+    # 2) Abgeschlossene Kerzen laden (laufende Kerze verwerfen)
+    df = exchange.fetch_recent_ohlcv(symbol, timeframe, limit=int(params['strategy'].get('candle_limit', 600)))
+    if df.empty:
+        logger.warning("Keine Kerzen geladen.")
+        return
+    if df.index[-1] + pd.Timedelta(seconds=tf_seconds) > pd.Timestamp.now(tz='UTC'):
+        df = df.iloc[:-1]
+    if len(df) < 200:
+        logger.warning(f"Zu wenig abgeschlossene Kerzen: {len(df)}")
+        return
+    current_candle = (df.index[-1] + pd.Timedelta(seconds=tf_seconds)).isoformat()
+    plan = plan_next_order(df, params)
+
+    # 3) Bestehende wartende Order pruefen
+    if tracker.get('status') == 'pending_entry':
+        order = None
+        try:
+            order = exchange.fetch_order(tracker.get('order_id'), symbol)
+        except Exception as e:
+            logger.warning(f"Pending-Order nicht abrufbar: {e}")
+        status = (order or {}).get('status')
+        if status == 'closed':
+            # gefuellt und (ohne Position) bereits wieder geschlossen -> Impuls verbraucht
+            logger.info("Entry wurde gefuellt und Position ist schon wieder zu (SL/TP zwischen zwei Laeufen).")
+            send_message(bot_token, chat_id, f"FiBot ({symbol} {timeframe}): Entry gefuellt und Position bereits geschlossen.")
+            exchange.cancel_all_orders_for_symbol(symbol)
+            write_tracker(tracker_path, {})
+            tracker = {}
+        elif status == 'open':
+            same = (plan is not None and tracker.get('candle_ts') == current_candle
+                    and tracker.get('direction') == plan['direction']
+                    and abs(float(tracker.get('entry_price', 0)) - plan['limit']) <= 1e-9 * max(1.0, plan['limit']))
+            if same:
+                logger.info(f"Limit-Order fuer {current_candle} liegt bereits @ {plan['limit']:.6f}.")
+                return
+            logger.info("Neue Kerze bzw. neuer Plan: wartende Order wird storniert.")
+            try:
+                exchange.cancel_order(tracker.get('order_id'), symbol)
+            except Exception as e:
+                logger.warning(f"Storno fehlgeschlagen: {e}")
+            write_tracker(tracker_path, {})
+        else:
+            write_tracker(tracker_path, {})
+
+    if plan is None:
+        logger.info("Kein Konfluenz-Setup fuer die laufende Kerze.")
+        return
+
+    contracts = _confluence_size(exchange, symbol, plan, risk_pct, leverage, logger)
+    if contracts <= 0:
+        return
+    side = 'buy' if plan['direction'] == 'long' else 'sell'
+    try:
+        order = exchange.place_limit_order_with_tpsl(symbol, side, contracts, plan['limit'], plan['sl'], plan['tp'])
+    except ccxt.InsufficientFunds:
+        logger.warning("Nicht genug freie Margin fuer die Konfluenz-Order.")
+        return
+    except Exception as e:
+        logger.error(f"Konfluenz-Order fehlgeschlagen: {e}")
+        send_message(bot_token, chat_id, f"FiBot FEHLER ({symbol}): Konfluenz-Order fehlgeschlagen: {e}")
+        return
+    write_tracker(tracker_path, {
+        'status': 'pending_entry', 'strategy': 'confluence', 'order_id': str(order.get('id', '')),
+        'candle_ts': current_candle, 'direction': plan['direction'], 'entry_price': plan['limit'],
+        'sl_price': plan['sl'], 'tp1_price': plan['tp'], 'contracts': contracts,
+        'a_ts': plan['a_ts'], 'b_ts': plan['b_ts'], 'timestamp': datetime.utcnow().isoformat(),
+    })
+    send_message(bot_token, chat_id,
+                 f"FiBot KONFLUENZ-ORDER ({symbol} {timeframe})\n{plan['direction'].upper()} Limit {plan['limit']:.6g}\n"
+                 f"SL {plan['sl']:.6g} | TP {plan['tp']:.6g} | R:R {plan['rr']:.2f}\nImpuls {plan['a_ts'][:16]} -> {plan['b_ts'][:16]}")
 
 
 # ---------------------------------------------------------------------------

@@ -261,6 +261,18 @@ class Exchange:
             logger.error(f"Fehler beim Abrufen offener Trigger-Orders für {symbol}: {e}")
             return []
 
+    def fetch_position_tpsl_orders(self, symbol: str):
+        """Position-TP/SL (planType 'profit_loss'), z.B. die an eine Limit-Entry
+        gehaengten preset-SL/TP. Tauchen in fetch_open_trigger_orders() NICHT auf
+        (das liefert nur 'normal_plan') -- Muster aus ltbbot."""
+        if not self.markets: return []
+        try:
+            params = {'stop': True, 'planType': 'profit_loss', 'productType': 'USDT-FUTURES'}
+            return self.exchange.fetch_open_orders(symbol, params=params)
+        except Exception as e:
+            logger.error(f"Fehler beim Abrufen von Position-TP/SL-Orders für {symbol}: {e}")
+            return []
+
     def fetch_closed_trigger_orders(self, symbol: str, limit: int = 20):
         if not self.markets: return []
         try:
@@ -467,6 +479,32 @@ class Exchange:
     # HIER IST DIE KORREKTUR FÜR TRIGGER MARKET ORDERS (TP/SL)
     # WIR KOPIEREN DIE LOGIK VON JAEGERBOT/TITANBOT
     # =========================================================================
+    def place_limit_order_with_tpsl(self, symbol: str, side: str, amount: float, price: float,
+                                    sl_price: float, tp_price: float):
+        """Limit-Entry mit angehaengtem SL/TP (Bitget presetStopLossPrice/presetStopSurplusPrice).
+        Bitget legt beide erst beim Fill als Position-TP/SL an -- die Position ist damit
+        ab der ersten Sekunde geschuetzt, auch wenn der Fill zwischen zwei Cron-Laeufen passiert."""
+        if not self.markets: return None
+        amount_str = self.amount_to_precision(symbol, amount)
+        price_str = self.price_to_precision(symbol, price)
+        order_params = {
+            'hedged': True, 'marginMode': 'isolated', 'productType': 'USDT-FUTURES',
+            'stopLoss':   {'triggerPrice': float(self.price_to_precision(symbol, sl_price)), 'type': 'market'},
+            'takeProfit': {'triggerPrice': float(self.price_to_precision(symbol, tp_price)), 'type': 'market'},
+        }
+        logger.info(f"Platziere Limit+TP/SL: {side.upper()} {amount_str} {symbol} @ {price_str} | SL {sl_price} | TP {tp_price}")
+        return self.exchange.create_order(symbol, 'limit', side, float(amount_str), float(price_str), params=order_params)
+
+    def fetch_equity_usdt(self) -> float:
+        """Gesamtkapital (USDT total inkl. gebundener Margin) -- Basis fuer risikobasiertes Sizing."""
+        if not self.markets: return 0.0
+        try:
+            bal = self.exchange.fetch_balance(params={'marginCoin': 'USDT', 'productType': 'USDT-FUTURES'})
+            return float((bal.get('USDT') or {}).get('total') or 0.0)
+        except Exception as e:
+            logger.error(f"Fehler beim Abrufen des Gesamtkapitals: {e}")
+            return 0.0
+
     def place_trigger_market_order(self, symbol: str, side: str, amount: float, trigger_price: float, reduce: bool = False, params={}):
         """Platziert eine Trigger-Market Order (Stop Market oder Take Profit Market)."""
         if not self.markets: return None

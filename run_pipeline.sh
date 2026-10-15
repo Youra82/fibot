@@ -1,5 +1,5 @@
 #!/bin/bash
-# FiBot — Parameter-Optimierungs-Pipeline
+# FiBot — Parameter-Optimierungs-Pipeline (Fibo-Kanal-Konfluenz)
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
@@ -7,7 +7,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo -e "${BLUE}======================================================="
-echo "       FiBot — Fibonacci Optimierungs-Pipeline"
+echo "   FiBot — Fibo-Kanal-Konfluenz Optimierungs-Pipeline"
 echo -e "=======================================================${NC}"
 
 VENV_PATH=".venv/bin/activate"
@@ -37,24 +37,29 @@ fi
 # --- Interaktive Abfrage ---
 read -p "Handelspaar(e) eingeben (ohne /USDT, z.B. BTC ETH): " SYMBOLS
 read -p "Zeitfenster eingeben (z.B. 1h 4h): " TIMEFRAMES
+if [ -z "${SYMBOLS// }" ] || [ -z "${TIMEFRAMES// }" ]; then
+    echo -e "${RED}Fehler: Handelspaar und Zeitfenster sind Pflicht. Abbruch.${NC}"
+    exit 1
+fi
 
-echo -e "\n${BLUE}--- Empfehlung: Optimaler Rückblick-Zeitraum ---${NC}"
+echo -e "\n${BLUE}--- Empfehlung: Rückblick-Zeitraum ---${NC}"
 printf "+-------------+--------------------------------+\n"
 printf "| Zeitfenster | Empfohlener Rückblick (Tage)   |\n"
 printf "+-------------+--------------------------------+\n"
-printf "| 5m, 15m     | 15 - 90 Tage                   |\n"
-printf "| 30m, 1h     | 180 - 365 Tage                 |\n"
-printf "| 2h, 4h      | 550 - 730 Tage                 |\n"
-printf "| 6h, 1d      | 1095 - 1825 Tage               |\n"
+printf "| 15m, 30m    | 365 Tage                       |\n"
+printf "| 1h - 1d     | 1095 - 1280 Tage               |\n"
 printf "+-------------+--------------------------------+\n"
 read -p "Startdatum (JJJJ-MM-TT) oder 'a' für Automatik [Standard: a]: " START_DATE_INPUT
 START_DATE_INPUT="${START_DATE_INPUT:-a}"
 read -p "Enddatum (JJJJ-MM-TT) [Standard: Heute]: " END_DATE
 END_DATE="${END_DATE:-$(date +%F)}"
-read -p "Startkapital in USDT [Standard: 1000]: " START_CAPITAL
-START_CAPITAL="${START_CAPITAL:-1000}"
-read -p "Anzahl Trials [Standard: 200]: " N_TRIALS
-N_TRIALS="${N_TRIALS:-200}"
+echo -e "${YELLOW}Optimiert wird nur bis zum OOS-Start; danach wird die Config unverändert getestet (Out-of-Sample).${NC}"
+read -p "OOS-Start (JJJJ-MM-TT) [Standard: 180 Tage vor Enddatum]: " OOS_FROM
+OOS_FROM="${OOS_FROM:-$(date -d "$END_DATE -180 days" +%F)}"
+read -p "Startkapital in USDT [Standard: 100]: " START_CAPITAL
+START_CAPITAL="${START_CAPITAL:-100}"
+read -p "Anzahl Trials [Standard: 150]: " N_TRIALS
+N_TRIALS="${N_TRIALS:-150}"
 read -p "CPU-Kerne [Standard: 1]: " N_JOBS
 N_JOBS="${N_JOBS:-1}"
 
@@ -68,8 +73,9 @@ read -p "Max Drawdown % [Standard: 30]: " MAX_DD
 MAX_DD="${MAX_DD:-30}"
 
 if [ "$OPTIM_MODE" == "1" ]; then
-    read -p "Min Win-Rate % [Standard: 55]: " MIN_WR
-    MIN_WR="${MIN_WR:-55}"
+    # Konfluenz-Trades: wenige Treffer mit hohem Chance-Risiko -> Win-Rate typ. 20-35 %
+    read -p "Min Win-Rate % [Standard: 20]: " MIN_WR
+    MIN_WR="${MIN_WR:-20}"
 else
     MIN_WR=0
 fi
@@ -79,12 +85,9 @@ for symbol in $SYMBOLS; do
 
         # --- Datumsberechnung ---
         if [ "$START_DATE_INPUT" == "a" ]; then
-            lookback_days=365
+            lookback_days=1280
             case "$timeframe" in
-                5m|15m) lookback_days=60 ;;
-                30m|1h) lookback_days=365 ;;
-                2h|4h)  lookback_days=730 ;;
-                6h|1d)  lookback_days=1095 ;;
+                5m|15m|30m) lookback_days=365 ;;
             esac
             FINAL_START_DATE=$(date -d "$lookback_days days ago" +%F)
             echo -e "${YELLOW}INFO: Automatisches Startdatum für $timeframe (${lookback_days} Tage Rückblick): $FINAL_START_DATE${NC}"
@@ -94,11 +97,13 @@ for symbol in $SYMBOLS; do
 
         echo -e "\n${BLUE}=======================================================${NC}"
         echo -e "${BLUE}  Bearbeite Pipeline für: $symbol ($timeframe)${NC}"
-        echo -e "${BLUE}  Datenzeitraum: $FINAL_START_DATE bis $END_DATE${NC}"
+        echo -e "${BLUE}  In-Sample: $FINAL_START_DATE bis $OOS_FROM | OOS: $OOS_FROM bis $END_DATE${NC}"
         echo -e "${BLUE}=======================================================${NC}"
 
-        echo -e "\n${GREEN}>>> Starte Fibonacci-Optimierung für $symbol ($timeframe)...${NC}"
+        echo -e "\n${GREEN}>>> Starte Konfluenz-Optimierung für $symbol ($timeframe)...${NC}"
         $PYTHON "$OPTIMIZER" \
+            --strategy confluence \
+            --oos-from "$OOS_FROM" \
             --symbols "$symbol" \
             --timeframes "$timeframe" \
             --from "$FINAL_START_DATE" \

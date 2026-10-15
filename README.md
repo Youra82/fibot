@@ -1,64 +1,177 @@
-# fibot — Fibonacci Structure Trading Bot
+# fibot — Fibo-Kanal-Konfluenz Trading Bot
 
-Ein technischer Trading-Bot, der klassische Chart-Analyse automatisiert:
-Fibonacci-Retracements, Strukturerkennung (Wedge, Triangle, Channel) und RSI/Volumen-Bestätigung.
-Kein maschinelles Lernen — reine Preisstruktur-Logik, so wie ein Trader es von Hand einzeichnen würde.
+Ein regelbasierter Trading-Bot für Bitget USDT-Futures. Er macht das, was ein Chart-Trader von Hand einzeichnet:
+**Impuls finden, Trendkanal ziehen, Fibonacci-Retracement darüberlegen.** Gekauft (bzw. verkauft) wird nur dort,
+wo die **Kanallinie und das 61,8-%-Level zusammentreffen**. Dafür liegt die Limit-Order schon vorher an genau
+diesem Punkt.
 
-> **Disclaimer:** Diese Software ist experimentell und dient ausschließlich Forschungszwecken.
-> Der Handel mit Kryptowährungen birgt erhebliche finanzielle Risiken. Nutzung auf eigene Gefahr.
+Kein maschinelles Lernen. Die Regeln sind reine Preisstruktur, und Live-Bot und Backtest benutzen dafür
+**dieselbe Funktion**.
+
+> **Disclaimer:** Experimentelle Software, ausschließlich zu Forschungszwecken. Der Handel mit Kryptowährungen
+> birgt erhebliche finanzielle Risiken. Nutzung auf eigene Gefahr.
+
+<p align="center"><img src="docs/img/konfluenz.svg" alt="Fibo-Kanal-Konfluenz: Impuls A–B, steigender Kanal, Limit-Order am Schnittpunkt von 61,8 % und unterer Kanallinie" width="100%"></p>
+
+---
+
+## Inhalt
+
+- [Grundidee](#grundidee)
+- [Ablauf im Überblick](#ablauf-im-überblick)
+- [Strategie im Detail](#strategie-im-detail)
+- [Live-Betrieb](#live-betrieb)
+- [Status und Forschungsergebnisse](#status-und-forschungsergebnisse)
+- [Architektur](#architektur)
+- [Konfiguration](#konfiguration)
+- [Installation](#installation)
+- [Workflow](#workflow)
+- [Auto-Optimierung (wöchentlich)](#auto-optimierung-wöchentlich)
+- [Live vs. Backtest vergleichen](#live-vs-backtest-vergleichen)
+- [Tests](#tests)
+- [Tägliche Verwaltung](#tägliche-verwaltung)
+- [Wichtige Regeln](#wichtige-regeln)
 
 ---
 
 ## Grundidee
 
-Der Bot repliziert das, was ein erfahrener Techniker im Chart einzeichnet:
+| Schritt | Was der Bot tut | Warum |
+|---|---|---|
+| **1 Impuls** | letztes bestätigtes Swing-Tief **A** und das höchste Hoch **B** danach | Das ist die Bewegung, deren Rücksetzer gehandelt wird. |
+| **2 Kanal** | untere Linie durch Pivot-Tiefs, obere parallel durch Pivot-Hochs | Dort haben Käufer bzw. Verkäufer schon mehrfach reagiert. |
+| **3 Konfluenz** | untere Kanallinie in die Zukunft verlängern: Wann kreuzt sie die Zone 50–61,8 %? | Zwei unabhängige Unterstützungen an einem Preis. |
+| **4 Order** | Limit-Order **vorab** an diesem Preis, SL und TP direkt angehängt | Einstieg am Level statt irgendwo in der Zone. |
+| **5 Ausstieg** | TP an der oberen Kanallinie, SL unter 78,6 % bzw. unter der Linie | Strukturell begründet, typisch 2–5 R Chance-Risiko |
 
-```
-Schritt 1: Dominante Swing-Punkte finden
-   ┌─────────────────────────────────────────┐
-   │   Swing High (100%)                     │
-   │       ╲                                 │
-   │        ╲  ← Preisfall (Down-Move)       │
-   │         ╲                               │
-   │          ╲ 61.8% ← Entry-Zone           │
-   │           ╲ 50.0%                       │
-   │            ╲ 38.2% ← Entry-Zone         │
-   │             ╲                           │
-   │   Swing Low (0%)  ← Support             │
-   └─────────────────────────────────────────┘
+Short-Setups laufen spiegelbildlich im fallenden Kanal. Technisch rechnet der Bot die Long-Logik auf der
+gespiegelten Kursreihe (Preis → −Preis), damit beide Seiten garantiert dieselben Regeln haben.
 
-Schritt 2: Fibonacci-Retracement einzeichnen
-   0%    = Swing Low   (aktuelles Tief)
-   38.2% = erste Entry-Zone
-   50.0% = mittlere Entry-Zone
-   61.8% = letzte Entry-Zone vor SL
-   78.6% = Stop-Loss-Niveau
-   100%  = Swing High  (Take-Profit 1)
-   127.2% / 161.8% = Extensions (aggressives TP)
+<p align="center"><img src="docs/img/beispiel_trade.png" alt="Echtes Beispiel: AAVE 4h Long im steigenden Kanal, Fill an der Konfluenz, Take-Profit an der oberen Kanallinie" width="100%"></p>
 
-Schritt 3: Marktstruktur einzeichnen
-   Wedge ↘ / Triangle / Channel → ergibt den Bias
+---
 
-Schritt 4: Confluence prüfen
-   Preis nahe Fib-Zone + RSI bestätigt + Volumen + Struktur-Support
-   → LONG oder SHORT
-```
+## Ablauf im Überblick
 
-**Beispiel: BTC/USDT 4H**
+<p align="center"><img src="docs/img/ablauf.svg" alt="Ablauf: run_pipeline.sh → show_results.sh → wöchentlicher Auto-Optimizer → Live alle 15 Minuten" width="100%"></p>
 
-```
-Swing High: 87.800  (100%)
-Swing Low:  80.600  (0%)
+1. **`run_pipeline.sh`** sucht per Optuna die Parameter je Coin und Timeframe. Optimiert wird **nur auf dem
+   In-Sample-Zeitraum**. Danach wird die Config unverändert auf dem Out-of-Sample-Zeitraum getestet, und
+   beide Ergebnisse stehen in der Config.
+2. **`show_results.sh`** bietet Einzel-Analyse, manuelles Portfolio, automatisches Portfolio und interaktive
+   Charts mit eingezeichnetem Kanal.
+3. **Auto-Optimizer** stellt einmal pro Woche aus allen Configs das beste Team zusammen und schreibt es in
+   `settings.json`.
+4. **Live:** `master_runner.py` läuft alle 15 Minuten und führt jede aktive Strategie aus.
 
-Retracement-Levels:
-  38.2%  →  83.551  ← Entry-Zone Anfang
-  50.0%  →  84.200  ← Entry-Zone Mitte
-  61.8%  →  85.050  ← Entry-Zone Ende
-  78.6%  →  86.457  ← Stop-Loss
- 161.8%  →  92.443  ← Take-Profit (goldene Extension)
-```
+---
 
-Der Bot erkennt genau diese Strukturen und handelt sie automatisch — auf Bitget Futures.
+## Strategie im Detail
+
+Code: [`src/fibot/strategy/confluence_logic.py`](src/fibot/strategy/confluence_logic.py)
+
+### 1 — Pivots ohne Blick in die Zukunft
+
+Ein Hoch/Tief ist ein Pivot, wenn es das Extrem über ±`pivot_k` Kerzen ist. Benutzt wird es erst,
+**nachdem** die `pivot_k` Kerzen rechts davon abgeschlossen sind. Kein Pivot „weiß“ also von späteren Kursen.
+
+### 2 — Kanalerkennung (für jede Kerze neu)
+
+Im Fenster der letzten `window` Kerzen werden alle Paare steigender Pivot-Tiefs als untere Linie getestet.
+Eine Linie zählt nur, wenn alle folgenden Bedingungen erfüllt sind:
+
+| Regel | Parameter | Standard |
+|---|---|---|
+| mindestens 2 Pivot-Tiefs liegen an der Linie | `touch_atr` | 0,3 ATR |
+| Schlusskurse unter der Linie (mehr als 0,5 ATR) | `max_break_frac` | 0 % bis 3 % |
+| kein Pivot-Tief deutlich darunter | `break_atr` | 0,5 ATR |
+| Mindestspanne erster Anker → heute | `min_span` | 20 Kerzen |
+
+Die **obere Linie** liegt parallel durch das relativ höchste Pivot-Hoch. Sie braucht mindestens
+`min_upper_touches` eigene Berührungen und eine Mindestbreite (`min_width_atr`). Auch über ihr darf kaum ein
+Schlusskurs liegen. Unter mehreren gültigen Kanälen gewinnt der mit den meisten Berührungen, bei Gleichstand
+der jüngere.
+
+### 3 — Impuls A → B
+
+- **A** = letztes Pivot-Tief, das die untere Linie berührt.
+- **B** = höchstes bestätigtes Pivot-Hoch nach A. Es muss nahe der oberen Linie liegen (`b_near_upper_atr`).
+- Ein neues Hoch über B bedeutet, dass der Impuls noch läuft. Dann gibt es kein Setup.
+- Ein Schlusskurs unter dem SL-Level macht B ungültig.
+- **Jedes B wird höchstens einmal gehandelt.**
+
+### 4 — Konfluenz und Limit-Order
+
+Für die kommende Kerze wird die untere Kanallinie projiziert. Liegt dieser Preis in der Zone
+`fib_hi` … `fib_lo` (Standard 61,8 % … 50 %, ± `zone_tol_atr`) und der letzte Schlusskurs darüber, liegt dort
+die Limit-Order. In der nächsten Kerze ist die Linie weitergewandert, und die Order wird nachgezogen.
+Optional verfällt ein Setup nach `max_age_mult` × (B − A) Kerzen.
+
+### 5 — Stop-Loss, Take-Profit, Mindest-Chance-Risiko
+
+| | Formel |
+|---|---|
+| **SL** | min(`fib_sl`-Level, Kanallinie) − `sl_buf_atr` × ATR |
+| **TP** | obere Kanallinie (`tp_mode: upper`) oder Hoch B (`tp_mode: b`) |
+| **Filter** | (TP − Entry) / (Entry − SL) ≥ `min_rr` |
+
+### 6 — Konservative Backtest-Ausführung
+
+- Gefüllt wird, wenn das Tief (Long) der Kerze den Limitpreis erreicht. Füllpreis ist der Limitpreis.
+- Erreicht die **Füllkerze auch den SL**, zählt der Trade als Verlust.
+- Ein TP zählt frühestens ab der nächsten Kerze.
+- Berührt eine Kerze SL und TP, entscheiden Feindaten. Ohne Feindaten zählt es als Verlust.
+- In der Kerze, in der ein Trade schließt, gibt es keinen neuen Fill, weil live während einer Position keine
+  Entry-Order liegt.
+- Gebühren: 0,06 % je Seite (Taker, konservativ).
+- **PnL = Kontrakte × Kursbewegung.** Der Hebel bestimmt nur die gebundene Margin, nicht das Risiko.
+
+---
+
+## Live-Betrieb
+
+<p align="center"><img src="docs/img/live_zyklus.svg" alt="Live-Zyklus: kein Setup → Order wartet → Position offen → geschlossen" width="100%"></p>
+
+Bei jedem Lauf (alle 15 Minuten) und für jede aktive Strategie:
+
+1. Abgeschlossene Kerzen laden (die laufende Kerze wird verworfen). Dann ruft der Bot
+   **`plan_next_order()`** auf. Das ist exakt die Rechnung, mit der der Backtest Kerze *n* plant.
+2. **Kein Setup:** Es passiert nichts.
+3. **Setup:** Der Bot legt eine Limit-Order mit **angehängtem SL und TP** (Bitget `presetStopLossPrice` /
+   `presetStopSurplusPrice`). Beide aktiviert Bitget im Moment des Fills. Die Position ist also ab der ersten
+   Sekunde geschützt, auch wenn der Fill zwischen zwei Läufen passiert.
+4. **Neue Kerze:** Die alte Order wird storniert und auf die neue Kanalposition nachgezogen. Bei gleicher Kerze
+   und gleichem Plan bleibt sie liegen.
+5. **Position offen:** Self-Repair prüft SL/TP, auch in Bitgets Kategorie „Position-TP/SL“, und setzt fehlende
+   Orders neu. Der Overshoot-Check schließt notfalls per Market.
+6. **Geschlossen:** Der Bot räumt Rest-Orders auf. Da B laut Kerzenhistorie verbraucht ist, gibt es keinen
+   zweiten Einstieg in denselben Impuls.
+
+**Positionsgröße:** Risiko = `risk_per_entry_pct` × **Gesamtkapital**, wie im Backtest. Die Margin wird nur auf
+das freie Guthaben gekappt. Positionen unter 5 USDT Notional werden nicht eröffnet.
+
+Die Parität ist getestet: [`tests/test_confluence.py`](tests/test_confluence.py) vergleicht für jede Kerze den
+Live-Plan (600 Kerzen Historie) mit dem Backtest-Plan (volle Historie). Zusätzlich prüft der Test den
+Live-Zyklus (legen / liegen lassen / aufräumen) mit einer Mock-Exchange.
+
+---
+
+## Status und Forschungsergebnisse
+
+Ehrlich dokumentiert, damit niemand mehr erwartet, als belegt ist:
+
+| Test | Ergebnis |
+|---|---|
+| Alte Fibo-Logik (RSI-Score, Einstieg am Kerzenschluss), 63 Configs | In-Sample +0,20 R/Trade, **Out-of-Sample −0,43 R/Trade** |
+| Konfluenz mit festen Lehrbuch-Parametern, v1 (10 Coins, 4h/6h/1d) | 334 Trades, **−0,09 R/Trade**, nicht bestanden |
+| Konfluenz v2, strengerer Kanal (20 Coins) | 235 Trades, **−0,05 R/Trade**, brutto ≈ 0, nicht bestanden |
+
+Vorregistrierung, Code und Trades: [`forschung/konfluenz/`](forschung/konfluenz/) ([`PREREG.md`](forschung/konfluenz/PREREG.md)).
+
+Mit **einem** Parametersatz für alle Coins hat die Regel bisher keine messbare Kante. Die aktuellen Configs sind
+deshalb **je Coin/Timeframe optimiert** und nach ihrem Out-of-Sample-Ergebnis ausgewählt. Wer so auswählt,
+findet auch Zufallssieger. Die Configs sollten deshalb mit kleinem Risiko live laufen und regelmäßig mit
+`daten/compare_live_vs_backtest.py` überprüft werden.
 
 ---
 
@@ -66,647 +179,209 @@ Der Bot erkennt genau diese Strukturen und handelt sie automatisch — auf Bitge
 
 ```
 fibot/
-├── master_runner.py                   # Cronjob-Orchestrator für Live-Trading
-├── auto_optimizer_scheduler.py        # Auto-Optimierung im Hintergrund (Scheduler)
-├── show_leverage.py                   # Zeigt Hebel, SL, Risiko aller aktiven Strategien
-├── show_results.sh                    # Interaktives Analyse-Menü (4 Modi)
-├── run_pipeline.sh                    # Optuna-Optimierung für neue Configs
-├── push_configs.sh                    # Optimierte Configs ins Repo pushen
-├── install.sh                         # Erstinstallation auf VPS
-├── update.sh                          # Git-Update (sichert secret.json)
-├── cron_setup.sh                      # Cron-Job einrichten
-├── settings.json                      # Aktive Strategien + Auto-Optimizer-Einstellungen
-├── secret.json                        # API-Keys (nicht in Git)
+├── master_runner.py                 # Cron-Orchestrator: startet alle aktiven Strategien
+├── auto_optimizer_scheduler.py      # wöchentliche Portfolio-Optimierung im Hintergrund
+├── run_pipeline.sh                  # Optuna-Optimierung (In-Sample) + OOS-Test je Coin/TF
+├── show_results.sh                  # Analyse-Menü (4 Modi)
+├── push_configs.sh                  # Configs + settings.json ins Repo pushen
+├── update.sh                        # VPS-Update (sichert secret.json, VPS-Configs, Portfolio)
+├── cron_setup.sh                    # Cron alle 15 Minuten
+├── settings.json                    # aktive Strategien + Auto-Optimizer
 │
-├── daten/
-│   └── compare_live_vs_backtest.py    # Live-Trades (Bitget) vs. Backtest + Korrelation
+├── docs/                            # README-Illustrationen (make_illustrations.py)
+├── forschung/konfluenz/             # Vorregistrierung, Tests, Strategiesuche
+├── daten/compare_live_vs_backtest.py
 │
 └── src/fibot/
     ├── strategy/
-    │   ├── fibonacci_logic.py         # KERN: Swing, Fib, Struktur, Signal
-    │   ├── run.py                     # Entry Point für eine Strategie
-    │   └── configs/
-    │       └── config_BTCUSDTUSDT_4h_fib.json   # Parameter pro Symbol
-    │
+    │   ├── confluence_logic.py      # KERN: Pivots, Kanal, Impuls, Konfluenz, plan_next_order()
+    │   ├── signals.py               # Verteiler: strategy.type → Konfluenz- oder alte Fibo-Logik
+    │   ├── fibonacci_logic.py       # alte Fibo-Logik (für Altkonfigs)
+    │   ├── run.py                   # Einstieg für eine Strategie
+    │   └── configs/                 # config_<SYMBOL>_<TF>_fib.json
     ├── analysis/
-    │   ├── backtester.py              # Walk-Forward Backtest (vektorisiert, O(N log N))
-    │   ├── optimizer.py               # Optuna-Optimierung: findet beste Parameter
-    │   ├── portfolio_simulator.py     # Chronologische Multi-Strategie-Simulation
-    │   ├── interactive_chart.py       # Interaktive Plotly-Charts (Mode 4)
-    │   └── show_results.py            # Portfolio-Analyse & Backtest-Anzeige
-    │
+    │   ├── backtester.py            # Einzel-Backtest (Signale über signals.py)
+    │   ├── optimizer.py             # Optuna: optimize_confluence() mit IS/OOS-Trennung
+    │   ├── portfolio_simulator.py   # gemeinsames Kapital, Margin-Check, chronologisch
+    │   ├── interactive_chart.py     # Plotly-Chart mit Kanal je Trade
+    │   └── show_results.py          # Modi 1–4
     └── utils/
-        ├── exchange.py                # Bitget CCXT Wrapper
-        ├── trade_manager.py           # Entry / TP / SL / Tracker
-        └── telegram.py                # Telegram-Benachrichtigungen
+        ├── exchange.py              # Bitget-Wrapper (Limit + angehängtes SL/TP, Position-TP/SL)
+        ├── trade_manager.py         # Live-Zyklus inkl. confluence_cycle()
+        └── telegram.py
 ```
-
----
-
-## Strategie im Detail
-
-### Phase 1 — Swing-Erkennung
-
-```
-ZigZag-Pivot-Algorithmus (pivot_left=5, pivot_right=5):
-  → Ein Hoch gilt als Pivot, wenn es das höchste der
-    umliegenden 5 Kerzen links und 5 Kerzen rechts ist.
-  → Gleich für Tiefs.
-
-Aus allen Pivots in den letzten 100 Kerzen:
-  → Dominanter Swing High = das höchste Pivot-Hoch
-  → Dominanter Swing Low  = das niedrigste Pivot-Tief
-  → Richtung: welcher Punkt kam zuletzt?
-      "down" → Preis fiel (→ LONG-Setup)
-      "up"   → Preis stieg (→ SHORT-Setup)
-```
-
-> Mindestbewegung: 1% zwischen High und Low, sonst kein Signal.
-
----
-
-### Phase 2 — Fibonacci-Grid
-
-```
-Für LONG-Setup (Preis ist gefallen, sucht Unterstützung):
-  0%    = Swing Low              ← aktuelles Tief
-  23.6% = Low + 23.6% × (H-L)   ← erstes Fibonacci-Niveau
-  38.2% = Low + 38.2% × (H-L)   ← Entry-Zone Anfang
-  50.0% = Low + 50.0% × (H-L)   ← Entry-Zone Mitte
-  61.8% = Low + 61.8% × (H-L)   ← Entry-Zone Ende
-  78.6% = Low + 78.6% × (H-L)   ← Stop-Loss-Niveau
- 100.0% = Swing High             ← Swing-Rückkehr
- 127.2% = Low + 127.2% × (H-L)  ← Extension TP
- 161.8% = Low + 161.8% × (H-L)  ← goldene Extension TP (Optimizer-Standard)
-
-Für SHORT-Setup (Preis ist gestiegen, sucht Widerstand):
-  → Spiegelverkehrt: gemessen vom Swing High nach unten
-```
-
----
-
-### Phase 3 — Strukturerkennung + Toleranzzone
-
-Der Bot legt automatisch Trendlinien durch die Pivot-Hochs und Pivot-Tiefs
-(lineare Regression) und klassifiziert das Ergebnis.
-
-**Wichtig:** Eine Trendlinie ist keine exakte Linie — Preise testen sie immer
-mit etwas Abstand. Deshalb berechnet der Bot eine **ATR-basierte Toleranzzone**
-um jede Trendlinie:
-
-```
-Toleranzzone = Trendlinie ± (structure_tolerance_atr_mult × ATR)
-
-Beispiel (BTC/USDT 4H, ATR = 800 USDT, Mult = 0.3):
-
-  Trendlinie (Support) = 83.200
-  Toleranz             = 0.3 × 800 = 240 USDT
-
-  Support-Zone:  82.960 ──────── 83.200 ──────── 83.440
-                 (Untergrenze)  (Linie)  (Obergrenze)
-
-  → Preis zwischen 82.960 und 83.440 = "testet die Unterstützung" → Confluence-Bonus
-  → Preis unter 82.960               = echter Breakdown (kein False-Breakout)
-  → Preis über 83.440                = oberhalb der Struktur (kein Support-Kontakt)
-```
-
-| Strukturtyp | Beschreibung | Bias |
-|---|---|---|
-| `wedge_down` | Absteigende Keile (beide Linien fallen, konvergieren) | Bullisch |
-| `wedge_up` | Aufsteigende Keile (beide Linien steigen, konvergieren) | Bärisch |
-| `triangle` | Symmetrisches Dreieck (Linien konvergieren gegenläufig) | Neutral |
-| `channel_down` | Absteigender Kanal (parallele fallende Linien) | Bärisch |
-| `channel_up` | Aufsteigender Kanal (parallele steigende Linien) | Bullisch |
-
----
-
-### Phase 4 — Signal & Confluence
-
-Ein LONG-Signal entsteht, wenn **alle** Bedingungen erfüllt sind:
-
-```
-1. Swing-Richtung = "down"  (Preis ist zuvor gefallen)
-2. Preis liegt in der Entry-Zone [38.2% – 61.8%]
-3. RSI < rsi_oversold (45)  → überverkaufte Zone
-4. Volumen ≥ vol_ratio_min × 20-Perioden-MA
-5. Struktur-Bias = "bullish" oder "neutral"
-6. Optional: Preis nahe Struktur-Support → +1.5 Bonus-Score
-7. Optional: Breakout nach oben → +2.0 Bonus-Score
-
-R:R ≥ min_rr (1.5) → sonst kein Signal
-
-Gesamt-Score (0–10):
-  ≥ min_signal_score (4.0) → Signal wird gehandelt
-  < min_signal_score       → Signal wird ignoriert
-```
-
-Ein SHORT-Signal läuft analog: Swing-Richtung "up", RSI > 55, Struktur bärisch.
-
----
-
-### Phase 5 — Entry, SL und TP
-
-```
-Entry:   Limit-Order exakt am Signal-Preis (Fibonacci-Niveau)
-         → konsistent mit dem Backtester (keine künstliche Delta-Verschiebung)
-
-SL:      max(ATR × 1.5, Fibonacci 78.6%)
-         → der engere Wert wird genommen (SL so nah wie möglich)
-
-TP:      Fibonacci 161.8% (goldene Extension — Standard nach Optimierung)
-         konfigurierbar: 100% / 127.2% / 161.8% via fib_tp1_level
-
-Alle TP/SL werden als Trigger-Market-Orders direkt nach Fill platziert.
-Gehen TP/SL verloren (VPS-Neustart), werden sie beim nächsten Cycle
-automatisch aus dem Tracker wiederhergestellt.
-```
-
-> **Warum 161.8% als TP?** Low Win-Rate (~16–18%) kombiniert mit hohem R:R (~1:14)
-> liefert einen besseren Expected Value als High Win-Rate + niedriges R:R.
-> Beispiel: 18% WR × 14 R:R − 82% × 1 = +1.70 vs. 55% WR × 2 − 45% = +0.65
-
----
-
-### Beispiel-Signal (Telegram-Ausgabe)
-
-```
-FiBot Signal — BTC/USDT:USDT (4h)
-Richtung : LONG
-Entry    : 83.420,00  (38.2–61.8 Retracement)
-SL       : 81.950,00  (-1.76%)
-TP1      : 92.443,00  (+10.82%) [Fib 161.8%]
-R:R      : 1:6.15
-Score    : 7.0/10
-Struktur : wedge_down (bullish)
-Swing    : H=87.800 / L=80.600
-Grund    : LONG | RSI überverkauft (41.2) | Volumen 1.43x
-           | Struktur: wedge_down (bullish)
-           | Preis nahe Struktur-Support (83.200) | R:R 6.15
-```
-
----
-
-## Fibonacci-Levels Referenz
-
-| Level | Ratio | Rolle im System |
-|---|---|---|
-| 0% | 0.000 | Swing-Extrem (Ausgangspunkt) |
-| 23.6% | 0.236 | Erstes Retracement (schwaches Level) |
-| **38.2%** | **0.382** | **Entry-Zone Anfang** |
-| **50.0%** | **0.500** | **Entry-Zone Mitte (stärkstes Level)** |
-| **61.8%** | **0.618** | **Entry-Zone Ende (letzter Einstieg)** |
-| 78.6% | 0.786 | Stop-Loss-Niveau |
-| 100% | 1.000 | Swing-Rückkehr |
-| 127.2% | 1.272 | Extension TP |
-| **161.8%** | **1.618** | **goldene Extension TP (Optimizer-Standard)** |
 
 ---
 
 ## Konfiguration
 
-### `settings.json` — Aktive Strategien & Auto-Optimizer
+### `settings.json`
 
 ```json
 {
   "live_trading_settings": {
+    "max_open_positions": 8,
     "active_strategies": [
-      {
-        "symbol": "BTC/USDT:USDT",
-        "timeframe": "4h",
-        "leverage": 3,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 0.5,
-        "active": true
-      }
+      { "symbol": "NEAR/USDT:USDT", "timeframe": "1h", "leverage": 5,
+        "margin_mode": "isolated", "risk_per_entry_pct": 1.0, "active": true }
     ]
   },
   "optimization_settings": {
-    "enabled": false,
-    "schedule": {
-      "day_of_week": 6,
-      "hour": 3,
-      "minute": 0,
-      "interval": {
-        "value": 7,
-        "unit": "days"
-      }
-    },
-    "start_capital": 1000,
-    "max_drawdown_pct": 30,
-    "min_win_rate_pct": 0,
-    "lookback_days": 365,
-    "send_telegram_on_completion": true
+    "enabled": true,
+    "start_capital": 100,
+    "start_date": "2025-01-01",
+    "end_date": "auto",
+    "constraints": { "max_drawdown_pct": 30 },
+    "send_telegram_on_completion": true,
+    "schedule": { "day_of_week": 2, "hour": 3, "minute": 0,
+                  "interval": { "value": 7, "unit": "days" } }
   }
 }
 ```
 
-| Feld | Standard | Erklärung |
-|---|---|---|
-| `enabled` | `false` | Auto-Optimizer ein/ausschalten |
-| `day_of_week` | `6` | Wochentag (0=Montag, 6=Sonntag) für geplanten Lauf |
-| `hour` / `minute` | `3` / `0` | Uhrzeit für geplanten Lauf (03:00 Uhr) |
-| `interval.value/unit` | `7 days` | Mindestabstand zwischen zwei Optimierungen |
-| `start_capital` | `1000` | Startkapital für die Simulation |
-| `max_drawdown_pct` | `30` | Max. erlaubter Drawdown (Portfolio-Simulation) |
-| `min_win_rate_pct` | `0` | Min. Win-Rate (0 = kein Limit) |
-| `lookback_days` | `"auto"` | Historische Tage: `"auto"` = max. Wert über alle Config-Timeframes (15m→180, 1h→365, 4h→730, 1d→1095), oder feste Zahl |
-| `send_telegram_on_completion` | `true` | Ergebnis via Telegram senden |
+`active_strategies` schreibt normalerweise der Auto-Optimizer, bzw. `show_results.sh` Modus 3 auf Nachfrage.
 
-> **Erster Start:** Beim ersten Lauf nach `enabled: true` startet die Optimierung sofort
-> (keine `.last_optimization_run` Datei vorhanden). Danach greift das Interval.
-
-### `configs/config_BTCUSDTUSDT_4h_fib.json` — Strategie-Parameter
+### Strategie-Config (Konfluenz)
 
 ```json
 {
-  "market": {
-    "symbol": "BTC/USDT:USDT",
-    "timeframe": "4h"
-  },
+  "market":   { "symbol": "AAVE/USDT:USDT", "timeframe": "4h" },
   "strategy": {
-    "swing_lookback": 100,
-    "pivot_left": 5,
-    "pivot_right": 5,
-    "structure_lookback": 60,
-
-    "fib_entry_min": 0.382,
-    "fib_entry_max": 0.618,
-    "fib_sl_level": 0.786,
-    "fib_tp1_level": 1.618,
-
-    "rsi_period": 14,
-    "rsi_oversold": 45,
-    "rsi_overbought": 55,
-    "volume_ratio_min": 1.0,
-    "atr_period": 14,
-    "atr_sl_multiplier": 1.5,
-
-    "min_rr": 1.5,
-    "min_signal_score": 4.0
+    "type": "confluence",
+    "pivot_k": 5, "window": 150, "touch_atr": 0.3,
+    "max_break_frac": 0.0, "min_width_atr": 3.0, "min_upper_touches": 2,
+    "fib_lo": 0.5, "fib_hi": 0.618, "fib_sl": 0.786,
+    "zone_tol_atr": 0.25, "sl_buf_atr": 0.2, "min_rr": 1.5,
+    "max_age_mult": 2.0, "b_near_upper_atr": 0.5, "tp_mode": "upper",
+    "candle_limit": 600
   },
-  "risk": {
-    "leverage": 3,
-    "margin_mode": "isolated",
-    "risk_per_entry_pct": 0.5
+  "risk": { "leverage": 5, "risk_per_entry_pct": 1.0, "margin_mode": "isolated" },
+  "_backtest": {
+    "start_date": "2023-04-08", "end_date": "2026-04-01",
+    "pnl_pct": 0.0, "max_drawdown": 0.0, "total_trades": 0, "win_rate": 0.0,
+    "oos": { "start_date": "2026-04-01", "end_date": "2026-10-15",
+             "pnl_pct": 0.0, "max_drawdown": 0.0, "total_trades": 0, "win_rate": 0.0 }
   }
 }
 ```
 
-| Parameter | Standard | Erklärung |
+| Parameter | Bereich im Optimizer | Bedeutung |
 |---|---|---|
-| `swing_lookback` | 100 | Kerzen für Swing-Suche |
-| `pivot_left` / `pivot_right` | 5 | Pivot-Bestätigung: n Kerzen links/rechts |
-| `structure_lookback` | 60 | Kerzen für Trendlinien-Berechnung |
-| `fib_entry_min` | 0.382 | Untere Entry-Zone (38.2%) |
-| `fib_entry_max` | 0.618 | Obere Entry-Zone (61.8%) |
-| `fib_sl_level` | 0.786 | Stop-Loss-Fibonacci-Level (78.6%) |
-| `fib_tp1_level` | 1.618 | TP-Extension (1.0=100%, 1.272=127.2%, 1.618=161.8%) |
-| `structure_tolerance_atr_mult` | 0.3 | Puffer um Trendlinie = ATR × Faktor |
-| `rsi_oversold` | 45 | RSI-Schwelle für LONG |
-| `rsi_overbought` | 55 | RSI-Schwelle für SHORT |
-| `volume_ratio_min` | 1.0 | Volumen muss ≥ MA × dieser Faktor sein |
-| `atr_sl_multiplier` | 1.5 | SL = ATR × dieser Faktor |
-| `min_rr` | 1.5 | Mindest-Risiko-Rendite-Verhältnis |
-| `min_signal_score` | 4.0 | Signal-Score 0–10: unter diesem Wert kein Trade |
-| `leverage` | 3 | Hebel (Bitget Futures) |
-| `margin_mode` | isolated | isolated oder cross |
-| `risk_per_entry_pct` | 0.5 | % des Kontostands als Risiko pro Trade |
+| `pivot_k` | 3 / 5 | Pivot-Bestätigung (Kerzen je Seite) |
+| `window` | 100 / 150 | Kerzen für die Kanalsuche |
+| `min_upper_touches` | 1 / 2 | Berührungen der oberen Linie |
+| `max_break_frac` | 0 / 0,03 | erlaubter Anteil Schlusskurse außerhalb |
+| `min_width_atr` | 2 / 3 | Mindestbreite des Kanals in ATR |
+| `fib_lo` / `fib_hi` | 0,382–0,5 / 0,618–0,786 | Konfluenz-Zone |
+| `fib_sl` | 0,786 / 0,886 / 1,0 | SL-Level (muss tiefer liegen als `fib_hi`) |
+| `zone_tol_atr` | 0,1–0,8 | Toleranz um die Zone |
+| `sl_buf_atr` | 0–0,6 | Puffer unter dem SL-Level |
+| `min_rr` | 1,0–3,0 | Mindest-Chance-Risiko |
+| `max_age_mult` | aus / 1,5 / 2 / 3 | Setup verfällt nach × (B − A) Kerzen |
+| `tp_mode` | upper / b | TP an oberer Kanallinie oder an B |
+| `leverage` | 3–10 | nur Margin, nicht Risiko |
+| `risk_per_entry_pct` | 0,5–3,0 | Risiko pro Trade in % des Kapitals |
 
-> **Optimizer-Parameter:** `leverage`, `risk_per_entry_pct`, `margin_mode` und
-> `fib_tp1_level` werden vom Optimizer automatisch bestimmt. Nicht manuell ändern —
-> `run_pipeline.sh` überschreibt sie.
+Configs ohne `"type": "confluence"` laufen weiter mit der alten Fibo-Logik. `update.sh` verschiebt sie beim
+Wechsel nach `configs_alt_fibo/`.
 
 ---
 
 ## Installation
 
-#### 1. Projekt klonen
-
 ```bash
 git clone https://github.com/Youra82/fibot.git
 cd fibot
-```
-
-#### 2. Installations-Skript ausführen
-
-```bash
-chmod +x install.sh
-./install.sh
-```
-
-#### 3. API-Keys eintragen
-
-```bash
-cp secret.json.template secret.json
-nano secret.json
+chmod +x install.sh && ./install.sh
+cp secret.json.template secret.json && nano secret.json
 ```
 
 ```json
 {
-  "fibot": {
-    "name": "Main Account",
-    "apiKey": "DEIN_API_KEY",
-    "secret": "DEIN_SECRET",
-    "password": "DEIN_PASSPHRASE"
-  },
-  "telegram": {
-    "bot_token": "DEIN_BOT_TOKEN",
-    "chat_id": "DEINE_CHAT_ID"
-  }
+  "fibot":    { "name": "Main Account", "apiKey": "…", "secret": "…", "password": "…" },
+  "telegram": { "bot_token": "…", "chat_id": "…" }
 }
 ```
-
-> Alternativ wird auch das Array-Format unterstützt: `"fibot": [{ ... }]`
 
 ---
 
 ## Workflow
 
-#### 1. Parameter optimieren — `run_pipeline.sh`
-
-Die Pipeline findet automatisch die besten Strategie-Parameter für jedes Symbol
-und jeden Timeframe per **Optuna-Optimierung** und speichert sie als Config-JSON.
+### 1. Configs erzeugen — `run_pipeline.sh`
 
 ```bash
-chmod +x run_pipeline.sh
 ./run_pipeline.sh
 ```
 
 ```
-Symbol(e) (z.B. BTC ETH): BTC ETH SOL
-Timeframe(s) (z.B. 4h oder 1h 4h): 4h 1d
-Startkapital: 1000
-Trials: 200
-Max Drawdown: 30
+Handelspaar(e) eingeben (ohne /USDT, z.B. BTC ETH): AAVE NEAR TRX
+Zeitfenster eingeben (z.B. 1h 4h): 1h 4h
+Startdatum oder 'a' für Automatik [a]:          → 1280 Tage (15m/30m: 365)
+Enddatum [Heute]:
+OOS-Start [180 Tage vor Enddatum]:              → bis hier wird optimiert, danach nur getestet
+Startkapital [100] / Trials [150] / Max Drawdown [30] / Min Win-Rate [20]
 ```
 
-Was optimiert wird:
-
-| Parameter | Bereich | Bedeutung |
-|---|---|---|
-| `fib_tp1_level` | 1.0 / 1.272 / 1.618 | TP-Extension (161.8% = mehr R:R) |
-| `swing_lookback` | 50–200 Kerzen | Wie weit zurück nach Swings suchen |
-| `pivot_left/right` | 2–8 Kerzen | Pivot-Bestätigung |
-| `rsi_oversold/bought` | 30–70 | RSI-Filter-Grenzen |
-| `volume_ratio_min` | 0.5–2.0× | Volumen-Bestätigung |
-| `min_signal_score` | 2.0–7.0 | Mindest-Score für Entry |
-| `leverage` | 2–20× | Hebelwirkung (DD-begrenzt) |
-| `risk_per_entry_pct` | 0.5–8.0% | Risiko pro Trade (DD-begrenzt) |
-
-Ergebnis: `src/fibot/strategy/configs/config_BTCUSDTUSDT_4h_fib.json`
-
-> **Tipp:** 200 Trials für erste Ergebnisse, 500 Trials für finale Optimierung.
-
-#### 2. Ergebnisse prüfen — `show_results.sh`
-
-```bash
-chmod +x show_results.sh
-./show_results.sh
-```
+Pro Coin/Timeframe gibt die Pipeline beide Ergebnisse aus und speichert sie in der Config:
 
 ```
-Wähle einen Analyse-Modus:
-  1) Einzel-Analyse              (jede Strategie wird isoliert getestet)
-  2) Manuelle Portfolio-Simulation  (du wählst das Team)
-  3) Automatische Portfolio-Optimierung  (der Bot wählt das beste Team)
-  4) Interaktive Charts          (Candlestick + Entry/Exit-Marker)
+  In-Sample: PnL +88.52%  WR 24.0%  Trades 100  MaxDD 27.30%
+  OOS      : PnL +19.31%  WR 29.4%  Trades 17   MaxDD 18.50%
 ```
 
-**Modus 1 — Einzel-Analyse:**
-Backtestet alle vorhandenen Configs isoliert. Fragt Startdatum, Enddatum,
-Startkapital. Ausgabe als sortierte Zusammenfassungstabelle (nach PnL):
+Leere Eingaben bei Coin oder Timeframe brechen die Pipeline sofort ab.
 
-```
-=========================================================================================
-                        Zusammenfassung aller Einzelstrategien
-=========================================================================================
-  Strategie               Trades  Win Rate %    PnL %  Max DD %  Endkapital
-  ADA/USDT:USDT (1h)         282       24.82  1613.40     19.26      428.35
-  ETH/USDT:USDT (1h)         199       20.60   299.07     17.59       99.77
-=========================================================================================
-```
+### 2. Ergebnisse prüfen — `show_results.sh`
 
-**Modus 2 — Manuelle Portfolio-Simulation:**
-Zeigt alle verfügbaren Configs nummeriert. Auswahl z.B. `1 3 5` oder `alle`.
-Bot backtestet die gewählten Strategien isoliert und zeigt kombinierte Portfolio-Performance.
+| Modus | Inhalt |
+|---|---|
+| **1 Einzel-Analyse** | alle Configs isoliert, Tabelle nach PnL |
+| **2 Manuelles Portfolio** | Configs auswählen (`1 3 5` oder `alle`) |
+| **3 Auto-Portfolio** | Greedy-Auswahl nach Calmar (PnL / MaxDD), gemeinsames Kapital, kein Coin doppelt. Danach optional `settings.json` schreiben, Equity-Chart + Excel per Telegram |
+| **4 Interaktive Charts** | Candlestick mit Entry/Exit und dem Kanal, wie er beim Fill bekannt war |
 
-**Modus 3 — Automatische Portfolio-Optimierung:**
-Greedy-Algorithmus findet das beste Portfolio unter vorgegebenen Randbedingungen
-(Max Drawdown, optionale Min Win-Rate). Coin-Kollisionsschutz: gleicher Coin
-in zwei Timeframes (BTC 4h + BTC 1d) ist blockiert.
+### 3. Configs ins Repo — `push_configs.sh`
 
-Die Basis-Strategie wird gegen die **Portfolio-Simulation-DD** validiert (nicht nur
-gegen den Einzel-Backtester). Das stellt sicher, dass die Bedingung im Ergebnis
-auch tatsächlich eingehalten wird.
+Committet nur `configs/*.json` und `settings.json` und pusht auf `origin/main`.
 
-```
-1/3: Suche Basis-Strategie (Portfolio-Sim-DD muss <= 30.00%)...
-  OK config_ADAUSDTUSDT_1h_fib.json     Sim: 428.35 USDT  Sim-DD: 19.26%
-  -- config_AAVEUSDTUSDT_30m_fib.json   Sim: 256.75 USDT  Sim-DD: 42.38%
-
-2/3: Beste Basis: config_ADAUSDTUSDT_1h_fib.json
-     Portfolio-Simulation: 428.35 USDT, Sim-DD: 19.26%
-
-3/3: Suche beste Team-Kollegen...
--> Fuege hinzu: config_ETHUSDTUSDT_1h_fib.json
-   (Neues Kapital: 510.00 USDT, Max DD: 22.40%)
-
-=======================================================
-     Ergebnis der automatischen Portfolio-Optimierung
-=======================================================
-Endkapital:    510.00 USDT (+410.00%, +410.00 USDT)
-Portfolio MaxDD: 22.40%
-Liquidiert:    NEIN
-=======================================================
-```
-
-Am Ende wird angeboten:
-- `settings.json` mit dem optimalen Portfolio zu aktualisieren
-- Interaktiven Portfolio-Equity-Chart als HTML zu erstellen (`artifacts/charts/fibot_portfolio_equity.html`)
-- Excel-Tabelle aller Trades zu erstellen (`artifacts/charts/fibot_trades.xlsx`)
-- Beides via Telegram zu senden
-
-**Modus 4 — Interaktive Charts:**
-Liest alle aktuellen Configs aus `src/fibot/strategy/configs/` und zeigt sie zur Auswahl.
-Nach der Auswahl: Startdatum, Enddatum, Kapital eingeben → Backtest wird frisch berechnet
-→ HTML-Chart in `artifacts/charts/fibot_*.html` mit 5 Panels:
-Candlestick + Fib-Levels, Volumen, RSI, ATR, Signal-Score.
-
-#### 3. Configs ins Repo pushen — `push_configs.sh`
-
-Nach erfolgreicher Optimierung die neuen Configs direkt ins Repo pushen,
-damit der VPS sie per `update.sh` holen kann:
-
-```bash
-chmod +x push_configs.sh
-./push_configs.sh
-```
-
-Das Skript:
-- Prüft ob `config_*_fib.json` Dateien vorhanden sind
-- Staged + committet nur die Configs (keine anderen Dateien)
-- Pusht auf `origin/main`, führt bei Konflikt automatisch Rebase durch
-
-#### 4. VPS aktualisieren
+### 4. VPS aktualisieren — `update.sh`
 
 ```bash
 ./update.sh
 ```
 
-Sichert `secret.json`, holt neue Configs per `git reset --hard`, stellt `secret.json` wieder her.
+- Sichert `secret.json`, die VPS-eigenen Configs und das aktive Portfolio. Danach `git reset --hard origin/main`
+  und Wiederherstellung.
+- **Strategiewechsel:** Liegt im Repo eine Konfluenz-Config, wird sie nie von einer alten Fibo-Config des VPS
+  überschrieben. Alte Fibo-Configs wandern nach `src/fibot/strategy/configs_alt_fibo/`, das Portfolio kommt dann
+  aus dem Repo.
 
-#### 5. Live schalten
-
-```bash
-nano settings.json
-# active_strategies befüllen (manuell oder via show_results.sh Mode 3)
-```
-
-#### 6. Cronjob einrichten
+### 5. Cron
 
 ```bash
-chmod +x cron_setup.sh
-./cron_setup.sh
+./cron_setup.sh      # */15 * * * *  master_runner.py
 ```
-
-Oder manuell:
-
-```bash
-crontab -e
-```
-
-```cron
-# FiBot — alle 4 Stunden (passend zum 4h Timeframe)
-0 */4 * * * cd /root/fibot && .venv/bin/python3 master_runner.py >> logs/cron.log 2>&1
-
-# FiBot — stündlich (für 1h Timeframe)
-5 * * * * cd /root/fibot && .venv/bin/python3 master_runner.py >> logs/cron.log 2>&1
-```
-
-> Offset von 5 Minuten nach der vollen Stunde empfohlen (Börse braucht ~1–2 Min
-> um die Kerze zu schließen).
 
 ---
 
-## Auto-Optimierung
+## Auto-Optimierung (wöchentlich)
 
-Der Bot kann das Portfolio **vollautomatisch** neu optimieren — ohne manuellen Eingriff.
-Der Scheduler läuft bei jedem `master_runner.py`-Start im Hintergrund und prüft,
-ob eine Optimierung fällig ist.
+`master_runner.py` startet bei jedem Lauf `auto_optimizer_scheduler.py` im Hintergrund. Ist die Optimierung
+fällig (Zeitplan aus `settings.json`, Standard Mittwoch 03:00, Mindestabstand 7 Tage), läuft:
 
-### Aktivieren
+```
+show_results.py --mode 3 --auto
+  ├─ alle Configs backtesten (Zeitraum start_date … heute)
+  ├─ Greedy-Portfolio nach Calmar, MaxDD ≤ constraints.max_drawdown_pct
+  ├─ active_strategies in settings.json schreiben
+  └─ Telegram: Portfolio, Equity-Chart (HTML), Trades (Excel)
+```
 
 ```bash
-nano settings.json
-# "enabled": true setzen unter optimization_settings
-```
-
-### Zeitplan-Optionen
-
-```json
-"schedule": {
-  "day_of_week": 6,
-  "hour": 3,
-  "minute": 0,
-  "interval": { "value": 7, "unit": "days" }
-}
-```
-
-- **`interval`**: Mindestabstand zwischen zwei Läufen (z.B. alle 7 Tage)
-- **`day_of_week` + `hour`**: Zusätzlich geplanter Lauf (z.B. jeden Samstag 03:00 Uhr)
-- Beide Mechanismen greifen unabhängig voneinander
-
-Unterstützte Einheiten für `interval.unit`: `minutes`, `hours`, `days`, `weeks`
-
-### Ablauf
-
-```
-master_runner.py startet
-  └─ auto_optimizer_scheduler.py (Hintergrund, non-blocking)
-       ├─ Prüft .last_optimization_run
-       ├─ Wenn fällig: Telegram "Optimierung gestartet"
-       ├─ Setzt .optimization_in_progress (verhindert parallele Läufe)
-       ├─ Führt aus: show_results.py --mode 3 --auto
-       │    (verwendet start_capital / max_drawdown_pct / lookback_days aus settings.json)
-       ├─ Liest optimization_results.json
-       ├─ Schreibt active_strategies in settings.json
-       ├─ Speichert Timestamp in .last_optimization_run
-       └─ Telegram "Optimierung abgeschlossen" mit Portfolio-Details
-          + Portfolio-Chart HTML + Excel-Tabelle (artifacts/charts/)
-```
-
-### Manuell auslösen
-
-```bash
-# Scheduler direkt starten (prüft ob fällig, hält sich an enabled + Schedule)
-.venv/bin/python3 auto_optimizer_scheduler.py
-
-# Sofort erzwingen — ignoriert enabled und Schedule (für Tests)
-.venv/bin/python3 auto_optimizer_scheduler.py --force
-```
-
-> `--force` überspringt den `enabled`-Check und den Zeitplan-Check.
-> Nützlich um nach einer Konfigurationsänderung direkt zu testen,
-> ob der Ablauf korrekt funktioniert.
-
-### Replot — Charts neu generieren (ohne Re-Optimierung)
-
-Das aktive Portfolio erneut simulieren und Equity-Chart + Trades-Excel via Telegram senden — ohne die komplette Optimierung neu durchzuführen:
-
-```bash
-.venv/bin/python3 run_portfolio_optimizer.py --replot
-```
-
-Optionale Parameter (werden sonst aus `settings.json` gelesen):
-```bash
-.venv/bin/python3 run_portfolio_optimizer.py --replot --capital 200 --start-date 2024-01-01 --end-date 2025-01-01
-```
-
-### Log ansehen
-
-```bash
+.venv/bin/python3 auto_optimizer_scheduler.py           # prüft, ob fällig
+.venv/bin/python3 auto_optimizer_scheduler.py --force   # sofort
+.venv/bin/python3 run_portfolio_optimizer.py --replot   # nur Charts neu
 tail -f logs/auto_optimizer.log
-```
-
-### Dateien
-
-| Datei | Beschreibung |
-|---|---|
-| `.last_optimization_run` | Timestamp des letzten Laufs (nicht in Git) |
-| `.optimization_in_progress` | Lock-Datei während laufender Optimierung |
-| `artifacts/results/optimization_results.json` | Letztes Optimierungs-Ergebnis |
-| `artifacts/charts/fibot_portfolio_equity.html` | Interaktiver Portfolio-Chart |
-| `artifacts/charts/fibot_trades.xlsx` | Excel-Tabelle aller Trades |
-| `logs/auto_optimizer.log` | Vollständiges Protokoll |
-
----
-
-## Risikoparameter anzeigen
-
-```bash
-python3 show_leverage.py
-```
-
-Zeigt für alle aktiven Strategien aus `settings.json`:
-
-```
-  ====================================================
-  BTC/4h
-  ====================================================
-  Hebel          : 2x
-  Risiko/Trade   : 0.50%
-  Margin         : isolated
-  ---
-  Fib Entry Zone : 0.382 – 0.618
-  SL             : Fib 0.786  ATR × 0.50
-  TSL Aktivierung: —  (kein Trailing Stop)
-  TSL Callback   : —  (kein Trailing Stop)
-  Min R:R        : 1.40
-  ---
-  PnL (Backtest) : 89.3%
-  Win-Rate       : 11.5%
-  Trades         : 243
-  Kapital        : 25 USDT
 ```
 
 ---
@@ -714,312 +389,55 @@ Zeigt für alle aktiven Strategien aus `settings.json`:
 ## Live vs. Backtest vergleichen
 
 ```bash
-.venv/bin/python3 daten/compare_live_vs_backtest.py
+.venv/bin/python3 daten/compare_live_vs_backtest.py --start 2026-10-01
 ```
 
-Holt alle geschlossenen Positionen des Live-Kontos direkt von Bitget
-(`order/fill-history`, in 7-Tage-Fenstern paginiert — die `position/history-position`-API
-erlaubt nur 90 Tage Rückblick) und vergleicht sie mit einem frisch berechneten Backtest
-der aktuell in `settings.json` aktiven Configs. Liest die Coins/Timeframes automatisch
-aus `settings.json` — läuft unverändert weiter, auch wenn der Auto-Optimizer das
-Portfolio umbaut.
-
-Optional:
-
-```bash
-.venv/bin/python3 daten/compare_live_vs_backtest.py --start 2026-05-01 --end 2026-09-05 --capital 100
-```
-
-| Parameter | Standard | Erklärung |
-|---|---|---|
-| `--start` | `2026-05-01` | Startdatum des Vergleichs |
-| `--end` | heute | Enddatum des Vergleichs |
-| `--capital` | `100` | Backtest-Startkapital je Coin (isoliert) |
-
-Ausgabe (Beispiel):
-
-```
-Coin       Live Trades  BT Trades   Trend-r  Wochen-r
--------------------------------------------------------
-AAVEUSDT            45         44     +0.78     +0.13
-ETHUSDT             14          4     +0.82     +0.12
-...
--------------------------------------------------------
-Portfolio-Trendkorrelation (kumuliert):  r = +0.95
-Portfolio-Wochenkorrelation:              r = +0.31
-```
-
-`Trend-r` = Korrelation der kumulierten PnL-Kurven (läuft der Account insgesamt in
-dieselbe Richtung wie der Backtest — Drawdown oder Aufwärtstrend gemeinsam).
-`Wochen-r` = Korrelation der einzelnen Wochen-PnL-Werte (stimmt auch das Timing der
-guten/schlechten Wochen überein, oder nur der grobe Trend). Braucht `secret.json`
-mit Live-API-Zugriff, ist reiner Lesezugriff und verändert keine Positionen.
+Holt die geschlossenen Positionen read-only von Bitget und vergleicht sie mit einem frischen Backtest der aktiven
+Configs. Ausgegeben wird die Korrelation der kumulierten Kurven und der Wochen-PnL.
 
 ---
 
-## Excel-Trades (`fibot_trades.xlsx`)
-
-Die Tabelle wird von `show_results.sh` → Modus 4 erzeugt und enthält folgende Spalten:
-
-| Spalte | Inhalt |
-|---|---|
-| Nr | Laufende Nummer |
-| Datum | Schlusskurs-Zeitstempel |
-| Strategie | Symbol/Timeframe-Kürzel |
-| Richtung | LONG / SHORT |
-| Hebel | Hebel aus Config (z.B. 2x) |
-| Einsatz (USDT) | Tatsächlich eingesetztes Notional pro Trade |
-| SL-Bereich | Fib-Level + ATR-Multiplikator + aktuelle SL-Distanz in % |
-| TSL Akt. | — (fibot hat kein Trailing Stop) |
-| TSL Callback | — (fibot hat kein Trailing Stop) |
-| Entry | Eintrittspreis |
-| Exit | Austrttspreis |
-| Ergebnis | TP erreicht / SL erreicht |
-| PnL (USDT) | Gewinn/Verlust in USDT |
-| Kapital | Kontostand nach dem Trade |
-
----
-
-## Sicherheitscheck (Tests)
+## Tests
 
 ```bash
-chmod +x run_tests.sh
 ./run_tests.sh
 ```
 
-Führt alle Unit- und Live-Tests aus:
-
-| Test | Beschreibung |
+| Test | Prüft |
 |---|---|
-| `test_settings_exists` | settings.json vorhanden |
-| `test_settings_active_strategies` | Strategien haben Symbol, Timeframe, Active-Flag |
-| `test_settings_optimization_settings` | num_trials, start_capital korrekt |
-| `test_active_configs_exist` | Config-Dateien für aktive Strategien vorhanden |
-| `test_active_configs_valid_json` | strategy, risk, market-Keys vorhanden |
-| `test_active_configs_have_backtest_meta` | `_backtest.pnl_pct` in jeder Config |
-| `test_active_configs_risk_params` | Leverage ≥ 1, risk_per_entry_pct 0–10% |
-| `test_backtester_runs_without_error` | Backtester läuft fehlerfrei durch |
-| `test_backtester_result_fields` | win_rate, max_drawdown_pct korrekt |
-| `test_auto_days_known_timeframes` | Lookback-Werte für bekannte Timeframes |
-| `test_secret_exists` | secret.json vorhanden |
-| `test_secret_has_fibot_key` | `fibot.apiKey` und `fibot.secret` vorhanden |
-| `test_live_pepe_order_on_bitget` | Echter Live-Workflow auf Bitget (PEPE): Limit Entry + SL/TP Trigger-Orders setzen, Sichtbarkeit prüfen, Telegram-Nachricht senden, alle Orders stornieren |
-
-Der Live-Test (`test_live_pepe_order_on_bitget`) wird automatisch übersprungen wenn:
-- `secret.json` fehlt
-- Kein `fibot`-Key vorhanden
-- Kontostand < 5 USDT
-
-Der Test öffnet **keine Position** — die Limit-Order liegt 2% unter Markt und wird nie gefüllt.
-Alle Orders werden am Ende des Tests sauber storniert.
+| `tests/test_confluence.py` | Live-Plan == Backtest-Plan je Kerze, Live-Zyklus mit Mock-Exchange |
+| `tests/test_fibot.py` | settings.json, Configs, Backtester-Grundfunktionen |
+| `tests/test_signal_parity.py` | Parität der alten Fibo-Logik |
+| `tests/test_load_ohlcv.py` | Datenladen, Cache, Lücken |
 
 ---
 
 ## Tägliche Verwaltung
 
-#### Logs ansehen
-
 ```bash
 tail -f logs/cron.log
-tail -n 100 logs/fibot_BTCUSDTUSDT_4h.log
-tail -f logs/auto_optimizer.log
-grep -i "ERROR" logs/fibot_BTCUSDTUSDT_4h.log
+tail -n 100 logs/fibot_AAVEUSDTUSDT_4h.log
+cat artifacts/tracker/fibot_AAVEUSDTUSDT_4h.json   # pending_entry / open, Limit, SL, TP, Impuls A/B
+.venv/bin/python3 src/fibot/strategy/run.py --symbol AAVE/USDT:USDT --timeframe 4h
 ```
 
-#### Chart-Simulation
-
-Aktuellen Fibonacci-Chart mit Fib-Grid, Struktur-Trendlinien und simulierten Entry/SL/TP-Levels per Telegram senden — **ohne echten Trade**. Zeigt die Signal-Kriterien (RSI, Volumen, Struktur, Breakout) und die Trendlinien des erkannten Musters (Wedge, Triangle, Channel).
-
-```bash
-# Alle aktiven Strategien aus settings.json
-.venv/bin/python show_chart.py
-
-# Einzelnes Symbol/Timeframe
-.venv/bin/python show_chart.py --symbol ETH/USDT:USDT --timeframe 6h
-
-# Richtung erzwingen (ignoriert echtes Fib-Signal)
-.venv/bin/python show_chart.py --symbol ETH/USDT:USDT --timeframe 6h --side short
-```
-
-Gibt es ein echtes Fib-Signal, werden die tatsächlichen Entry/SL/TP-Werte verwendet. Andernfalls wird mit ATR-basiertem SL/TP simuliert.
-
----
-
-#### Manuell testen
-
-```bash
-.venv/bin/python3 master_runner.py
-```
-
-#### Einzelne Strategie direkt starten
-
-```bash
-.venv/bin/python3 src/fibot/strategy/run.py --symbol BTC/USDT:USDT --timeframe 4h
-```
-
-#### show_results.py direkt aufrufen
-
-```bash
-# Modus 1: alle Configs isoliert
-.venv/bin/python3 src/fibot/analysis/show_results.py \
-    --mode 1 --from 2024-01-01 --capital 1000
-
-# Modus 2: manuelle Portfolio-Simulation
-.venv/bin/python3 src/fibot/analysis/show_results.py \
-    --mode 2 --configs "config_BTCUSDTUSDT_1d_fib.json config_ETHUSDTUSDT_6h_fib.json" \
-    --from 2024-01-01 --capital 1000
-
-# Modus 3: automatische Portfolio-Optimierung (interaktiv)
-.venv/bin/python3 src/fibot/analysis/show_results.py \
-    --mode 3 --capital 1000 --target-max-dd 30 --from 2024-01-01
-
-# Modus 3: non-interaktiv (wie Auto-Optimizer, kein Prompt)
-.venv/bin/python3 src/fibot/analysis/show_results.py \
-    --mode 3 --capital 1000 --target-max-dd 30 --from 2024-01-01 --auto
-
-# Modus 4: interaktive Charts
-.venv/bin/python3 src/fibot/analysis/show_results.py --mode 4
-```
-
-#### Trade-Status prüfen
-
-```bash
-cat artifacts/tracker/fibot_BTCUSDTUSDT_4h.json
-```
-
----
-
-## Signal-Score Erklärung
-
-Der Score (0–10) aggregiert alle Confluence-Faktoren:
-
-| Faktor | Score-Bonus | Bedingung |
-|---|---|---|
-| RSI überverkauft / überkauft | +2.0 | RSI < 45 (Long) oder > 55 (Short) |
-| RSI moderat | +1.0 | RSI < 50 (Long) oder > 50 (Short) |
-| Volumen erhöht | +1.5 | Volume ≥ MA × `volume_ratio_min` |
-| Struktur-Bias passend | +1.5 | Struktur-Bias = bullish/neutral (Long) |
-| Breakout in Signal-Richtung | +2.0 | Preis hat Struktur durchbrochen |
-| Preis in Fib-Zone (kein Breakout) | +1.0 | Preis liegt innerhalb 38.2–61.8% |
-| Preis nahe Struktur-Support/-Resistance | +1.5 | Abstand < 0.8% |
-
-**Empfehlung:** `min_signal_score: 4.0` ist ein guter Ausgangswert.
-Erhöhen auf 5–6 für selektivere, qualitativ hochwertigere Signale.
-
----
-
-## Multi-Symbol betreiben
-
-Mehrere Symbole laufen parallel — jedes als eigenständiger Prozess:
-
-```json
-"active_strategies": [
-  { "symbol": "BTC/USDT:USDT", "timeframe": "1d", "leverage": 2, "risk_per_entry_pct": 0.5, "active": true },
-  { "symbol": "ETH/USDT:USDT", "timeframe": "6h", "leverage": 3, "risk_per_entry_pct": 0.5, "active": true },
-  { "symbol": "SOL/USDT:USDT", "timeframe": "4h", "leverage": 3, "risk_per_entry_pct": 0.5, "active": true }
-]
-```
-
-**Wichtig:** Pro Coin nur ein Timeframe — kein `BTC 4h + BTC 1h` gleichzeitig
-(Bitget verwaltet Positionen pro Coin, nicht pro Timeframe).
+Telegram meldet `KONFLUENZ-ORDER` (mit Limit, SL, TP, R:R, Impuls), `ENTRY gefüllt` und `Position geschlossen`.
 
 ---
 
 ## Wichtige Regeln
 
-- `secret.json` ist **nicht in Git** — wird von `update.sh` gesichert
-- `artifacts/tracker/` ist **nicht in Git** — enthält offene Trade-Zustände
-- `.last_optimization_run` ist **nicht in Git** — wird vom Auto-Optimizer verwaltet
-- Immer erst `show_results.sh` → Modus 1 oder 3 (Backtest) bevor Live-Trading aktiviert wird
-- Pro Coin maximal einen Timeframe in `active_strategies` eintragen
-- `min_signal_score ≥ 4.0` empfohlen — darunter zu viele Fehlsignale
-- Configs nie manuell bearbeiten — `run_pipeline.sh` überschreibt sie
-- Neue Configs nach Optimierung mit `push_configs.sh` ins Repo pushen, dann VPS mit `update.sh` aktualisieren
-
----
-
-## Automatische Zeiträume
-
-| Timeframe | Tage | Kerzen (ca.) |
-|---|---|---|
-| 1m | 30 | ~43.000 |
-| 3m / 5m / 15m | 60 – 90 | ~6.000 – 13.000 |
-| 30m / 1h | 365 | ~17.500 / ~8.700 |
-| **2h / 4h** | **730** | **~8.700 / ~4.380** |
-| 6h / 8h / 12h / 1d | 1095 | ~4.380 – ~1.095 |
-| 3d / 1w | 1825 | ~608 / ~260 |
-
-Der Auto-Optimizer (`lookback_days: "auto"`) nimmt den **maximalen** Wert
-über alle vorhandenen Config-Timeframes.
-
----
-
-## Coin & Timeframe Empfehlungen
-
-FiBot ist eine **Fibonacci-Retracement-Strategie** — er findet mittels ZigZag-Algorithmus dominante Swing-Hochs/-Tiefs, legt ein Fibonacci-Gitter und tradet den Rücklauf in die Golden Zone (38.2%–61.8%). Benötigt: klare Swing-Strukturen, ausreichend Swing-Historie für den ZigZag-Algorithmus und Coins mit nachweisbaren Fibonacci-Reaktionen.
-
-### Effektive Zeitspannen je Timeframe
-
-| TF | ZigZag(20) — Swings | RSI(14) | Vol-MA(20) | EMA20/50 Bias | Geeignet |
-|---|---|---|---|---|---|
-| 15m | 5h | 3.5h | 5h | 5h / 12.5h | ❌ |
-| 30m | 10h | 7h | 10h | 10h / 25h | ⚠️ |
-| **1h** | **20h** | **14h** | **20h** | **20h / 50h** | **✅✅** |
-| **2h** | **40h** | **28h** | **40h** | **40h / 100h** | **✅✅** |
-| **4h** | **80h** | **56h** | **80h** | **80h / 200h** | **✅✅** |
-| 6h | 120h | 84h | 120h | 120h / 300h | ✅ |
-| 1d | 20d | 14d | 20d | 20d / 50d | ✅ |
-
-Der ZigZag-Algorithmus braucht mindestens 20 Kerzen für valide Swing-Erkennung. Auf 15m entstehen in 5h viele Fake-Swings. Ab 1h (20h Spanne) sind die ZigZag-Swings strukturell relevant. Auf 4h umspannt ein Swing-Paar typisch 2-5 Tage — exakt das klassische Fibonacci-Swing-Trading-Setup.
-
-### Coin-Eignung
-
-| Coin | Swing-Struktur | Fibonacci-Reaktion | ZigZag-Qualität | Bewertung |
-|---|---|---|---|---|
-| **BTC** | Exzellent — institutionelle Swings | Starke Reaktionen an 38.2-61.8% | Klarste ZigZag-Swings | ✅✅ Beste Wahl |
-| **ETH** | Exzellent — klare Swing-Hochs/-Tiefs | Sehr gute Fibonacci-Reaktionen | Klare Swings | ✅✅ Sehr gut |
-| **SOL** | Sehr gut — explosiver, aber klar strukturiert | Gute Fibonacci-Zonen | Gut | ✅ Gut |
-| **BNB** | Gut — stabile Swing-Struktur | Solide Fibonacci-Reaktionen | Gut | ✅ Gut |
-| **AVAX** | Gut — klare Impuls-Korrektur-Muster | Gute Fibonacci-Levels | Gut | ✅ Gut |
-| **XRP** | Gut — lange Seitwärtsphasen mit klaren Swings | Solide Reaktionen | Gut | ✅ Gut |
-| **LINK** | Gut — klare Impulsbewegungen | Gute Fibonacci-Zonen in Trends | Gut | ✅ Gut |
-| **LTC** | Mittel — BTC-korreliert, kleinere Swings | Moderate Fibonacci-Reaktionen | Mittel | ⚠️ Mittel |
-| **ARB** | Mittel — ETH-korreliert, junge Datenbasis | Solide | Mittel | ⚠️ Mittel |
-| **ADA** | Mittel — sehr flache Korrekturen | Fibonacci-Reaktionen unscharf | Schwache Swings | ⚠️ Schwach |
-| **DOT** | Schwach — lange unstrukturierte Phasen | Fibonacci-Levels wenig respektiert | Viele Fake-Swings | ⚠️ Schwach |
-| **DOGE** | Schlecht — sentiment-getrieben | Fibonacci irrelevant | ZigZag unbrauchbar | ❌ Schlecht |
-| **SHIB/PEPE** | Nicht vorhanden | Fibonacci nicht anwendbar | Nur Pumps, keine Swings | ❌❌ Nicht geeignet |
-
-### Empfohlene Kombinationen (Ranking)
-
-| Rang | Kombination | Begründung |
-|---|---|---|
-| 🥇 1 | **BTC 4h** | Klarste institutionelle Fibonacci-Swings, Golden Zone sehr zuverlässig |
-| 🥇 1 | **ETH 4h** | Ähnlich BTC, exzellente Fibonacci-Reaktionen |
-| 🥈 2 | **BTC 1h / 2h** | Mehr Trades, ZigZag noch strukturell relevant |
-| 🥈 2 | **SOL 4h** | Explosive Fibonacci-Bounces in Bullphasen |
-| 🥉 3 | **BNB 4h** | Stabile, vorhersehbare Fibonacci-Struktur |
-| 4 | **AVAX 4h** | Gute Impuls-Korrektur-Muster |
-| 4 | **LINK 4h** | Klare Fibonacci-Zonen bei Trendbewegungen |
-| 4 | **XRP 4h** | Lange Seitwärtsphasen mit klaren Fibonacci-Levels |
-| ❌ | **15m / 30m** | Zu viele Fake-Swings, ZigZag instabil |
-| ❌ | **DOGE / SHIB** | Keine Fibonacci-Struktur erkennbar |
-
-> **Hinweis:** Der SL liegt bei 78.6% Fibonacci oder ATR×1.5 — welcher enger ist. BTC und ETH auf 4h liefern die zuverlässigsten Fibonacci-Reaktionszonen mit ausreichend SL-Abstand.
-
+- `secret.json`, `artifacts/tracker/` und `.last_optimization_run` sind nicht in Git.
+- Pro Coin nur ein Timeframe aktiv. Bitget führt Positionen pro Coin, nicht pro Timeframe.
+- Neue Configs immer über `run_pipeline.sh` erzeugen und vor dem Live-Schalten mit `show_results.sh`
+  (Modus 1 oder 3) prüfen.
+- Risiko klein halten, bis Live-Ergebnisse den Backtest bestätigen (siehe [Status](#status-und-forschungsergebnisse)).
 
 ---
 
 ## Abhängigkeiten
 
 ```
-ccxt>=4.2.0      # Exchange-Verbindung (Bitget)
-pandas>=2.0.0    # Datenverarbeitung
-numpy>=1.24.0    # Array-Operationen / lineare Regression
-scipy>=1.11.0    # argrelmax/argrelmin für vektorisierten Backtester
-optuna>=3.0.0    # Hyperparameter-Optimierung
-requests>=2.31.0 # Telegram-Benachrichtigungen
-plotly>=5.0.0    # Interaktive Charts
-openpyxl>=3.1.0  # Excel-Export (Trades-Tabelle)
-pytest>=7.0.0    # Test-Framework (run_tests.sh)
+ccxt>=4.2.0  pandas>=2.0.0  numpy>=1.24.0  scipy>=1.11.0  optuna>=3.0.0
+requests>=2.31.0  plotly>=5.0.0  openpyxl>=3.1.0  matplotlib  pytest>=7.0.0
 ```

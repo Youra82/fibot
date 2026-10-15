@@ -1,13 +1,11 @@
 #!/bin/bash
 # FiBot — Cron-Job einrichten (VPS)
-# Läuft alle 4 Stunden (passend zum 4h Timeframe)
-# Für andere Timeframes anpassen:
-#   1h  → */1 * * * *  (jede Stunde)
-#   4h  → 0 */4 * * *  (alle 4 Stunden)
-#   1d  → 0 0 * * *    (täglich Mitternacht)
+# Alle 15 Minuten: die Konfluenz-Strategie legt ihre Limit-Order zu Beginn jeder Kerze
+# und zieht sie mit der Kanallinie nach -- das braucht einen kurzen Takt, unabhaengig
+# vom Timeframe der Strategien. master_runner.py startet alle aktiven Strategien.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CRON_CMD="0 */4 * * * cd $SCRIPT_DIR && .venv/bin/python3 master_runner.py >> logs/cron.log 2>&1"
+CRON_CMD="*/15 * * * * cd $SCRIPT_DIR && .venv/bin/python3 master_runner.py >> logs/cron.log 2>&1"
 
 echo "Füge Cron-Job hinzu:"
 echo "  $CRON_CMD"

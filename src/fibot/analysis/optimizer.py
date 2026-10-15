@@ -362,6 +362,127 @@ def optimize(symbol: str, timeframe: str,
     return config
 
 
+# ---------------------------------------------------------------------------
+# Fibo-Kanal-Konfluenz: Optimierung auf In-Sample, Bewertung auf Out-of-Sample
+# ---------------------------------------------------------------------------
+
+# Mindest-Trades im In-Sample (ca. 3 Jahre) je Timeframe
+_CONF_MIN_TRADES = {"15m": 120, "30m": 90, "1h": 60, "2h": 45, "4h": 30, "6h": 25, "1d": 12}
+
+
+def segment_stats(trades, start_ts=None, end_ts=None) -> dict:
+    """PnL/DD/WR eines Zeitabschnitts aus den Trades eines Gesamt-Backtests.
+    pnl_pct je Trade ist relativ zum Kapital VOR dem Trade -> Zinseszins-Kette."""
+    eq, peak, max_dd, n, wins = 1.0, 1.0, 0.0, 0, 0
+    for t in trades:
+        if t.result == 'open':
+            continue
+        ts = pd.Timestamp(t.timestamp)
+        if (start_ts is not None and ts < start_ts) or (end_ts is not None and ts >= end_ts):
+            continue
+        eq *= 1 + t.pnl_pct / 100
+        peak = max(peak, eq)
+        max_dd = max(max_dd, (peak - eq) / peak * 100)
+        n += 1
+        wins += t.result == 'win'
+    return {'pnl_pct': (eq - 1) * 100, 'max_dd': max_dd, 'trades': n,
+            'win_rate': wins / n * 100 if n else 0.0}
+
+
+def _confluence_config(symbol, timeframe, sp: dict, risk_pct, leverage) -> dict:
+    return {
+        "market": {"symbol": symbol, "timeframe": timeframe},
+        "strategy": {"type": "confluence", **sp, "candle_limit": 600},
+        "risk": {"leverage": int(leverage), "risk_per_entry_pct": float(risk_pct), "margin_mode": "isolated"},
+    }
+
+
+def _suggest_confluence(trial) -> dict:
+    fib_hi = trial.suggest_categorical("fib_hi", [0.618, 0.705, 0.786])
+    fib_sl = trial.suggest_categorical("fib_sl", [0.786, 0.886, 1.0])
+    if fib_sl <= fib_hi:
+        fib_sl = 0.886 if fib_hi < 0.886 else 1.0
+    age = trial.suggest_categorical("max_age_mult", [0.0, 1.5, 2.0, 3.0])
+    return {
+        # Kanal (kategorisch -> Kanal-Cache greift ueber Trials hinweg)
+        "pivot_k":           trial.suggest_categorical("pivot_k", [3, 5]),
+        "window":            trial.suggest_categorical("window", [100, 150]),
+        "min_upper_touches": trial.suggest_categorical("min_upper_touches", [1, 2]),
+        "max_break_frac":    trial.suggest_categorical("max_break_frac", [0.0, 0.03]),
+        "min_width_atr":     trial.suggest_categorical("min_width_atr", [2.0, 3.0]),
+        "touch_atr":         0.3,
+        # Einstieg / Ausstieg
+        "fib_lo":            trial.suggest_categorical("fib_lo", [0.382, 0.5]),
+        "fib_hi":            fib_hi,
+        "fib_sl":            fib_sl,
+        "zone_tol_atr":      trial.suggest_float("zone_tol_atr", 0.1, 0.8, step=0.05),
+        "sl_buf_atr":        trial.suggest_float("sl_buf_atr", 0.0, 0.6, step=0.05),
+        "min_rr":            trial.suggest_float("min_rr", 1.0, 3.0, step=0.1),
+        "max_age_mult":      None if age == 0.0 else age,
+        "b_near_upper_atr":  trial.suggest_categorical("b_near_upper_atr", [0.5, 1.0]),
+        "tp_mode":           trial.suggest_categorical("tp_mode", ["upper", "b"]),
+    }
+
+
+def optimize_confluence(symbol: str, timeframe: str, start_date: str, oos_start: str, end_date: str,
+                        capital: float = 100.0, n_trials: int = 150, max_dd: float = 30.0,
+                        min_wr: float = 0.0, seed: int = 42, verbose: bool = True) -> dict | None:
+    """Optimiert auf [start_date, oos_start), bewertet danach unveraendert auf [oos_start, end_date].
+    Ein Backtest ueber den Gesamtzeitraum; IS-/OOS-Kennzahlen werden aus den Trades geschnitten,
+    damit der OOS-Teil mit vollem Kanal-Vorlauf startet."""
+    from fibot.analysis.backtester import run_backtest, load_ohlcv
+
+    df_all = load_ohlcv(symbol, timeframe, start_date, end_date)
+    if df_all.empty or len(df_all) < 300:
+        if verbose:
+            print(f"  FEHLER: zu wenig Daten ({len(df_all)} Kerzen).")
+        return None
+    oos_ts = pd.Timestamp(oos_start, tz='UTC')
+    df_is = df_all[df_all.index < oos_ts]
+    min_trades = _CONF_MIN_TRADES.get(timeframe, 20)
+    key_is = (symbol, timeframe, 'IS', len(df_is))
+
+    def objective(trial):
+        sp = _suggest_confluence(trial)
+        leverage = trial.suggest_int("leverage", 3, 10)
+        risk_pct = trial.suggest_float("risk_per_entry_pct", 0.5, 3.0, step=0.25)
+        cfg = _confluence_config(symbol, timeframe, sp, risk_pct, leverage)
+        try:
+            r = run_backtest(df_is, cfg, capital, symbol, timeframe, cache_key=key_is)
+        except Exception:
+            return -999.0
+        if r.total_trades < min_trades or r.max_drawdown_pct > max_dd or r.win_rate < min_wr:
+            return -999.0
+        return r.pnl_pct + math.log1p(r.total_trades) * 10.0
+
+    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=seed))
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=verbose)
+    if study.best_value <= -999.0:
+        if verbose:
+            print(f"  Keine gueltige Config (min. {min_trades} Trades, DD <= {max_dd}%).")
+        return None
+
+    bp = study.best_params
+    trial = optuna.trial.FixedTrial(bp)
+    sp = _suggest_confluence(trial)
+    cfg = _confluence_config(symbol, timeframe, sp, bp["risk_per_entry_pct"], bp["leverage"])
+    r = run_backtest(df_all, cfg, capital, symbol, timeframe)
+    is_s = segment_stats(r.trades, end_ts=oos_ts)
+    oos_s = segment_stats(r.trades, start_ts=oos_ts)
+    cfg["_backtest"] = {
+        "pnl_pct": round(is_s['pnl_pct'], 2), "win_rate": round(is_s['win_rate'], 1),
+        "total_trades": is_s['trades'], "max_drawdown": round(is_s['max_dd'], 2),
+        "start_date": start_date, "end_date": oos_start, "capital": capital,
+        "oos": {"start_date": oos_start, "end_date": end_date,
+                "pnl_pct": round(oos_s['pnl_pct'], 2), "max_drawdown": round(oos_s['max_dd'], 2),
+                "total_trades": oos_s['trades'], "win_rate": round(oos_s['win_rate'], 1)},
+    }
+    if verbose:
+        print(f"  IS : PnL={is_s['pnl_pct']:+.2f}%  DD={is_s['max_dd']:.2f}%  Trades={is_s['trades']}  WR={is_s['win_rate']:.1f}%")
+        print(f"  OOS: PnL={oos_s['pnl_pct']:+.2f}%  DD={oos_s['max_dd']:.2f}%  Trades={oos_s['trades']}  WR={oos_s['win_rate']:.1f}%")
+    return cfg
+
+
 def save_config(config: dict, symbol: str, timeframe: str) -> str | None:
     """Speichert Config nur wenn das neue Ergebnis besser ist als die bestehende."""
     os.makedirs(CONFIGS_DIR, exist_ok=True)
@@ -375,7 +496,8 @@ def save_config(config: dict, symbol: str, timeframe: str) -> str | None:
             with open(path) as f:
                 existing = json.load(f)
             existing_pnl = existing.get('_backtest', {}).get('pnl_pct')
-            if existing_pnl is not None and new_pnl <= existing_pnl:
+            same_type = (existing.get('strategy', {}).get('type') == config.get('strategy', {}).get('type'))
+            if same_type and existing_pnl is not None and new_pnl <= existing_pnl:
                 print(f"  Bestehende Config besser ({existing_pnl:.2f}% vs {new_pnl:.2f}%) "
                       f"— wird nicht ueberschrieben.")
                 return None
@@ -405,6 +527,10 @@ if __name__ == "__main__":
                         help="Max erlaubter Drawdown %% (Standard: 30)")
     parser.add_argument('--min-wr',   type=float, default=0.0,
                         help="Min Win-Rate %% (Standard: 0)")
+    parser.add_argument('--strategy', choices=['confluence', 'fib'], default='confluence',
+                        help="confluence = Fibo-Kanal-Konfluenz (Standard), fib = alte Fibonacci-Logik")
+    parser.add_argument('--oos-from', dest='oos_from', default=None, metavar='YYYY-MM-DD',
+                        help="Konfluenz: Beginn Out-of-Sample (Standard: 180 Tage vor Enddatum)")
     parser.add_argument('--jobs',     type=int,   default=1,
                         help="CPU-Kerne für Parallelisierung (Standard: 1, Python GIL limitiert Threading)")
     args = parser.parse_args()
@@ -441,12 +567,20 @@ if __name__ == "__main__":
             print(f"  Trials:   {args.trials}  |  Kapital: {args.capital}  |  "
                   f"Max-DD: {args.max_dd}%  |  Min-WR: {args.min_wr}%")
 
-            best_config = optimize(
-                symbol, timeframe, start_date, end_date,
-                capital=args.capital, n_trials=args.trials,
-                max_dd=args.max_dd, min_wr=args.min_wr,
-                n_jobs=args.jobs
-            )
+            if args.strategy == 'confluence':
+                oos_from = args.oos_from or (pd.Timestamp(end_date) - pd.Timedelta(days=180)).strftime('%Y-%m-%d')
+                print(f"  Strategie: Fibo-Kanal-Konfluenz | In-Sample {start_date} -> {oos_from} | OOS {oos_from} -> {end_date}")
+                best_config = optimize_confluence(
+                    symbol, timeframe, start_date, oos_from, end_date,
+                    capital=args.capital, n_trials=args.trials,
+                    max_dd=args.max_dd, min_wr=args.min_wr)
+            else:
+                best_config = optimize(
+                    symbol, timeframe, start_date, end_date,
+                    capital=args.capital, n_trials=args.trials,
+                    max_dd=args.max_dd, min_wr=args.min_wr,
+                    n_jobs=args.jobs
+                )
 
             if best_config is None:
                 print(f"  {RED}Keine gültige Config gefunden. Übersprungen.{NC}")
@@ -457,7 +591,13 @@ if __name__ == "__main__":
             if path is None:
                 continue
             print(f"\n  {GREEN}✓ Config gespeichert: {os.path.basename(path)}{NC}")
-            if bt:
+            if bt and 'oos' in bt:
+                o = bt['oos']
+                for lab, d in (('In-Sample', bt), ('OOS      ', o)):
+                    color = GREEN if d.get('pnl_pct', 0) >= 0 else RED
+                    print(f"  {lab}: {color}PnL {d['pnl_pct']:+.2f}%{NC}  WR {d['win_rate']:.1f}%  "
+                          f"Trades {d['total_trades']}  MaxDD {d['max_drawdown']:.2f}%")
+            elif bt:
                 color = GREEN if bt.get('pnl_pct', 0) >= 0 else RED
                 print(f"  {color}PnL: {bt['pnl_pct']:+.2f}%{NC}  "
                       f"WR: {bt['win_rate']:.1f}%  "

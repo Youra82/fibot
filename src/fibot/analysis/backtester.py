@@ -19,6 +19,8 @@ from fibot.strategy.fibonacci_logic import (
     precompute_indicators, precompute_all_signals,
     # generate_signal kept for live trading in strategy/run.py
 )
+from fibot.strategy.signals import precompute_signals
+from fibot.strategy.confluence_logic import is_confluence
 
 logger = logging.getLogger(__name__)
 
@@ -247,7 +249,8 @@ def run_backtest(df: pd.DataFrame, config: dict,
                   symbol: str = "UNKNOWN",
                   timeframe: str = "4h",
                   min_contracts: float = 0.0,
-                  fine_data: pd.DataFrame = None) -> BacktestResult:
+                  fine_data: pd.DataFrame = None,
+                  cache_key=None) -> BacktestResult:
     """
     Walk-forward backtest on df.
     For each bar (after warm-up), generate a signal on df[:i].
@@ -274,11 +277,10 @@ def run_backtest(df: pd.DataFrame, config: dict,
 
     # ── Batch-Precomputation: O(N log N) statt O(N²) ──────────────────────────
     # Schritt 1: Indikatoren (RSI, ATR, Vol-Ratio) — einmal, vektorisiert
-    df = precompute_indicators(df, config)
-    # Schritt 2: Alle Signale vorberechnen — argrelmax EINMAL auf vollem Array,
-    #            dann searchsorted (O(log N)) pro Bar statt argrelmax (O(lookback)).
-    #            Ersetzt precompute_swings_and_zones + generate_signal im Loop komplett.
-    df = precompute_all_signals(df, config)
+    # Schritt 2: Alle Signale vorberechnen (Verteiler waehlt Fibo- oder Konfluenz-Logik)
+    df = precompute_signals(df, config, cache_key)
+    confluence = is_confluence(config)
+    instant_arr = df['_sig_instant'].values if '_sig_instant' in df.columns else None
 
     logger.info(f"Starte Backtest: {symbol} ({timeframe}) | {len(df)} Kerzen | Kapital: {start_capital}")
 
@@ -332,7 +334,7 @@ def run_backtest(df: pd.DataFrame, config: dict,
 
                 notional = open_trade.contracts * open_trade.entry
                 fees_usdt = notional * FEE_PCT * 2      # Entry + Exit Gebühr
-                pnl_usdt = price_diff * open_trade.contracts * leverage - fees_usdt
+                pnl_usdt = price_diff * open_trade.contracts - fees_usdt
                 pnl_pct  = pnl_usdt / capital * 100
 
                 open_trade.exit_price = exit_p
@@ -356,6 +358,10 @@ def run_backtest(df: pd.DataFrame, config: dict,
 
             # If trade still open, don't look for new signals
             if open_trade is not None:
+                continue
+            # Konfluenz: kein neuer Limit-Fill in der Kerze, in der gerade ein Trade
+            # geschlossen wurde (live liegt waehrend der Position keine Entry-Order)
+            if confluence:
                 continue
 
         # --- O(1) Signal-Lookup aus vorberechneten Arrays ---
@@ -395,6 +401,19 @@ def run_backtest(df: pd.DataFrame, config: dict,
         logger.debug(f"[{ts}] {direction_str.upper()} Entry @ {entry:.4f} | "
                      f"SL {sl:.4f} | TP {sig_tp1_arr[i]:.4f} | Score {sig_score_arr[i]:.1f}")
 
+        # Konfluenz: Fuellkerze erreicht auch den SL -> sofort Verlust (konservativ)
+        if instant_arr is not None and instant_arr[i]:
+            fees_usdt = notional * FEE_PCT * 2
+            pnl_usdt  = -price_risk * contracts - fees_usdt
+            open_trade.exit_price = sl
+            open_trade.exit_bar   = i
+            open_trade.result     = 'loss'
+            open_trade.pnl_usdt   = pnl_usdt
+            open_trade.pnl_pct    = pnl_usdt / capital * 100
+            capital += pnl_usdt
+            result.trades.append(open_trade)
+            open_trade = None
+
     # Close any remaining open trade at last bar close
     if open_trade is not None:
         last_price = float(df['close'].iloc[-1])
@@ -403,7 +422,7 @@ def run_backtest(df: pd.DataFrame, config: dict,
             price_diff = -price_diff
         notional_last = open_trade.contracts * open_trade.entry
         fees_last     = notional_last * FEE_PCT * 2
-        pnl_usdt = price_diff * open_trade.contracts * leverage - fees_last
+        pnl_usdt = price_diff * open_trade.contracts - fees_last
         open_trade.exit_price = last_price
         open_trade.exit_bar   = len(df) - 1
         open_trade.result     = 'open'
