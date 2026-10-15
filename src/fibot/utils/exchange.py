@@ -353,8 +353,12 @@ class Exchange:
         return cancelled_count
 
 
-    def fetch_open_positions(self, symbol):
-        if not self.markets: return []
+    def fetch_open_positions(self, symbol, strict: bool = False):
+        """strict=True: API-Fehler werden weitergereicht statt als 'keine Position' ([]) gemeldet."""
+        if not self.markets:
+            if strict:
+                raise RuntimeError("Markets nicht geladen -- Positionsstatus unbekannt")
+            return []
         try:
             params = {'productType': 'USDT-FUTURES', 'marginCoin': 'USDT'}
             positions = self.exchange.fetch_positions([symbol], params=params)
@@ -375,6 +379,8 @@ class Exchange:
             return open_positions
         except Exception as e:
             logger.error(f"Fehler beim Abrufen offener Positionen für {symbol}: {e}", exc_info=True)
+            if strict:
+                raise
             return []
 
 

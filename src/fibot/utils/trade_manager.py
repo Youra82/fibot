@@ -457,7 +457,14 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     time.sleep(0.3)
 
     # --- Check open positions ---
-    positions = exchange.fetch_open_positions(symbol)
+    # strict: bei API-Fehler NICHT "keine Position" annehmen -- sonst wuerde der Lauf eine
+    # bestehende Position fuer geschlossen halten, Orders stornieren und neu einsteigen
+    # (mbot-Liquidation 2026-08 durch genau dieses Muster).
+    try:
+        positions = exchange.fetch_open_positions(symbol, strict=True)
+    except Exception as e:
+        logger.error(f"Positionsabfrage fehlgeschlagen ({e}) -- Lauf wird ohne Aktion beendet.")
+        return
     tf_seconds = exchange.exchange.parse_timeframe(timeframe)
     if positions:
         # Kerzen, die bei offener Position schliessen, wertet der Backtester nicht aus

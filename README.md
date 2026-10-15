@@ -400,6 +400,16 @@ Committet nur `configs/*.json` und `settings.json` und pusht auf `origin/main`.
   überschrieben. Alte Fibo-Configs wandern nach `src/fibot/strategy/configs_alt_fibo/`, das Portfolio kommt dann
   aus dem Repo.
 
+> **Einmalig beim Umstieg von der alten Fibo-Version: `./update.sh` zweimal ausführen.** Beim ersten Aufruf läuft
+> noch das alte `update.sh` vom VPS. Es holt den neuen Code, spielt aber die alten Configs zurück. Erst der zweite
+> Aufruf mit dem neuen `update.sh` führt die Umstellung durch. Danach reicht wieder ein Aufruf.
+>
+> ```bash
+> ./update.sh && ./update.sh
+> ls src/fibot/strategy/configs/          # nur noch Konfluenz-Configs
+> python3 show_leverage.py                # aktives Portfolio prüfen
+> ```
+
 ### 5. Cron
 
 ```bash

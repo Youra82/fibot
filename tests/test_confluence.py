@@ -114,3 +114,17 @@ def test_cycle_places_keeps_and_replaces(tmp_path):
         ex.fetch_order.return_value = {'status': 'closed'}
         tm.confluence_cycle(ex, CFG, {}, MagicMock())
         ex.cancel_all_orders_for_symbol.assert_called()
+
+
+def test_position_api_error_aborts_cycle():
+    """API-Fehler bei der Positionsabfrage darf nie als 'keine Position' gelten."""
+    import fibot.utils.trade_manager as tm
+    ex = MagicMock()
+    ex.fetch_open_positions.side_effect = RuntimeError('API down')
+    with patch.object(tm, 'confluence_cycle') as cyc, patch.object(tm, 'housekeeper_routine') as hk:
+        tm.full_trade_cycle(ex, CFG, {}, MagicMock())
+    ex.fetch_open_positions.assert_called_once_with('BTC/USDT:USDT', strict=True)
+    cyc.assert_not_called()
+    hk.assert_not_called()
+    ex.cancel_all_orders_for_symbol.assert_not_called()
+    ex.place_limit_order_with_tpsl.assert_not_called()
