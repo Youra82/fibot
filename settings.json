@@ -80,7 +80,7 @@
   "optimization_settings": {
     "enabled": true,
     "num_trials": 100,
-    "start_capital": 100,
+    "start_capital": "auto",
     "start_date": "oos",
     "end_date": "auto",
     "send_telegram_on_completion": true,
@@ -100,6 +100,7 @@
     },
     "_start_date_info": "'oos' = jede Strategie ab ihrem eigenen OOS-Beginn (aus der Config); oder festes Datum JJJJ-MM-TT",
     "objective": "pnl",
-    "_objective_info": "'pnl' = hoechstes Endkapital mit MaxDD <= constraints.max_drawdown_pct; 'calmar' = bestes PnL/DD-Verhaeltnis"
+    "_objective_info": "'pnl' = hoechstes Endkapital mit MaxDD <= constraints.max_drawdown_pct; 'calmar' = bestes PnL/DD-Verhaeltnis",
+    "_start_capital_info": "'auto' = aktueller Kontostand von Bitget beim Optimizer-Lauf; oder feste Zahl in USDT"
   }
 }

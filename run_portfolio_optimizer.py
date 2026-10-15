@@ -462,6 +462,23 @@ def _do_replot(settings: dict, capital: float, start_date: str, end_date: str) -
     return 0
 
 
+def _capital_from_setting(setting) -> float:
+    """start_capital: Zahl oder "auto" = aktuelles Gesamtkapital von Bitget (Fallback 100)."""
+    if str(setting).strip().lower() != 'auto':
+        return float(setting)
+    try:
+        from fibot.utils.exchange import Exchange
+        with open(os.path.join(PROJECT_ROOT, 'secret.json')) as f:
+            acc = json.load(f)['fibot']
+        equity = Exchange(acc[0] if isinstance(acc, list) else acc).fetch_equity_usdt()
+        if equity > 0:
+            print(f"  Startkapital automatisch: aktueller Kontostand {equity:.2f} USDT")
+            return round(equity, 2)
+    except Exception as e:
+        print(f"  Kontostand nicht abrufbar ({e}) -- rechne mit 100 USDT.")
+    return 100.0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description='fibot Portfolio-Optimizer')
     parser.add_argument('--capital',    type=float, default=None)
@@ -476,7 +493,7 @@ def main() -> int:
     with open(SETTINGS_PATH) as f:
         settings = json.load(f)
     opt           = settings.get('optimization_settings', {})
-    capital       = args.capital or float(opt.get('start_capital', 100))
+    capital       = args.capital or _capital_from_setting(opt.get('start_capital', 100))
     max_dd        = args.max_dd
     end_date      = args.end_date   or date.today().strftime('%Y-%m-%d')
     start_date    = args.start_date or (

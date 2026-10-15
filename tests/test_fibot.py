@@ -47,7 +47,8 @@ def test_settings_optimization_settings():
     assert 'enabled'      in opt
     assert 'num_trials'   in opt
     assert 'start_capital' in opt
-    assert float(opt['start_capital']) > 0
+    # Zahl oder "auto" (= aktueller Kontostand von Bitget, siehe auto_optimizer_scheduler)
+    assert str(opt['start_capital']).lower() == 'auto' or float(opt['start_capital']) > 0
 
 
 # ---------------------------------------------------------------------------

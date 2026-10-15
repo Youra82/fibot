@@ -95,6 +95,29 @@ def _is_due(schedule: dict) -> tuple[bool, str]:
     return False, 'not_due'
 
 
+def _resolve_capital(setting, bot_token: str, chat_id: str, send_tg: bool) -> float:
+    """start_capital: Zahl oder "auto" = aktuelles Gesamtkapital (USDT-Futures) von Bitget.
+    Schlaegt der Abruf fehl, wird mit 100 USDT gerechnet und das gemeldet."""
+    if str(setting).strip().lower() != 'auto':
+        return float(setting)
+    try:
+        sys.path.insert(0, os.path.join(PROJECT_ROOT, 'src'))
+        from fibot.utils.exchange import Exchange
+        with open(os.path.join(PROJECT_ROOT, 'secret.json')) as f:
+            acc = json.load(f)['fibot']
+        acc = acc[0] if isinstance(acc, list) else acc
+        equity = Exchange(acc).fetch_equity_usdt()
+        if equity > 0:
+            log.info(f"Startkapital automatisch: aktueller Kontostand {equity:.2f} USDT")
+            return round(equity, 2)
+        raise ValueError(f"Kontostand {equity}")
+    except Exception as e:
+        log.warning(f"Kontostand nicht abrufbar ({e}) -- rechne mit 100 USDT.")
+        if send_tg:
+            _telegram_send(bot_token, chat_id, f"FiBot Optimizer: Kontostand nicht abrufbar ({e}), rechne mit 100 USDT.")
+        return 100.0
+
+
 def _telegram_send(bot_token: str, chat_id: str, message: str):
     """Sendet eine plain-text Nachricht (kein MarkdownV2 — Emojis + Sonderzeichen unverändert)."""
     if not bot_token or not chat_id:
@@ -221,7 +244,7 @@ def main():
 
     try:
         constraints = opt_cfg.get('constraints', {})
-        capital    = float(opt_cfg.get('start_capital', 100))
+        capital    = _resolve_capital(opt_cfg.get('start_capital', 100), bot_token, chat_id, send_tg)
         max_dd     = float(constraints.get('max_drawdown_pct', 30))
         start_date = opt_cfg.get('start_date', 'auto')
         end_date   = opt_cfg.get('end_date',   'auto')

@@ -237,7 +237,8 @@ fibot/
   },
   "optimization_settings": {
     "enabled": true,
-    "start_capital": 100,
+    "start_capital": "auto",
+    "objective": "pnl",
     "start_date": "oos",
     "end_date": "auto",
     "constraints": { "max_drawdown_pct": 30 },
@@ -249,6 +250,15 @@ fibot/
 ```
 
 `active_strategies` schreibt normalerweise der Auto-Optimizer, bzw. `show_results.sh` Modus 3 auf Nachfrage.
+
+| Einstellung | Wirkung |
+|---|---|
+| `start_capital: "auto"` | Der Optimizer rechnet mit dem **aktuellen Kontostand** von Bitget, Fallback 100 USDT. So fallen Trades unter dem Bitget-Minimum (5 USDT) wie live weg. Alternativ eine feste Zahl. |
+| `start_date: "oos"` | Jede Strategie wird ab ihrem eigenen OOS-Beginn bewertet. |
+| `objective: "pnl"` | Höchstes Endkapital mit MaxDD ≤ `constraints.max_drawdown_pct`; `"calmar"` = bestes PnL/DD-Verhältnis. |
+
+`update.sh` lässt das auf dem VPS gewählte Portfolio (`active_strategies`) unangetastet. Ein neues Portfolio entsteht dort
+durch den wöchentlichen Lauf oder sofort mit `.venv/bin/python3 auto_optimizer_scheduler.py --force`.
 
 ### Strategie-Config (Konfluenz)
 
