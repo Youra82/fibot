@@ -24,14 +24,14 @@ TRIALS_BY_TF = {'5m': 100, '15m': 120}
 OUT = os.path.join(HERE, 'search', 'candidates')
 
 
-def job(coin, tf):
+def job(coin, tf, start=None):
     os.chdir(ROOT)
     import warnings
     warnings.filterwarnings('ignore')
     from fibot.analysis.optimizer import optimize_confluence
     t0 = time.time()
     sym = f'{coin}/USDT:USDT'
-    cfg = optimize_confluence(sym, tf, START_BY_TF.get(tf, START), OOS_START, END, capital=100.0,
+    cfg = optimize_confluence(sym, tf, start or START_BY_TF.get(tf, START), OOS_START, END, capital=100.0,
                               n_trials=TRIALS_BY_TF.get(tf, TRIALS), max_dd=30.0, verbose=False)
     if cfg is not None:
         with open(os.path.join(OUT, f'config_{coin}USDTUSDT_{tf}_fib.json'), 'w') as f:
@@ -51,6 +51,9 @@ if __name__ == '__main__':
             vals.append(sys.argv[i]); i += 1
         return vals
     COINS = _arg_list('--coins', COINS)
+    if '--start' in sys.argv:            # fuer spaeter gelistete Coins: In-Sample ab diesem Datum
+        START = sys.argv[sys.argv.index('--start') + 1]
+        START_BY_TF = {tf: max(d, START) for tf, d in START_BY_TF.items()}
     TFS = _arg_list('--tfs', TFS)
     os.makedirs(OUT, exist_ok=True)
     # langsame Timeframes zuerst einplanen
@@ -59,7 +62,7 @@ if __name__ == '__main__':
     print(f'{len(jobs)} Jobs, {workers} Prozesse', flush=True)
     done = 0
     with ProcessPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(job, c, tf): (c, tf) for c, tf in jobs}
+        futs = {ex.submit(job, c, tf, START_BY_TF.get(tf, START)): (c, tf) for c, tf in jobs}
         for fu in as_completed(futs):
             c, tf = futs[fu]
             done += 1
