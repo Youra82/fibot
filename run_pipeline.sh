@@ -80,6 +80,8 @@ else
     MIN_WR=0
 fi
 
+PIPELINE_START=$(date +%s)
+
 for symbol in $SYMBOLS; do
     for timeframe in $TIMEFRAMES; do
 
@@ -119,6 +121,9 @@ for symbol in $SYMBOLS; do
         fi
     done
 done
+
+# Zusammenfassung aller in diesem Lauf gespeicherten Configs (Konsole + Telegram)
+$PYTHON src/fibot/analysis/pipeline_summary.py --since "$PIPELINE_START" --searched "$SYMBOLS / $TIMEFRAMES"
 
 deactivate
 echo -e "\n${BLUE}✔ Alle Pipeline-Aufgaben erfolgreich abgeschlossen!${NC}"

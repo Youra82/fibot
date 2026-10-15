@@ -44,9 +44,9 @@ if [ "$MODE" == "1" ]; then
     echo ""
     echo -e "${CYAN}--- Bitte Konfiguration für den Backtest festlegen ---${NC}"
 
-    read -p "Startdatum (JJJJ-MM-TT) [Standard: 2024-01-01]: " DATE_FROM
+    read -p "Startdatum (JJJJ-MM-TT oder oos = je Strategie ab OOS-Beginn) [Standard: oos]: " DATE_FROM
     DATE_FROM="${DATE_FROM//[$'\r\n ']/}"
-    [ -z "$DATE_FROM" ] && DATE_FROM="2024-01-01"
+    [ -z "$DATE_FROM" ] && DATE_FROM="oos"
 
     read -p "Enddatum (JJJJ-MM-TT) [Standard: Heute]: " DATE_TO
     DATE_TO="${DATE_TO//[$'\r\n ']/}"
@@ -58,7 +58,7 @@ if [ "$MODE" == "1" ]; then
     echo "--------------------------------------------------"
 
     DATE_ARGS=""
-    [[ "$DATE_FROM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="--from $DATE_FROM"
+    [[ "$DATE_FROM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ || "$DATE_FROM" == "oos" ]] && DATE_ARGS="--from $DATE_FROM"
     [[ "$DATE_TO"   =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="$DATE_ARGS --to $DATE_TO"
 
     $PYTHON src/fibot/analysis/show_results.py \
@@ -112,9 +112,9 @@ elif [ "$MODE" == "2" ]; then
     echo ""
     echo -e "${CYAN}--- Bitte Konfiguration für den Backtest festlegen ---${NC}"
 
-    read -p "Startdatum (JJJJ-MM-TT) [Standard: 2024-01-01]: " DATE_FROM
+    read -p "Startdatum (JJJJ-MM-TT oder oos = je Strategie ab OOS-Beginn) [Standard: oos]: " DATE_FROM
     DATE_FROM="${DATE_FROM//[$'\r\n ']/}"
-    [ -z "$DATE_FROM" ] && DATE_FROM="2024-01-01"
+    [ -z "$DATE_FROM" ] && DATE_FROM="oos"
 
     read -p "Enddatum (JJJJ-MM-TT) [Standard: Heute]: " DATE_TO
     DATE_TO="${DATE_TO//[$'\r\n ']/}"
@@ -126,7 +126,7 @@ elif [ "$MODE" == "2" ]; then
     echo "--------------------------------------------------"
 
     DATE_ARGS=""
-    [[ "$DATE_FROM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="--from $DATE_FROM"
+    [[ "$DATE_FROM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ || "$DATE_FROM" == "oos" ]] && DATE_ARGS="--from $DATE_FROM"
     [[ "$DATE_TO"   =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="$DATE_ARGS --to $DATE_TO"
 
     $PYTHON src/fibot/analysis/show_results.py \
@@ -159,9 +159,9 @@ elif [ "$MODE" == "3" ]; then
     echo ""
     echo -e "${YELLOW}Zeitraum:${NC}"
 
-    read -p "Startdatum (JJJJ-MM-TT) [Standard: 2024-01-01]: " DATE_FROM
+    read -p "Startdatum (JJJJ-MM-TT oder oos = je Strategie ab OOS-Beginn) [Standard: oos]: " DATE_FROM
     DATE_FROM="${DATE_FROM//[$'\r\n ']/}"
-    [ -z "$DATE_FROM" ] && DATE_FROM="2024-01-01"
+    [ -z "$DATE_FROM" ] && DATE_FROM="oos"
 
     read -p "Enddatum (JJJJ-MM-TT) [Standard: Heute]: " DATE_TO
     DATE_TO="${DATE_TO//[$'\r\n ']/}"
@@ -169,7 +169,7 @@ elif [ "$MODE" == "3" ]; then
     echo ""
 
     DATE_ARGS=""
-    [[ "$DATE_FROM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="--from $DATE_FROM"
+    [[ "$DATE_FROM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ || "$DATE_FROM" == "oos" ]] && DATE_ARGS="--from $DATE_FROM"
     [[ "$DATE_TO"   =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATE_ARGS="$DATE_ARGS --to $DATE_TO"
 
     $PYTHON src/fibot/analysis/show_results.py \

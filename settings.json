@@ -4,11 +4,19 @@
     "use_auto_optimizer_results": false,
     "active_strategies": [
       {
-        "symbol": "OP/USDT:USDT",
-        "timeframe": "1h",
-        "leverage": 9,
+        "symbol": "DOT/USDT:USDT",
+        "timeframe": "2h",
+        "leverage": 10,
         "margin_mode": "isolated",
-        "risk_per_entry_pct": 1.5,
+        "risk_per_entry_pct": 2.75,
+        "active": true
+      },
+      {
+        "symbol": "SAND/USDT:USDT",
+        "timeframe": "1h",
+        "leverage": 4,
+        "margin_mode": "isolated",
+        "risk_per_entry_pct": 2.75,
         "active": true
       },
       {
@@ -21,26 +29,10 @@
       },
       {
         "symbol": "XLM/USDT:USDT",
-        "timeframe": "1h",
-        "leverage": 10,
+        "timeframe": "30m",
+        "leverage": 3,
         "margin_mode": "isolated",
-        "risk_per_entry_pct": 1.0,
-        "active": true
-      },
-      {
-        "symbol": "APT/USDT:USDT",
-        "timeframe": "1h",
-        "leverage": 10,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 2.25,
-        "active": true
-      },
-      {
-        "symbol": "XRP/USDT:USDT",
-        "timeframe": "2h",
-        "leverage": 4,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 1.0,
+        "risk_per_entry_pct": 1.75,
         "active": true
       }
     ]
@@ -49,7 +41,7 @@
     "enabled": true,
     "num_trials": 100,
     "start_capital": 100,
-    "start_date": "2025-01-01",
+    "start_date": "oos",
     "end_date": "auto",
     "send_telegram_on_completion": true,
     "constraints": {
@@ -65,6 +57,7 @@
         "value": 7,
         "unit": "days"
       }
-    }
+    },
+    "_start_date_info": "'oos' = jede Strategie ab ihrem eigenen OOS-Beginn (aus der Config); oder festes Datum JJJJ-MM-TT"
   }
 }

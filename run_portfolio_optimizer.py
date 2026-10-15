@@ -61,7 +61,8 @@ def _build_strategies_data(config_files: list, start_date: str, end_date: str) -
             timeframe = market.get('timeframe', '')
             if not symbol or not timeframe:
                 continue
-            df = load_ohlcv(symbol, timeframe, start_date, end_date)
+            from fibot.analysis.show_results import load_eval_df
+            df, _ = load_eval_df(symbol, timeframe, config, start_date, end_date)
             if df is None or df.empty or len(df) < 50:
                 print(f"  {Y}Uebersprungen (keine Daten): {fname}{NC}")
                 continue

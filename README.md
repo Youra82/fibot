@@ -170,8 +170,8 @@ Vorregistrierung, Code und Trades: [`forschung/konfluenz/`](forschung/konfluenz/
 
 **Aktuelle Configs (15.10.2026):** 143 Coin/Timeframe-Kombinationen wurden optimiert (In-Sample bis 31.03.2026).
 12 davon erfüllen im Out-of-Sample ab 01.04.2026 alle Kriterien: PnL ≥ 10 %, MaxDD ≤ 30 %, ≥ 10 Trades, In-Sample
-positiv. Der Portfolio-Optimizer wählt daraus 5 aus, einen Timeframe je Coin: OP 1h, UNI 1h, XLM 1h, APT 1h und
-XRP 2h.
+positiv. Der Portfolio-Optimizer bewertet nur auf OOS-Daten und wählt daraus 4 aus, einen Timeframe je Coin:
+DOT 2h, SAND 1h, UNI 1h und XLM 30m.
 
 Mit **einem** Parametersatz für alle Coins hat die Regel bisher keine messbare Kante. Die aktuellen Configs sind
 deshalb **je Coin/Timeframe optimiert** und nach ihrem Out-of-Sample-Ergebnis ausgewählt. Wer so auswählt,
@@ -238,7 +238,7 @@ fibot/
   "optimization_settings": {
     "enabled": true,
     "start_capital": 100,
-    "start_date": "2025-01-01",
+    "start_date": "oos",
     "end_date": "auto",
     "constraints": { "max_drawdown_pct": 30 },
     "send_telegram_on_completion": true,
@@ -331,7 +331,9 @@ OOS-Start [180 Tage vor Enddatum]:              → bis hier wird optimiert, dan
 Startkapital [100] / Trials [150] / Max Drawdown [30] / Min Win-Rate [20]
 ```
 
-Pro Coin/Timeframe gibt die Pipeline beide Ergebnisse aus und speichert sie in der Config:
+Am Ende schickt die Pipeline eine Telegram-Zusammenfassung aller gespeicherten Configs mit In-Sample und OOS.
+✅ markiert Configs, die die strengen Kriterien erfüllen. Pro Coin/Timeframe gibt sie beide Ergebnisse aus und
+speichert sie in der Config:
 
 ```
   In-Sample: PnL +88.52%  WR 24.0%  Trades 100  MaxDD 27.30%
@@ -424,8 +426,9 @@ Committet nur `configs/*.json` und `settings.json` und pusht auf `origin/main`.
 fällig (Zeitplan aus `settings.json`, Standard Mittwoch 03:00, Mindestabstand 7 Tage), läuft:
 
 ```
-show_results.py --mode 3 --auto
-  ├─ alle Configs backtesten (Zeitraum start_date … heute)
+show_results.py --mode 3 --auto --from oos
+  ├─ alle Configs backtesten: jede Strategie ab IHREM OOS-Beginn (_backtest.oos.start_date) bis heute
+  │    (Kanal-Vorlauf wird mitgeladen, Trades zählen erst ab OOS-Beginn; ohne OOS-Angabe ab 2025-01-01)
   ├─ Greedy-Portfolio nach Calmar, MaxDD ≤ constraints.max_drawdown_pct
   ├─ active_strategies in settings.json schreiben
   └─ Telegram: Portfolio, Equity-Chart (HTML), Trades (Excel)

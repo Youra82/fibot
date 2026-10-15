@@ -38,6 +38,42 @@ CYAN   = '\033[0;36m'
 BOLD   = '\033[1m'
 NC     = '\033[0m'
 
+
+# ---------------------------------------------------------------------------
+# Bewertungszeitraum: "oos" = jede Strategie ab IHREM eigenen OOS-Beginn
+# ---------------------------------------------------------------------------
+OOS_FALLBACK = '2025-01-01'   # Configs ohne OOS-Angabe (alte Fibo-Configs)
+
+
+def _plabel(d: str) -> str:
+    return 'OOS-Beginn je Strategie' if d == 'oos' else d
+
+
+def eval_start(config: dict, date_from: str) -> str:
+    """'oos' -> OOS-Beginn der Strategie aus _backtest.oos (sonst OOS_FALLBACK); sonst date_from."""
+    if date_from != 'oos':
+        return date_from
+    return config.get('_backtest', {}).get('oos', {}).get('start_date') or OOS_FALLBACK
+
+
+def load_eval_df(symbol: str, timeframe: str, config: dict, date_from: str, date_to: str):
+    """Kerzen fuer die Bewertung ab eval_start. Konfluenz: Vorlauf mitladen, damit der Kanal am
+    Start schon erkannt ist, und Signale VOR dem Start ausblenden (keine In-Sample-Trades).
+    Rueckgabe: (df, start)."""
+    from fibot.analysis.backtester import load_ohlcv
+    from fibot.strategy.signals import precompute_signals
+    start = eval_start(config, date_from)
+    if config.get('strategy', {}).get('type') != 'confluence':
+        return load_ohlcv(symbol, timeframe, start, date_to), start
+    warm_bars = int(config['strategy'].get('window', 150)) + 100
+    warm_start = (pd.Timestamp(start) - pd.Timedelta(timeframe) * warm_bars).strftime('%Y-%m-%d')
+    df = load_ohlcv(symbol, timeframe, warm_start, date_to)
+    if df.empty:
+        return df, start
+    df = precompute_signals(df, config)
+    df.loc[df.index < pd.Timestamp(start, tz='UTC'), '_sig_dir'] = 0
+    return df, start
+
 # ---------------------------------------------------------------------------
 # Modus 1: Einzel-Analyse — alle Configs isoliert testen (stbot-Style)
 # ---------------------------------------------------------------------------
@@ -56,7 +92,7 @@ def run_all_configs_isolated(date_from: str, date_to: str, capital: float):
         return
 
     print(f"\n--- FiBot Ergebnis-Analyse (Einzel-Modus) ---")
-    print(f"Zeitraum: {date_from} bis {date_to} | Startkapital: {capital:.0f} USDT\n")
+    print(f"Zeitraum: {_plabel(date_from)} bis {date_to} | Startkapital: {capital:.0f} USDT\n")
 
     results = []
     for fname in cfg_files:
@@ -73,10 +109,12 @@ def run_all_configs_isolated(date_from: str, date_to: str, capital: float):
             continue
 
         print(f"Analysiere Ergebnisse für: {fname}...")
-        df = load_ohlcv(symbol, timeframe, date_from, date_to)
+        df, eval_from = load_eval_df(symbol, timeframe, config, date_from, date_to)
         if df.empty or len(df) < 50:
             print(f"  {YELLOW}Keine Daten — übersprungen.{NC}")
             continue
+        if date_from == 'oos':
+            print(f"  Bewertung ab {eval_from} (OOS dieser Strategie)")
 
         fine_tf = FINE_TF_MAP.get(timeframe)
         fine_data = LazyFineData(symbol, fine_tf) if fine_tf else None
@@ -121,7 +159,7 @@ def run_manual_portfolio(filenames: list, date_from: str, date_to: str, capital:
     from fibot.analysis.backtester import run_backtest, load_ohlcv, FINE_TF_MAP, LazyFineData
 
     print(f"\n--- FiBot Manuelle Portfolio-Simulation ---")
-    print(f"Zeitraum: {date_from} bis {date_to} | Startkapital: {capital:.0f} USDT\n")
+    print(f"Zeitraum: {_plabel(date_from)} bis {date_to} | Startkapital: {capital:.0f} USDT\n")
 
     results = []
     for fname in filenames:
@@ -141,10 +179,12 @@ def run_manual_portfolio(filenames: list, date_from: str, date_to: str, capital:
             continue
 
         print(f"Analysiere Ergebnisse für: {fname.strip()}...")
-        df = load_ohlcv(symbol, timeframe, date_from, date_to)
+        df, eval_from = load_eval_df(symbol, timeframe, config, date_from, date_to)
         if df.empty or len(df) < 50:
             print(f"  {YELLOW}Keine Daten — übersprungen.{NC}")
             continue
+        if date_from == 'oos':
+            print(f"  Bewertung ab {eval_from} (OOS dieser Strategie)")
 
         fine_tf = FINE_TF_MAP.get(timeframe)
         fine_data = LazyFineData(symbol, fine_tf) if fine_tf else None
@@ -250,7 +290,7 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
 
     # ── Schritt 1: Daten laden, Signale vorberechnen, Einzel-Backtest ────────
     print(f"\n1/3: Analysiere Einzel-Performance & filtere nach {cond}...")
-    print(f"     Zeitraum: {start_date} bis {end_date} | Startkapital: {capital:.0f} USDT\n")
+    print(f"     Zeitraum: {_plabel(start_date)} bis {end_date} | Startkapital: {capital:.0f} USDT\n")
 
     single_results  = []   # für Filterung
     strategies_data = {}   # für Portfolio-Simulator (df bereits precomputed)
@@ -269,13 +309,14 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
         if not symbol or not timeframe:
             continue
 
-        df = load_ohlcv(symbol, timeframe, start_date, end_date)
+        df, eval_from = load_eval_df(symbol, timeframe, config, start_date, end_date)
         if df.empty or len(df) < 50:
             print(f"  {YELLOW}Uebersprungen (keine Daten): {fname}{NC}")
             continue
 
-        # Indikatoren + Signale vorberechnen (einmal, wird für Simulator wiederverwendet)
-        df = precompute_signals(df, config)
+        # Signale vorberechnen (einmal, wird für Simulator wiederverwendet)
+        if '_sig_dir' not in df.columns:
+            df = precompute_signals(df, config)
 
         fine_tf = FINE_TF_MAP.get(timeframe)
         fine_data = LazyFineData(symbol, fine_tf) if fine_tf else None
@@ -310,7 +351,8 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
               f"PnL {pnl_col}{result.pnl_pct:>+7.2f}%{NC}  "
               f"WR {result.win_rate:>5.1f}%  "
               f"DD {dd_col}{result.max_drawdown_pct:>6.2f}%{NC}  "
-              f"Trades {result.total_trades:>4}")
+              f"Trades {result.total_trades:>4}"
+              + (f"  (ab {eval_from})" if start_date == 'oos' else ''))
 
     if not single_results:
         print(f"{RED}Kein Backtest erfolgreich. Abbruch.{NC}")
@@ -450,7 +492,7 @@ def run_portfolio_finder(capital: float, target_max_dd: float, min_wr: float,
     print(f"\n{'='*55}")
     print(f"     Ergebnis der automatischen Portfolio-Optimierung")
     print(f"{'='*55}")
-    print(f"Zeitraum: {start_date} bis {end_date}")
+    print(f"Zeitraum: {_plabel(start_date)} bis {end_date}")
     print(f"Startkapital: {capital:.2f} USDT")
     print(f"Bedingung: Max Drawdown <= {target_max_dd:.2f}%"
           + (f"  |  WR >= {min_wr:.1f}%" if min_wr > 0 else ""))
