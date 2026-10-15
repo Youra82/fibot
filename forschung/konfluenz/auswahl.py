@@ -1,6 +1,6 @@
 # fibot/forschung/konfluenz/select.py
 # Waehlt aus search/candidates/ die Configs nach den vorab festgelegten Kriterien
-# und kopiert die besten 20 nach src/fibot/strategy/configs/ (Aufruf mit --write).
+# und kopiert alle passenden Configs nach src/fibot/strategy/configs/ (Aufruf mit --write).
 #
 # Kriterien (festgelegt vor Ende des Suchlaufs, 15.10.2026):
 #   OOS-PnL >= 10 %, OOS-MaxDD <= 30 %, OOS-Trades >= 10, In-Sample-PnL > 0
@@ -18,7 +18,7 @@ ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
 CAND = os.path.join(HERE, 'search', 'candidates')
 CONFIGS = os.path.join(ROOT, 'src', 'fibot', 'strategy', 'configs')
 ARCHIVE = os.path.join(ROOT, 'src', 'fibot', 'strategy', 'configs_alt_fibo')
-N_PICK = 20
+N_PICK = None   # alle, die die Kriterien erfuellen (User: "mehr als 20 ist auch gut")
 
 rows = []
 for path in sorted(glob.glob(os.path.join(CAND, 'config_*.json'))):
@@ -34,7 +34,7 @@ for path in sorted(glob.glob(os.path.join(CAND, 'config_*.json'))):
 
 ok = [r for r in rows if r['oos_pnl'] >= 10 and r['oos_dd'] <= 30 and r['oos_n'] >= 10 and r['is_pnl'] > 0]
 ok.sort(key=lambda r: r['calmar'], reverse=True)
-pick = ok[:N_PICK]
+pick = ok if N_PICK is None else ok[:N_PICK]
 
 print(f"Kandidaten mit gueltiger Config: {len(rows)} | erfuellen Kriterien: {len(ok)} | ausgewaehlt: {len(pick)}\n")
 print(f"{'Config':<36} {'IS PnL':>8} {'IS DD':>6} {'IS n':>5} | {'OOS PnL':>8} {'OOS DD':>7} {'OOS n':>6} {'WR':>5} {'Calmar':>7}")

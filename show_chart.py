@@ -11,6 +11,7 @@ Aufruf:
     .venv/bin/python show_chart.py --symbol BTC/USDT:USDT --timeframe 4h --side long
 """
 import argparse
+import numpy as np
 import json
 import logging
 import os
@@ -22,6 +23,7 @@ sys.path.insert(0, os.path.join(PROJECT_ROOT, 'src'))
 from fibot.utils.exchange import Exchange
 from fibot.utils.trade_manager import _generate_fib_chart_png
 from fibot.utils.telegram import send_photo, send_message
+from fibot.utils.confluence_chart import confluence_chart
 from fibot.strategy.fibonacci_logic import (
     generate_signal, precompute_indicators,
     find_significant_swings, compute_fib_levels, calc_atr,
@@ -113,6 +115,25 @@ def _make_dummy_signal(df, config: dict, force_side: str) -> FibSignal:
 def generate_and_send(exchange: Exchange, symbol: str, timeframe: str,
                       force_side: str, tg: dict) -> bool:
     config = _load_config(symbol, timeframe)
+    if config.get('strategy', {}).get('type') == 'confluence':
+        candle_limit = int(config['strategy'].get('candle_limit', 600))
+        print(f"  Lade OHLCV {symbol} ({timeframe})...")
+        df = exchange.fetch_recent_ohlcv(symbol, timeframe, limit=candle_limit)
+        if df is None or df.empty or len(df) < 200:
+            print("  WARNUNG: Nicht genug Daten.")
+            return False
+        df = df.iloc[:-1]                      # laufende Kerze verwerfen (wie live)
+        path, plan = confluence_chart(df, config, symbol, timeframe)
+        if plan:
+            caption = (f"[CHART] FIBOT Konfluenz | {symbol} ({timeframe})\n"
+                       f"{plan['direction'].upper()} Limit {plan['limit']:.6g} | SL {plan['sl']:.6g} | "
+                       f"TP {plan['tp']:.6g} | R:R {plan['rr']:.2f}")
+        else:
+            caption = f"[CHART] FIBOT Konfluenz | {symbol} ({timeframe})\nKein Setup fuer die laufende Kerze."
+        print('  ' + caption.replace('\n', ' | '))
+        send_photo(tg['bot_token'], tg['chat_id'], path, caption)
+        os.remove(path)
+        return True
     if not config:
         print(f"  WARNUNG: Keine Config für {symbol} {timeframe} gefunden — nutze Defaults.")
         config = {'strategy': {}, 'risk': {}, 'market': {'symbol': symbol, 'timeframe': timeframe}}

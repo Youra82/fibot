@@ -55,7 +55,13 @@ def main():
         atr_mult = strat_cfg.get('atr_sl_multiplier')
         pnl      = fmt(bt.get('pnl_pct'), '%', 1, 'n/a')
 
-        if isinstance(fib_sl, (int, float)) and isinstance(atr_mult, (int, float)):
+        if strat_cfg.get('type') == 'confluence':
+            fib_sl = strat_cfg.get('fib_sl', 0.786)
+            sl_str = f"Fib {fib_sl:.3f} - {strat_cfg.get('sl_buf_atr', 0.2):.2f} ATR"
+            oos = bt.get('oos', {})
+            if oos:
+                pnl = f"{pnl} | OOS {oos.get('pnl_pct', 0):+.1f}% ({oos.get('total_trades', 0)} Tr.)"
+        elif isinstance(fib_sl, (int, float)) and isinstance(atr_mult, (int, float)):
             sl_str = f"Fib {fib_sl:.3f} / ATR x{atr_mult:.2f}"
         elif isinstance(fib_sl, (int, float)):
             sl_str = f"Fib {fib_sl:.3f}"

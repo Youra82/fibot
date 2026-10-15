@@ -278,8 +278,9 @@ def run_backtest(df: pd.DataFrame, config: dict,
     # ── Batch-Precomputation: O(N log N) statt O(N²) ──────────────────────────
     # Schritt 1: Indikatoren (RSI, ATR, Vol-Ratio) — einmal, vektorisiert
     # Schritt 2: Alle Signale vorberechnen (Verteiler waehlt Fibo- oder Konfluenz-Logik)
-    df = precompute_signals(df, config, cache_key)
     confluence = is_confluence(config)
+    if not (confluence and '_sig_instant' in df.columns):   # Modus 3 rechnet die Signale schon vor
+        df = precompute_signals(df, config, cache_key)
     instant_arr = df['_sig_instant'].values if '_sig_instant' in df.columns else None
 
     logger.info(f"Starte Backtest: {symbol} ({timeframe}) | {len(df)} Kerzen | Kapital: {start_capital}")

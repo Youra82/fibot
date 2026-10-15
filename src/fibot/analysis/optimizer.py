@@ -366,8 +366,8 @@ def optimize(symbol: str, timeframe: str,
 # Fibo-Kanal-Konfluenz: Optimierung auf In-Sample, Bewertung auf Out-of-Sample
 # ---------------------------------------------------------------------------
 
-# Mindest-Trades im In-Sample (ca. 3 Jahre) je Timeframe
-_CONF_MIN_TRADES = {"15m": 120, "30m": 90, "1h": 60, "2h": 45, "4h": 30, "6h": 25, "1d": 12}
+# Mindest-Trades im In-Sample je Timeframe (1h-6h: ca. 3 Jahre, 30m: 2 Jahre, 15m: 1 Jahr, 5m: 6 Monate)
+_CONF_MIN_TRADES = {"5m": 80, "15m": 80, "30m": 70, "1h": 60, "2h": 45, "4h": 30, "6h": 25, "1d": 12}
 
 
 def segment_stats(trades, start_ts=None, end_ts=None) -> dict:

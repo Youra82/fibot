@@ -168,6 +168,11 @@ Ehrlich dokumentiert, damit niemand mehr erwartet, als belegt ist:
 
 Vorregistrierung, Code und Trades: [`forschung/konfluenz/`](forschung/konfluenz/) ([`PREREG.md`](forschung/konfluenz/PREREG.md)).
 
+**Aktuelle Configs (15.10.2026):** 143 Coin/Timeframe-Kombinationen wurden optimiert (In-Sample bis 31.03.2026).
+12 davon erfüllen im Out-of-Sample ab 01.04.2026 alle Kriterien: PnL ≥ 10 %, MaxDD ≤ 30 %, ≥ 10 Trades, In-Sample
+positiv. Der Portfolio-Optimizer wählt daraus 5 aus, einen Timeframe je Coin: OP 1h, UNI 1h, XLM 1h, APT 1h und
+XRP 2h.
+
 Mit **einem** Parametersatz für alle Coins hat die Regel bisher keine messbare Kante. Die aktuellen Configs sind
 deshalb **je Coin/Timeframe optimiert** und nach ihrem Out-of-Sample-Ergebnis ausgewählt. Wer so auswählt,
 findet auch Zufallssieger. Die Configs sollten deshalb mit kleinem Risiko live laufen und regelmäßig mit
@@ -182,7 +187,9 @@ fibot/
 ├── master_runner.py                 # Cron-Orchestrator: startet alle aktiven Strategien
 ├── auto_optimizer_scheduler.py      # wöchentliche Portfolio-Optimierung im Hintergrund
 ├── run_pipeline.sh                  # Optuna-Optimierung (In-Sample) + OOS-Test je Coin/TF
-├── show_results.sh                  # Analyse-Menü (4 Modi)
+├── show_results.sh                  # Ergebnis-Menü (4 Modi)
+├── run_analysis.sh                  # 12 Analysen (Signifikanz, Monte Carlo, Regime/S6, …)
+├── show_chart.py                    # aktuelles Konfluenz-Chart per Telegram
 ├── push_configs.sh                  # Configs + settings.json ins Repo pushen
 ├── update.sh                        # VPS-Update (sichert secret.json, VPS-Configs, Portfolio)
 ├── cron_setup.sh                    # Cron alle 15 Minuten
@@ -204,10 +211,12 @@ fibot/
     │   ├── optimizer.py             # Optuna: optimize_confluence() mit IS/OOS-Trennung
     │   ├── portfolio_simulator.py   # gemeinsames Kapital, Margin-Check, chronologisch
     │   ├── interactive_chart.py     # Plotly-Chart mit Kanal je Trade
-    │   └── show_results.py          # Modi 1–4
+    │   ├── show_results.py          # Modi 1–4
+    │   └── analysis_suite.py        # Analysen für run_analysis.sh
     └── utils/
         ├── exchange.py              # Bitget-Wrapper (Limit + angehängtes SL/TP, Position-TP/SL)
         ├── trade_manager.py         # Live-Zyklus inkl. confluence_cycle()
+        ├── confluence_chart.py      # Chart für Telegram und show_chart.py
         └── telegram.py
 ```
 
@@ -340,6 +349,41 @@ Leere Eingaben bei Coin oder Timeframe brechen die Pipeline sofort ab.
 | **3 Auto-Portfolio** | Greedy-Auswahl nach Calmar (PnL / MaxDD), gemeinsames Kapital, kein Coin doppelt. Danach optional `settings.json` schreiben, Equity-Chart + Excel per Telegram |
 | **4 Interaktive Charts** | Candlestick mit Entry/Exit und dem Kanal, wie er beim Fill bekannt war |
 
+### 2b. Analysen — `run_analysis.sh`
+
+```bash
+./run_analysis.sh               # Ergebnis zusätzlich per Telegram
+./run_analysis.sh --no-telegram
+```
+
+| Nr | Analyse | Frage |
+|---|---|---|
+| 1 | In-Sample vs. Out-of-Sample | Hält die Config, was die Optimierung versprach? |
+| 2 | Bootstrap-Signifikanz | Ist R/Trade sicher über null oder Zufall? |
+| 3 | Monte Carlo | Welche Drawdowns/Verluste sind bei gleicher Trefferquote realistisch? |
+| 4 | Gebühren & Slippage | Wie viel Puffer gibt es bei schlechterer Ausführung? |
+| 5 | Parameter-Sensitivität | Bricht das Ergebnis bei ± einer Parameterstufe ein? |
+| 6 | Stabilität je Quartal | Verdient die Strategie gleichmäßig oder nur in einer Phase? |
+| 7 | Long vs. Short | Welche Seite trägt? |
+| 8 | Regime + Filter S6 | Wie schlägt sie sich bei BTC über/unter SMA200, mit und ohne zerobot-Filter S6? |
+| 9 | Korrelation | Streuen die Strategien im Portfolio? |
+| 10 | Kelly-Sizing | Passt das Risiko pro Trade zur Trefferquote? |
+| 11 | Drawdown-Dauer | Wie lange dauern Durststrecken? |
+| 12 | Wochentag & Tageszeit | Gibt es Zeitmuster? |
+| 0 | alle nacheinander | |
+
+Abgefragt werden: aktives Portfolio oder alle Configs, Zeitraum, Kapital. Berichte landen in `artifacts/analysis/`.
+
+### 2c. Aktuelles Chart per Telegram — `show_chart.py`
+
+```bash
+.venv/bin/python3 show_chart.py                                    # alle aktiven Strategien
+.venv/bin/python3 show_chart.py --symbol OP/USDT:USDT --timeframe 1h
+```
+
+Zeigt den aktuell erkannten Kanal und, falls es ein Setup gibt, die Limit-Order der laufenden Kerze mit SL und
+TP, also genau das, was der Live-Bot gerade tun würde.
+
 ### 3. Configs ins Repo — `push_configs.sh`
 
 Committet nur `configs/*.json` und `settings.json` und pusht auf `origin/main`.
@@ -421,7 +465,15 @@ cat artifacts/tracker/fibot_AAVEUSDTUSDT_4h.json   # pending_entry / open, Limit
 .venv/bin/python3 src/fibot/strategy/run.py --symbol AAVE/USDT:USDT --timeframe 4h
 ```
 
-Telegram meldet `KONFLUENZ-ORDER` (mit Limit, SL, TP, R:R, Impuls), `ENTRY gefüllt` und `Position geschlossen`.
+Telegram meldet:
+
+| Nachricht | Wann |
+|---|---|
+| `KONFLUENZ-ORDER` + Chart (Kanal, Limit, SL, TP) | einmal je neuem Impuls. Das stündliche Nachziehen der Order läuft still im Log. |
+| `ENTRY gefüllt` | Limit wurde gefüllt, SL/TP sind aktiv |
+| `Entry gefüllt und Position bereits geschlossen` | Fill und SL/TP zwischen zwei Läufen |
+| `Position geschlossen` | SL oder TP ausgelöst |
+| `FEHLER` / `Self-Repair` / `NOTSCHLIESSUNG` | Orderfehler, fehlende SL/TP neu gesetzt, Kurs jenseits von SL/TP |
 
 ---
 

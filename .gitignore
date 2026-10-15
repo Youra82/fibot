@@ -19,3 +19,10 @@ data/cache/
 .vscode/
 .idea/
 *.swp
+
+# Analyse-Berichte, temporaere Charts, Such-Rohdaten
+artifacts/analysis/
+artifacts/tmp/
+forschung/konfluenz/*.log
+forschung/konfluenz/search/
+forschung/konfluenz/trades*.json

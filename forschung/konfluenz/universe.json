@@ -1,0 +1,457 @@
+[
+ {
+  "coin": "BTC",
+  "vol_mio": 3985.4,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "ETH",
+  "vol_mio": 2900.4,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "SOL",
+  "vol_mio": 362.7,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "ZEC",
+  "vol_mio": 265.6,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ },
+ {
+  "coin": "XRP",
+  "vol_mio": 262.0,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "NEAR",
+  "vol_mio": 130.1,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "HYPE",
+  "vol_mio": 101.2,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "DOGE",
+  "vol_mio": 73.4,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "WAL",
+  "vol_mio": 64.0,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "SUI",
+  "vol_mio": 59.9,
+  "ab_2023_04": false,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "STRK",
+  "vol_mio": 57.3,
+  "ab_2023_04": false,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "ADA",
+  "vol_mio": 40.0,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "ENA",
+  "vol_mio": 35.5,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "PEPE",
+  "vol_mio": 28.3,
+  "ab_2023_04": false,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "LINK",
+  "vol_mio": 28.2,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "WLD",
+  "vol_mio": 26.3,
+  "ab_2023_04": false,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "UNI",
+  "vol_mio": 22.3,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "BNB",
+  "vol_mio": 21.8,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "ONDO",
+  "vol_mio": 21.0,
+  "ab_2023_04": false,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "PUMP",
+  "vol_mio": 20.1,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ },
+ {
+  "coin": "QNT",
+  "vol_mio": 18.3,
+  "ab_2023_04": false,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "FIL",
+  "vol_mio": 16.6,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "NIL",
+  "vol_mio": 16.4,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "TRUMP",
+  "vol_mio": 16.0,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "AVAX",
+  "vol_mio": 15.2,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "XLM",
+  "vol_mio": 14.2,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "DOT",
+  "vol_mio": 14.1,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "PYTH",
+  "vol_mio": 13.6,
+  "ab_2023_04": false,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "BCH",
+  "vol_mio": 13.6,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "SIREN",
+  "vol_mio": 13.5,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "AKE",
+  "vol_mio": 13.3,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ },
+ {
+  "coin": "ZK",
+  "vol_mio": 12.5,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "Q",
+  "vol_mio": 11.4,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ },
+ {
+  "coin": "HBAR",
+  "vol_mio": 11.3,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "ARB",
+  "vol_mio": 11.1,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "TAO",
+  "vol_mio": 10.9,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "PONS",
+  "vol_mio": 9.7,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ },
+ {
+  "coin": "XPL",
+  "vol_mio": 9.4,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ },
+ {
+  "coin": "AAVE",
+  "vol_mio": 9.3,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "FET",
+  "vol_mio": 9.3,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "CRV",
+  "vol_mio": 8.7,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "ARC",
+  "vol_mio": 8.5,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "BLUR",
+  "vol_mio": 8.3,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "APT",
+  "vol_mio": 8.0,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "AVA",
+  "vol_mio": 7.9,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "BE",
+  "vol_mio": 7.8,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ },
+ {
+  "coin": "LTC",
+  "vol_mio": 7.8,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "INJ",
+  "vol_mio": 7.7,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "OP",
+  "vol_mio": 7.3,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "TIA",
+  "vol_mio": 7.2,
+  "ab_2023_04": false,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "WDC",
+  "vol_mio": 7.1,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ },
+ {
+  "coin": "PENGU",
+  "vol_mio": 7.1,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "CBRS",
+  "vol_mio": 6.8,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ },
+ {
+  "coin": "US",
+  "vol_mio": 6.6,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ },
+ {
+  "coin": "BAT",
+  "vol_mio": 6.4,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "RENDER",
+  "vol_mio": 6.3,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "AXTI",
+  "vol_mio": 6.0,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ },
+ {
+  "coin": "NXPC",
+  "vol_mio": 5.8,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ },
+ {
+  "coin": "CSOPSK2LHKD",
+  "vol_mio": 5.6,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ },
+ {
+  "coin": "QCOM",
+  "vol_mio": 5.4,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ },
+ {
+  "coin": "W",
+  "vol_mio": 5.4,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "RSR",
+  "vol_mio": 5.2,
+  "ab_2023_04": true,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "SEI",
+  "vol_mio": 5.2,
+  "ab_2023_04": false,
+  "ab_2024_04": true,
+  "ab_2025_04": true
+ },
+ {
+  "coin": "MRNA",
+  "vol_mio": 5.1,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ },
+ {
+  "coin": "BSP",
+  "vol_mio": 5.1,
+  "ab_2023_04": false,
+  "ab_2024_04": false,
+  "ab_2025_04": false
+ }
+]

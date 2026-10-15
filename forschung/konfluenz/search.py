@@ -17,7 +17,10 @@ COINS = ['AAVE', 'ADA', 'AVAX', 'BNB', 'BTC', 'DOGE', 'ETH', 'LINK', 'SOL', 'XRP
          'LTC', 'DOT', 'NEAR', 'UNI', 'ATOM', 'TRX', 'FIL', 'BCH', 'ETC', 'XLM']
 TFS = ['1h', '2h', '4h', '6h', '1d']
 START, OOS_START, END = '2023-04-08', '2026-04-01', '2026-10-15'
+# In-Sample-Beginn je Timeframe (kleine TF: kuerzere Historie -> aehnliche Kerzenzahl, aktuelleres Regime)
+START_BY_TF = {'5m': '2025-10-01', '15m': '2025-04-01', '30m': '2024-04-01'}
 TRIALS = 150
+TRIALS_BY_TF = {'5m': 100, '15m': 120}
 OUT = os.path.join(HERE, 'search', 'candidates')
 
 
@@ -28,8 +31,8 @@ def job(coin, tf):
     from fibot.analysis.optimizer import optimize_confluence
     t0 = time.time()
     sym = f'{coin}/USDT:USDT'
-    cfg = optimize_confluence(sym, tf, START, OOS_START, END, capital=100.0,
-                              n_trials=TRIALS, max_dd=30.0, verbose=False)
+    cfg = optimize_confluence(sym, tf, START_BY_TF.get(tf, START), OOS_START, END, capital=100.0,
+                              n_trials=TRIALS_BY_TF.get(tf, TRIALS), max_dd=30.0, verbose=False)
     if cfg is not None:
         with open(os.path.join(OUT, f'config_{coin}USDTUSDT_{tf}_fib.json'), 'w') as f:
             json.dump(cfg, f, indent=2)
@@ -38,6 +41,17 @@ def job(coin, tf):
 
 if __name__ == '__main__':
     workers = int(sys.argv[1]) if len(sys.argv) > 1 else 8
+    # optional: --coins A B C --tfs 1h 2h  (zweite Runde mit weiteren Coins)
+    def _arg_list(flag, default):
+        if flag not in sys.argv:
+            return default
+        i = sys.argv.index(flag) + 1
+        vals = []
+        while i < len(sys.argv) and not sys.argv[i].startswith('--'):
+            vals.append(sys.argv[i]); i += 1
+        return vals
+    COINS = _arg_list('--coins', COINS)
+    TFS = _arg_list('--tfs', TFS)
     os.makedirs(OUT, exist_ok=True)
     # langsame Timeframes zuerst einplanen
     jobs = [(c, tf) for tf in TFS for c in COINS

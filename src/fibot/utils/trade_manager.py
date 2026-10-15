@@ -806,12 +806,14 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     tracker_path = get_tracker_path(symbol, timeframe)
     tracker = read_tracker(tracker_path)
     tf_seconds = exchange.exchange.parse_timeframe(timeframe)
+    # Impuls, zu dem schon eine Telegram-Nachricht ging (bleibt beim Nachziehen erhalten)
+    keep = {'notified_b_ts': tracker.get('notified_b_ts')}
 
     # 1) Position war offen und ist jetzt weg -> Reste aufraeumen
     if tracker.get('status') == 'open':
         logger.info("Position geschlossen (SL/TP). Raeume Rest-Orders auf.")
         exchange.cancel_all_orders_for_symbol(symbol)
-        write_tracker(tracker_path, {})
+        write_tracker(tracker_path, keep)
         send_message(bot_token, chat_id, f"FiBot ({symbol} {timeframe}): Position geschlossen.")
         tracker = {}
 
@@ -841,7 +843,7 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
             logger.info("Entry wurde gefuellt und Position ist schon wieder zu (SL/TP zwischen zwei Laeufen).")
             send_message(bot_token, chat_id, f"FiBot ({symbol} {timeframe}): Entry gefuellt und Position bereits geschlossen.")
             exchange.cancel_all_orders_for_symbol(symbol)
-            write_tracker(tracker_path, {})
+            write_tracker(tracker_path, keep)
             tracker = {}
         elif status == 'open':
             same = (plan is not None and tracker.get('candle_ts') == current_candle
@@ -855,9 +857,9 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
                 exchange.cancel_order(tracker.get('order_id'), symbol)
             except Exception as e:
                 logger.warning(f"Storno fehlgeschlagen: {e}")
-            write_tracker(tracker_path, {})
+            write_tracker(tracker_path, keep)
         else:
-            write_tracker(tracker_path, {})
+            write_tracker(tracker_path, keep)
 
     if plan is None:
         logger.info("Kein Konfluenz-Setup fuer die laufende Kerze.")
@@ -880,11 +882,27 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         'status': 'pending_entry', 'strategy': 'confluence', 'order_id': str(order.get('id', '')),
         'candle_ts': current_candle, 'direction': plan['direction'], 'entry_price': plan['limit'],
         'sl_price': plan['sl'], 'tp1_price': plan['tp'], 'contracts': contracts,
-        'a_ts': plan['a_ts'], 'b_ts': plan['b_ts'], 'timestamp': datetime.utcnow().isoformat(),
+        'a_ts': plan['a_ts'], 'b_ts': plan['b_ts'], 'notified_b_ts': plan['b_ts'],
+        'timestamp': datetime.utcnow().isoformat(),
     })
-    send_message(bot_token, chat_id,
-                 f"FiBot KONFLUENZ-ORDER ({symbol} {timeframe})\n{plan['direction'].upper()} Limit {plan['limit']:.6g}\n"
-                 f"SL {plan['sl']:.6g} | TP {plan['tp']:.6g} | R:R {plan['rr']:.2f}\nImpuls {plan['a_ts'][:16]} -> {plan['b_ts'][:16]}")
+    if keep['notified_b_ts'] == plan['b_ts']:
+        # gleicher Impuls, Order nur auf die neue Kanalposition nachgezogen -> keine neue Nachricht
+        logger.info(f"Limit nachgezogen: {plan['direction'].upper()} @ {plan['limit']:.6g} "
+                    f"(SL {plan['sl']:.6g}, TP {plan['tp']:.6g})")
+        return
+    caption = (f"FiBot KONFLUENZ-ORDER ({symbol} {timeframe})\n"
+               f"{plan['direction'].upper()} Limit {plan['limit']:.6g}\n"
+               f"SL {plan['sl']:.6g} | TP {plan['tp']:.6g} | R:R {plan['rr']:.2f}\n"
+               f"Impuls {plan['a_ts'][:16]} -> {plan['b_ts'][:16]}\n"
+               f"Die Order wird jede Kerze mit der Kanallinie nachgezogen.")
+    try:
+        from fibot.utils.confluence_chart import confluence_chart
+        path, _ = confluence_chart(df, params, symbol, timeframe)
+        send_photo(bot_token, chat_id, path, caption)
+        os.remove(path)
+    except Exception as e:
+        logger.warning(f"Chart fuer Telegram fehlgeschlagen ({e}) - sende nur Text.")
+        send_message(bot_token, chat_id, caption)
 
 
 # ---------------------------------------------------------------------------

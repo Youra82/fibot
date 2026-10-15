@@ -91,17 +91,25 @@ def test_cycle_places_keeps_and_replaces(tmp_path):
     store = {}
     with patch.object(tm, 'read_tracker', side_effect=lambda p: dict(store.get(p, {}))), \
          patch.object(tm, 'write_tracker', side_effect=lambda p, d: store.__setitem__(p, dict(d))), \
-         patch.object(tm, 'send_message'), \
+         patch.object(tm, 'send_message') as msg, \
+         patch.object(tm, 'send_photo') as photo, \
          patch('pandas.Timestamp.now', return_value=now):
         ex = _mock_exchange(win)
         tm.confluence_cycle(ex, CFG, {}, MagicMock())
         assert ex.place_limit_order_with_tpsl.call_count == 1
         tr = list(store.values())[0]
         assert tr['status'] == 'pending_entry'
+        assert photo.call_count == 1                      # Telegram mit Chart bei neuem Impuls
         # gleicher Lauf, gleiche Kerze -> Order bleibt liegen
         tm.confluence_cycle(ex, CFG, {}, MagicMock())
         assert ex.place_limit_order_with_tpsl.call_count == 1
         ex.cancel_order.assert_not_called()
+        # neue Kerze, gleicher Impuls: Order wird nachgezogen, aber KEINE neue Nachricht
+        store[list(store)[0]]['candle_ts'] = 'alt'
+        tm.confluence_cycle(ex, CFG, {}, MagicMock())
+        assert ex.cancel_order.call_count == 1
+        assert ex.place_limit_order_with_tpsl.call_count == 2
+        assert photo.call_count == 1 and msg.call_count == 0
         # gefuellt und schon wieder geschlossen -> aufraeumen, kein neuer Entry fuer denselben Impuls
         ex.fetch_order.return_value = {'status': 'closed'}
         tm.confluence_cycle(ex, CFG, {}, MagicMock())
