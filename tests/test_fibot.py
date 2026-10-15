@@ -335,7 +335,7 @@ def test_live_and_backtest_structure_agree():
 
 
 # ---------------------------------------------------------------------------
-# 7. Live Workflow Test — PEPE/USDT:USDT auf Bitget (wie dnabot)
+# 7. Live-Test der Konfluenz-Orderart — PEPE/USDT:USDT auf Bitget (Minimalbetrag)
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope='module')
@@ -343,6 +343,8 @@ def live_setup():
     import time
     print('\n--- Starte FiBot Live-Workflow-Test (PEPE) ---')
 
+    if os.environ.get('FIBOT_SKIP_LIVE'):
+        pytest.skip('FIBOT_SKIP_LIVE gesetzt — Live-Test uebersprungen.')
     secret_path = os.path.join(PROJECT_ROOT, 'secret.json')
     if not os.path.exists(secret_path):
         pytest.skip('secret.json nicht gefunden — Live-Test uebersprungen.')
@@ -403,124 +405,101 @@ def live_setup():
         print(f'FEHLER beim Teardown: {e}')
 
 
-def test_live_pepe_order_on_bitget(live_setup):
+def _tpsl_prices(orders):
+    """Trigger-Preise aus Bitget Position-TP/SL-Orders (profit_loss)."""
+    out = []
+    for o in orders:
+        trig = (o.get('triggerPrice') or o.get('stopPrice') or o.get('info', {}).get('triggerPrice'))
+        try:
+            out.append((float(trig), o.get('info', {}).get('planType', '')))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def test_live_confluence_order_on_bitget(live_setup):
     """
-    Simuliert einen echten FiBot-Eintrag wie im Livebetrieb:
-    1. Limit Entry-Order etwas unter Markt (wird nicht gefüllt)
-    2. SL + TP als Trigger-Market Orders
-    3. Alle 3 Orders auf Bitget sichtbar + Telegram-Benachrichtigung
-    4. Aufräumen: Orders stornieren
+    Echter Test der Konfluenz-Orderart auf Bitget (PEPE, Minimalbetrag):
+    A) Limit-Order UNTER Markt mit angehaengtem SL/TP -> Bitget speichert preset-SL/TP an der Order
+       -> wieder storniert, kein Fill.
+    B) Limit-Order knapp UEBER Markt (sofortiger Fill, ca. 6 USDT Notional) mit angehaengtem SL/TP
+       -> Position offen, Bitget hat SL und TP als Position-TP/SL aktiviert, der Self-Repair-Abruf
+       des Bots (fetch_position_tpsl_orders) findet beide -> Position sofort per Market geschlossen.
+    Kosten: wenige Cent Gebuehren.
     """
-    import time
     import math
+    import time
 
     exchange, symbol = live_setup
-
-    # Telegram laden
     with open(os.path.join(PROJECT_ROOT, 'secret.json')) as f:
-        secrets_data = json.load(f)
-    tg = secrets_data.get('telegram', {})
-    bot_token = tg.get('bot_token', '')
-    chat_id   = tg.get('chat_id', '')
+        tg = json.load(f).get('telegram', {})
     from fibot.utils.telegram import send_message
 
-    bal = exchange.fetch_balance_usdt()
-    print(f'\n--- Verfuegbares Guthaben: {bal:.4f} USDT ---')
-    if bal < 5.0:
-        pytest.skip(f'Zu wenig Guthaben ({bal:.2f} USDT < 5 USDT) fuer Live-Test.')
+    free = exchange.fetch_balance_usdt()
+    print(f'\n--- Freies Guthaben: {free:.2f} USDT ---')
+    if free < 5.0:
+        pytest.skip(f'Zu wenig freies Guthaben ({free:.2f} USDT) fuer den Live-Test.')
 
-    # Margin & Leverage
-    print('-> Setze Margin-Modus: isolated | Leverage: 5x')
     exchange.set_margin_mode(symbol, 'isolated')
     time.sleep(0.5)
     exchange.set_leverage(symbol, 5, 'isolated')
     time.sleep(0.5)
+    price = float(exchange.exchange.fetch_ticker(symbol)['last'])
+    amount = float(exchange.amount_to_precision(symbol, math.ceil(6.0 / price)))
+    print(f'-> PEPE @ {price:.8f} | Menge {amount} (~{amount * price:.2f} USDT)')
 
-    # Aktuellen Preis holen + Fib-Signal simulieren
-    ticker     = exchange.exchange.fetch_ticker(symbol)
-    price      = float(ticker['last'])
-    entry_price = round(price * 0.98, 8)   # 2% unter Markt → Limit wird nie gefüllt
-    sl_price    = round(price * 0.95, 8)   # 5% unter Markt
-    tp_price    = round(price * 1.04, 8)   # 4% über Markt (2:1 R:R)
-    print(f'-> PEPE @ {price:.8f} | Entry: {entry_price:.8f} | SL: {sl_price:.8f} | TP: {tp_price:.8f}')
-
-    # Positionsgröße: Risiko 0.5 USDT auf SL-Distanz
-    price_risk  = abs(entry_price - sl_price)
-    contracts   = 0.5 / price_risk
-    amount_str  = exchange.amount_to_precision(symbol, contracts)
-    amount      = float(amount_str)
-    notional    = amount * entry_price
-    print(f'-> Contracts: {amount} | Notional: {notional:.2f} USDT')
-    if notional < 5.0:
-        # Auf Mindest-Notional aufstocken
-        amount  = float(exchange.amount_to_precision(symbol, math.ceil(6.0 / entry_price)))
-        notional = amount * entry_price
-        print(f'-> Auf Minimum aufgestockt: {amount} PEPE | Notional: {notional:.2f} USDT')
-
-    # --- Schritt 1: Limit Entry-Order ---
-    print(f'\n[Schritt 1/3] Platziere Limit Entry-Order @ {entry_price:.8f}...')
-    entry_order = exchange.place_limit_order(symbol, 'buy', amount, entry_price)
-    assert entry_order and entry_order.get('id'), 'FEHLER: Entry-Order nicht platziert.'
-    entry_id = entry_order['id']
-    print(f'-> Entry-Order platziert. ID: {entry_id}')
-    time.sleep(1)
-
-    # --- Schritt 2: SL + TP Trigger-Orders ---
-    print(f'\n[Schritt 2/3] Setze SL @ {sl_price:.8f} und TP @ {tp_price:.8f}...')
-    sl_order = exchange.place_trigger_market_order(symbol, 'sell', amount, trigger_price=sl_price, reduce=True)
-    time.sleep(0.5)
-    tp_order = exchange.place_trigger_market_order(symbol, 'sell', amount, trigger_price=tp_price, reduce=True)
+    # ---------------- A) ohne Fill ----------------
+    entry_a, sl_a, tp_a = price * 0.97, price * 0.94, price * 1.03
+    print(f'\n[A] Limit-Kauf {entry_a:.8f} (unter Markt) mit SL {sl_a:.8f} / TP {tp_a:.8f}')
+    order_a = exchange.place_limit_order_with_tpsl(symbol, 'buy', amount, entry_a, sl_a, tp_a)
+    assert order_a and order_a.get('id'), 'Order A wurde nicht angelegt.'
     time.sleep(2)
+    info_a = (exchange.fetch_order(order_a['id'], symbol) or {}).get('info', {})
+    preset_sl = float(info_a.get('presetStopLossPrice') or 0)
+    preset_tp = float(info_a.get('presetStopSurplusPrice') or 0)
+    print(f'-> Bitget meldet an der Order: presetStopLossPrice={preset_sl}  presetStopSurplusPrice={preset_tp}')
+    exchange.cancel_order(order_a['id'], symbol)
+    time.sleep(1)
+    assert abs(preset_sl - sl_a) / sl_a < 0.01, f'SL nicht an der Order gespeichert (info: {info_a})'
+    assert abs(preset_tp - tp_a) / tp_a < 0.01, f'TP nicht an der Order gespeichert (info: {info_a})'
+    print('-> [A] OK: SL und TP haengen an der Limit-Order, Order storniert.')
 
-    # Prüfen was auf Bitget angekommen ist
-    open_orders    = exchange.fetch_open_orders(symbol)
-    trigger_orders = exchange.fetch_open_trigger_orders(symbol)
-    entry_ids      = [o['id'] for o in open_orders]
+    # ---------------- B) mit Fill ----------------
+    price = float(exchange.exchange.fetch_ticker(symbol)['last'])
+    entry_b, sl_b, tp_b = price * 1.005, price * 0.97, price * 1.03
+    print(f'\n[B] Limit-Kauf {entry_b:.8f} (knapp ueber Markt -> sofortiger Fill) mit SL {sl_b:.8f} / TP {tp_b:.8f}')
+    order_b = exchange.place_limit_order_with_tpsl(symbol, 'buy', amount, entry_b, sl_b, tp_b)
+    assert order_b and order_b.get('id'), 'Order B wurde nicht angelegt.'
+    pos = []
+    for _ in range(10):
+        time.sleep(1.5)
+        pos = exchange.fetch_open_positions(symbol, strict=True)
+        if pos:
+            break
+    assert pos, 'Order B wurde nicht gefuellt (keine Position).'
+    print(f"-> Position offen: {pos[0].get('side')} {pos[0].get('contracts')} @ {pos[0].get('entryPrice')}")
+    time.sleep(2)
+    tpsl = _tpsl_prices(exchange.fetch_position_tpsl_orders(symbol))
+    print(f'-> Position-TP/SL laut Bitget: {tpsl}')
+    found_sl = any(abs(p - sl_b) / sl_b < 0.01 for p, _ in tpsl)
+    found_tp = any(abs(p - tp_b) / tp_b < 0.01 for p, _ in tpsl)
 
-    assert entry_id in entry_ids, f'FEHLER: Entry-Order {entry_id} nicht in offenen Orders.'
-    print(f'-> Entry-Order sichtbar auf Bitget [OK]  (unter "Open Orders")')
-    print(f'-> {len(trigger_orders)} Trigger-Order(s) sichtbar auf Bitget [OK]  (unter "Trigger Orders")')
-
-    leverage  = 5
-    margin    = round((amount * entry_price) / leverage, 2)
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
-
-    send_message(bot_token, chat_id,
-        f"[TEST] FIBOT ORDER GESETZT\n\n"
-        f"Account: Jurij\n"
-        f"Symbol: {symbol}\n"
-        f"Richtung: LONG\n"
-        f"Menge: {amount} Kontrakte\n"
-        f"Entry: {entry_price:.8f} USDT (Limit, unter Markt)\n"
-        f"Hebel: {leverage}x | Margin: {margin:.2f} USDT\n"
-        f"Take-Profit: {tp_price:.8f} USDT\n"
-        f"Stop-Loss: {sl_price:.8f} USDT\n\n"
-        f"Zeit: {now} UTC")
-    print('-> Telegram gesendet.')
-
-    print('\n' + '='*60)
-    print('  JETZT BITGET PRUEFEN:')
-    print(f'  - "Open Orders"    -> Limit Entry @ {entry_price:.8f}')
-    print(f'  - "Trigger Orders" -> SL @ {sl_price:.8f}')
-    print(f'                        TP @ {tp_price:.8f}')
-    print('  Orders werden in 30 Sekunden storniert...')
-    print('='*60)
-
-    for remaining in range(30, 0, -5):
-        print(f'  -> Stornierung in {remaining}s...')
-        time.sleep(5)
-
-    # --- Schritt 3: Aufräumen ---
-    print(f'\n[Schritt 3/3] Storniere alle Orders...')
-    exchange.cancel_all_orders_for_symbol(symbol)
+    # sofort schliessen, egal wie die Pruefung ausgeht
+    exchange.place_market_order(symbol, 'sell', float(pos[0].get('contracts')), reduce=True)
     time.sleep(3)
+    exchange.cancel_all_orders_for_symbol(symbol)
+    time.sleep(2)
+    left = exchange.fetch_open_positions(symbol, strict=True)
+    print(f'-> Position geschlossen: {not left}')
 
-    final_open    = exchange.fetch_open_orders(symbol)
-    final_trigger = exchange.fetch_open_trigger_orders(symbol)
-    assert entry_id not in [o['id'] for o in final_open], 'FEHLER: Entry-Order nicht storniert.'
-
-    send_message(bot_token, chat_id,
-        f"\u2705 *TEST ABGESCHLOSSEN*\n\nAlle Orders storniert.\nFiBot Workflow-Test bestanden.")
-    print('-> Alle Orders storniert.')
-    print('\n--- LIVE-TEST ERFOLGREICH (PEPE) ---')
+    ok = found_sl and found_tp and not left
+    send_message(tg.get('bot_token', ''), tg.get('chat_id', ''),
+                 f"[TEST] FiBot Konfluenz-Order live (PEPE, ~{amount * price:.1f} USDT)\n"
+                 f"A) SL/TP an Limit-Order gespeichert: ja\n"
+                 f"B) Fill -> Position-SL aktiv: {'ja' if found_sl else 'NEIN'}, TP aktiv: {'ja' if found_tp else 'NEIN'}\n"
+                 f"Position wieder geschlossen: {'ja' if not left else 'NEIN'}\n"
+                 f"{'BESTANDEN' if ok else 'FEHLGESCHLAGEN'}")
+    assert found_sl, f'Nach dem Fill kein SL als Position-TP/SL gefunden: {tpsl}'
+    assert found_tp, f'Nach dem Fill kein TP als Position-TP/SL gefunden: {tpsl}'
+    assert not left, 'Test-Position wurde nicht geschlossen!'
+    print('\n--- LIVE-TEST KONFLUENZ-ORDER ERFOLGREICH ---')

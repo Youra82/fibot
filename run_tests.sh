@@ -14,6 +14,8 @@ fi
 source .venv/bin/activate
 
 echo "Fuehre Pytest aus..."
+echo "Hinweis: test_live_confluence_order_on_bitget handelt ECHT auf Bitget (PEPE, ca. 6 USDT, wird sofort"
+echo "geschlossen, Kosten wenige Cent). Ueberspringen mit:  FIBOT_SKIP_LIVE=1 ./run_tests.sh"
 if python3 -m pytest tests/ -v -s; then
     echo -e "${GREEN}Pytest erfolgreich. Alle Tests bestanden.${NC}"
     EXIT_CODE=0
