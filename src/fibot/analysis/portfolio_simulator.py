@@ -98,20 +98,41 @@ def run_portfolio_simulation(start_capital: float,
     if not processed:
         return None
 
-    # 2. Gemeinsamen Zeitstrahl aller Strategien aufbauen ────────────────────
+    # 2. Arrays + Index-Maps (statt df.loc je Zeitpunkt -- das war bei vielen Strategien der
+    #    Engpass: der woechentliche Optimizer lief mit 38 Configs ins 2-h-Timeout)
+    for strat in processed.values():
+        df = strat['df']
+        strat['pos'] = {ts: i for i, ts in enumerate(df.index)}
+        strat['h'] = df['high'].values
+        strat['l'] = df['low'].values
+        strat['c'] = df['close'].values
+        n = len(df)
+        strat['sd'] = df['_sig_dir'].values if '_sig_dir' in df.columns else np.zeros(n)
+        strat['se'] = df['_sig_entry'].values if '_sig_entry' in df.columns else np.full(n, np.nan)
+        strat['ss'] = df['_sig_sl'].values if '_sig_sl' in df.columns else np.full(n, np.nan)
+        strat['st'] = df['_sig_tp1'].values if '_sig_tp1' in df.columns else np.full(n, np.nan)
+        strat['si'] = df['_sig_instant'].values if '_sig_instant' in df.columns else np.zeros(n, dtype=bool)
+
+    # Signale je Zeitpunkt in der Reihenfolge von `processed` (bestimmt die Margin-Vergabe)
+    signals_at: dict = {}
+    for fname, strat in processed.items():
+        sd = strat['sd']
+        for i in np.nonzero(sd)[0]:
+            signals_at.setdefault(strat['df'].index[i], []).append(fname)
+
+    # 3. Gemeinsamen Zeitstrahl aller Strategien aufbauen ────────────────────
     all_ts: set = set()
     for strat in processed.values():
         all_ts.update(strat['df'].index)
     sorted_ts = sorted(all_ts)
 
-    # 3. Simulation ──────────────────────────────────────────────────────────
+    # 4. Simulation ──────────────────────────────────────────────────────────
     equity         = float(start_capital)
     peak_equity    = equity
     max_dd_pct     = 0.0
     max_dd_date    = None
     liquidation_date = None
 
-    # Warte-Flags: nach SL-Hit keine neue Position bis nächste Signalkerze
     open_positions: dict = {}   # fname → pos-dict
     trade_history:  list = []
     equity_curve:   list = []
@@ -124,22 +145,21 @@ def run_portfolio_simulation(start_capital: float,
         closed_now = set()
         for fname in list(open_positions.keys()):
             strat = processed[fname]
-            if ts not in strat['df'].index:
+            i = strat['pos'].get(ts)
+            if i is None:
                 continue
-
-            candle = strat['df'].loc[ts]
-            pos    = open_positions[fname]
+            pos = open_positions[fname]
 
             # Nur ab der Kerze NACH dem Entry prüfen
             if ts <= pos['entry_ts']:
                 continue
 
             if pos['direction'] == 'long':
-                hit_sl = candle['low']  <= pos['sl']
-                hit_tp = candle['high'] >= pos['tp']
+                hit_sl = strat['l'][i] <= pos['sl']
+                hit_tp = strat['h'][i] >= pos['tp']
             else:
-                hit_sl = candle['high'] >= pos['sl']
-                hit_tp = candle['low']  <= pos['tp']
+                hit_sl = strat['h'][i] >= pos['sl']
+                hit_tp = strat['l'][i] <= pos['tp']
 
             exit_price = None
             if hit_sl and hit_tp:
@@ -159,7 +179,6 @@ def run_portfolio_simulation(start_capital: float,
                 exit_price = pos['tp']
 
             if exit_price is not None:
-                lev = pos.get('leverage', 1)
                 if pos['direction'] == 'long':
                     raw_pnl = pos['notional'] * (exit_price - pos['entry']) / pos['entry']
                 else:
@@ -184,27 +203,23 @@ def run_portfolio_simulation(start_capital: float,
                 del open_positions[fname]
                 closed_now.add(fname)
 
-        # ── B) Neue Positionen öffnen ────────────────────────────────────
+        # ── B) Neue Positionen öffnen (nur Strategien mit Signal in dieser Kerze) ──
         if equity > 0:
-            for fname, strat in processed.items():
+            for fname in signals_at.get(ts, ()):
+                strat = processed[fname]
                 if fname in open_positions:
                     continue
                 # Konfluenz: kein Limit-Fill in der Kerze, in der die Position schloss
                 if strat.get('confluence') and fname in closed_now:
                     continue
-                if ts not in strat['df'].index:
-                    continue
-
-                row     = strat['df'].loc[ts]
-                sig_dir_raw = row.get('_sig_dir', 0)
-                if not sig_dir_raw or sig_dir_raw == 'none':
-                    continue
+                i = strat['pos'][ts]
+                sig_dir_raw = strat['sd'][i]
                 # _sig_dir ist int (0=none, 1=long, 2=short) → in String umwandeln
                 sig_dir = 'long' if sig_dir_raw == 1 else ('short' if sig_dir_raw == 2 else str(sig_dir_raw))
 
-                entry = float(row.get('_sig_entry', np.nan))
-                sl    = float(row.get('_sig_sl',    np.nan))
-                tp    = float(row.get('_sig_tp1',   np.nan))
+                entry = float(strat['se'][i])
+                sl    = float(strat['ss'][i])
+                tp    = float(strat['st'][i])
 
                 if any(np.isnan(v) or v <= 0 for v in [entry, sl, tp]):
                     continue
@@ -244,7 +259,7 @@ def run_portfolio_simulation(start_capital: float,
                 }
 
                 # Konfluenz: Fuellkerze erreicht auch den SL -> sofort Verlust
-                if bool(row.get('_sig_instant', False)):
+                if bool(strat['si'][i]):
                     fees = notional * FEE_PCT * 2
                     net_pnl = -notional * sl_pct - fees
                     equity += net_pnl
@@ -259,9 +274,9 @@ def run_portfolio_simulation(start_capital: float,
         unrealized = 0.0
         for fname, pos in open_positions.items():
             strat = processed[fname]
-            if ts in strat['df'].index:
-                close_p = float(strat['df'].loc[ts, 'close'])
-                lev = pos.get('leverage', 1)
+            i = strat['pos'].get(ts)
+            if i is not None:
+                close_p = float(strat['c'][i])
                 if pos['direction'] == 'long':
                     unrealized += pos['notional'] * (close_p - pos['entry']) / pos['entry']
                 else:
@@ -279,7 +294,7 @@ def run_portfolio_simulation(start_capital: float,
         if total_eq <= 0 and liquidation_date is None:
             liquidation_date = ts
 
-    # 4. Ergebnis zusammenstellen ────────────────────────────────────────────
+    # 5. Ergebnis zusammenstellen ────────────────────────────────────────────
     final_equity  = equity_curve[-1]['equity'] if equity_curve else start_capital
     total_pnl_pct = (final_equity / start_capital - 1) * 100 if start_capital > 0 else 0.0
     wins          = sum(1 for t in trade_history if t['pnl'] > 0)
