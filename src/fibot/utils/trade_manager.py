@@ -799,6 +799,16 @@ def _confluence_size(exchange: Exchange, symbol: str, plan: dict, risk_pct: floa
     return contracts
 
 
+def _order_updates_enabled() -> bool:
+    """settings.json live_trading_settings.telegram_order_updates (Standard: an):
+    Telegram auch beim Nachziehen und beim Storno ungueltiger Setups."""
+    try:
+        with open(os.path.join(PROJECT_ROOT, 'settings.json')) as f:
+            return bool(json.load(f).get('live_trading_settings', {}).get('telegram_order_updates', True))
+    except Exception:
+        return True
+
+
 def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, logger):
     """Ohne offene Position: Limit-Order fuer die laufende Kerze planen, nachziehen oder entfernen.
     Der Plan kommt aus plan_next_order() -- derselben Rechnung wie im Backtest."""
@@ -838,6 +848,7 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     plan = plan_next_order(df, params)
 
     # 3) Bestehende wartende Order pruefen
+    cancelled_prev = None   # stornierte wartende Order (fuer Telegram: nachgezogen / ungueltig)
     if tracker.get('status') == 'pending_entry':
         order = None
         try:
@@ -864,12 +875,19 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
                 exchange.cancel_order(tracker.get('order_id'), symbol)
             except Exception as e:
                 logger.warning(f"Storno fehlgeschlagen: {e}")
+            cancelled_prev = dict(tracker)
             write_tracker(tracker_path, keep)
         else:
             write_tracker(tracker_path, keep)
 
+    updates = _order_updates_enabled()
     if plan is None:
         logger.info("Kein Konfluenz-Setup fuer die laufende Kerze.")
+        if cancelled_prev and updates:
+            send_message(bot_token, chat_id,
+                         f"FiBot ({symbol} {timeframe}): Setup ungueltig - wartende "
+                         f"{str(cancelled_prev.get('direction', '')).upper()}-Order "
+                         f"@ {float(cancelled_prev.get('entry_price', 0)):.6g} storniert.")
         return
 
     contracts = _confluence_size(exchange, symbol, plan, risk_pct, leverage, logger)
@@ -896,6 +914,11 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         # gleicher Impuls, Order nur auf die neue Kanalposition nachgezogen -> keine neue Nachricht
         logger.info(f"Limit nachgezogen: {plan['direction'].upper()} @ {plan['limit']:.6g} "
                     f"(SL {plan['sl']:.6g}, TP {plan['tp']:.6g})")
+        if updates and cancelled_prev:
+            send_message(bot_token, chat_id,
+                         f"FiBot ({symbol} {timeframe}): Limit nachgezogen "
+                         f"{float(cancelled_prev.get('entry_price', 0)):.6g} -> {plan['limit']:.6g} "
+                         f"({plan['direction'].upper()}) | SL {plan['sl']:.6g} | TP {plan['tp']:.6g}")
         return
     caption = (f"FiBot KONFLUENZ-ORDER ({symbol} {timeframe})\n"
                f"{plan['direction'].upper()} Limit {plan['limit']:.6g}\n"

@@ -494,11 +494,16 @@ Telegram meldet:
 
 | Nachricht | Wann |
 |---|---|
-| `KONFLUENZ-ORDER` + Chart (Kanal, Limit, SL, TP) | einmal je neuem Impuls. Das stündliche Nachziehen der Order läuft still im Log. |
+| `KONFLUENZ-ORDER` + Chart (Kanal, Impuls A–B, Fibo-Zone, Limit, SL, TP) | einmal je neuem Impuls |
+| `Limit nachgezogen alt -> neu` | bei jeder neuen Kerze, in der die Order mit der Kanallinie wandert |
+| `Setup ungültig – Order storniert` | wenn Kanal, Impuls oder Zone nicht mehr gelten |
 | `ENTRY gefüllt` | Limit wurde gefüllt, SL/TP sind aktiv |
 | `Entry gefüllt und Position bereits geschlossen` | Fill und SL/TP zwischen zwei Läufen |
 | `Position geschlossen` | SL oder TP ausgelöst |
 | `FEHLER` / `Self-Repair` / `NOTSCHLIESSUNG` | Orderfehler, fehlende SL/TP neu gesetzt, Kurs jenseits von SL/TP |
+
+Die Meldungen zum Nachziehen und zum Storno lassen sich mit `"telegram_order_updates": false` unter
+`live_trading_settings` in `settings.json` abschalten.
 
 ---
 

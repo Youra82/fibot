@@ -75,7 +75,9 @@
         "risk_per_entry_pct": 3.0,
         "active": true
       }
-    ]
+    ],
+    "telegram_order_updates": true,
+    "_telegram_order_updates_info": "true = Telegram auch beim Nachziehen der Limit-Order und beim Storno ungueltiger Setups"
   },
   "optimization_settings": {
     "enabled": true,

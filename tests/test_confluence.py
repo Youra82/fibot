@@ -104,12 +104,13 @@ def test_cycle_places_keeps_and_replaces(tmp_path):
         tm.confluence_cycle(ex, CFG, {}, MagicMock())
         assert ex.place_limit_order_with_tpsl.call_count == 1
         ex.cancel_order.assert_not_called()
-        # neue Kerze, gleicher Impuls: Order wird nachgezogen, aber KEINE neue Nachricht
+        # neue Kerze, gleicher Impuls: Order wird nachgezogen -> kurze Textnachricht, kein neues Chart
         store[list(store)[0]]['candle_ts'] = 'alt'
         tm.confluence_cycle(ex, CFG, {}, MagicMock())
         assert ex.cancel_order.call_count == 1
         assert ex.place_limit_order_with_tpsl.call_count == 2
-        assert photo.call_count == 1 and msg.call_count == 0
+        assert photo.call_count == 1 and msg.call_count == 1   # Chart nur beim neuen Impuls, Nachziehen als Text
+        assert "nachgezogen" in msg.call_args[0][2]
         # gefuellt und schon wieder geschlossen -> aufraeumen, kein neuer Entry fuer denselben Impuls
         ex.fetch_order.return_value = {'status': 'closed'}
         tm.confluence_cycle(ex, CFG, {}, MagicMock())
