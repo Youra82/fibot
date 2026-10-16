@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "FIL/USDT:USDT",
+    "timeframe": "15m"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 3,
+    "window": 150,
+    "min_upper_touches": 1,
+    "max_break_frac": 0.0,
+    "min_width_atr": 3.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.5,
+    "fib_hi": 0.618,
+    "fib_sl": 1.0,
+    "zone_tol_atr": 0.45000000000000007,
+    "sl_buf_atr": 0.15000000000000002,
+    "min_rr": 1.4,
+    "max_age_mult": null,
+    "b_near_upper_atr": 1.0,
+    "tp_mode": "upper",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 9,
+    "risk_per_entry_pct": 1.5,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 40.89,
+    "win_rate": 42.5,
+    "total_trades": 146,
+    "max_drawdown": 18.79,
+    "start_date": "2025-04-01",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": 37.98,
+      "max_drawdown": 14.83,
+      "total_trades": 95,
+      "win_rate": 43.2
+    }
+  }
+}
