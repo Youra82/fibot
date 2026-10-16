@@ -17,11 +17,21 @@ def confluence_chart(df, config: dict, symbol: str, timeframe: str):
     import matplotlib.pyplot as plt
     from fibot.strategy.confluence_logic import plan_both, plan_next_order
 
+    from fibot.strategy.confluence_logic import strategy_params
+
     plan = plan_next_order(df, config)
     lo, sh = plan_both(df, config)
     n = len(df)
-    view = df.iloc[-160:]
-    x0 = n - len(view)
+    imp = None   # Impuls A->B des aktuellen Setups (Indizes + Preise)
+    if plan:
+        pl = lo if plan['direction'] == 'long' else sh
+        A, B = int(pl['A'][n]), int(pl['B'][n])
+        if plan['direction'] == 'long':
+            imp = (A, B, float(df['low'].iloc[A]), float(df['high'].iloc[B]))
+        else:
+            imp = (A, B, float(df['high'].iloc[A]), float(df['low'].iloc[B]))
+    x0 = max(0, min(n - 160, (imp[0] - 10) if imp else n))
+    view = df.iloc[x0:]
     fig, ax = plt.subplots(figsize=(11, 5), dpi=110)
     for k, (o, h, l, c) in enumerate(view[['open', 'high', 'low', 'close']].values):
         col = '#26a69a' if c >= o else '#ef5350'
@@ -43,6 +53,22 @@ def confluence_chart(df, config: dict, symbol: str, timeframe: str):
     title = f"FIBOT Konfluenz | {symbol} ({timeframe})"
     if plan:
         k = n - x0
+        p = strategy_params(config)
+        A, B, Ap, Bp = imp
+        diff = Bp - Ap                      # Long: positiv (Tief A -> Hoch B), Short: negativ
+        lvl = lambda r: Bp - r * diff
+        z_a, z_b = sorted((lvl(p['fib_lo']), lvl(p['fib_hi'])))
+        ax.fill_between([B - x0, k + 2], z_a, z_b, color='#f6e7c4', alpha=0.7, zorder=0)
+        for r in (p['fib_lo'], p['fib_hi'], p['fib_sl']):
+            ax.plot([B - x0, k + 2], [lvl(r), lvl(r)], color='#c98500', ls='--', lw=1)
+            ax.text(B - x0 + 0.5, lvl(r), f'{r * 100:.1f} %', color='#c98500', fontsize=8, va='bottom')
+        ax.plot([A - x0, B - x0], [Ap, Bp], color='#555555', ls=':', lw=1.2)
+        span = abs(diff)
+        for idx, price, lab, below in ((A, Ap, 'A', plan['direction'] == 'long'),
+                                       (B, Bp, 'B', plan['direction'] != 'long')):
+            ax.scatter([idx - x0], [price], color='#15171b', s=28, zorder=6)
+            ax.text(idx - x0, price + (-0.07 if below else 0.04) * span, lab, ha='center',
+                    fontsize=13, fontweight='bold', color='#15171b', zorder=6)
         for price, col, lab in ((plan['tp'], '#0ca30c', 'TP'), (plan['limit'], '#2a78d6', 'Limit'),
                                 (plan['sl'], '#d03b3b', 'SL')):
             ax.plot([k - 6, k + 2], [price, price], color=col, lw=2.2)
