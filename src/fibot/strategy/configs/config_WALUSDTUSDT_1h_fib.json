@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "WAL/USDT:USDT",
+    "timeframe": "1h"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 3,
+    "window": 150,
+    "min_upper_touches": 1,
+    "max_break_frac": 0.0,
+    "min_width_atr": 2.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.382,
+    "fib_hi": 0.786,
+    "fib_sl": 0.886,
+    "zone_tol_atr": 0.8,
+    "sl_buf_atr": 0.35000000000000003,
+    "min_rr": 1.7000000000000002,
+    "max_age_mult": null,
+    "b_near_upper_atr": 1.0,
+    "tp_mode": "upper",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 9,
+    "risk_per_entry_pct": 1.5,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 28.57,
+    "win_rate": 25.9,
+    "total_trades": 85,
+    "max_drawdown": 20.1,
+    "start_date": "2025-04-01",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": 27.46,
+      "max_drawdown": 17.01,
+      "total_trades": 46,
+      "win_rate": 30.4
+    }
+  }
+}
