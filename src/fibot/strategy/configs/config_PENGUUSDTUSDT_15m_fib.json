@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "PENGU/USDT:USDT",
+    "timeframe": "15m"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 5,
+    "window": 150,
+    "min_upper_touches": 1,
+    "max_break_frac": 0.0,
+    "min_width_atr": 2.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.382,
+    "fib_hi": 0.705,
+    "fib_sl": 0.886,
+    "zone_tol_atr": 0.8,
+    "sl_buf_atr": 0.5,
+    "min_rr": 1.6,
+    "max_age_mult": 1.5,
+    "b_near_upper_atr": 0.5,
+    "tp_mode": "upper",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 3,
+    "risk_per_entry_pct": 2.75,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 105.9,
+    "win_rate": 34.6,
+    "total_trades": 127,
+    "max_drawdown": 28.47,
+    "start_date": "2025-04-01",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": 42.8,
+      "max_drawdown": 21.44,
+      "total_trades": 71,
+      "win_rate": 33.8
+    }
+  }
+}
