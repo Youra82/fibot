@@ -10,7 +10,7 @@ count() { $PY forschung/konfluenz/auswahl.py 2>/dev/null | head -1 | sed 's/.*Kr
 cnt=$(count)
 echo "Start: $cnt bestaetigt, Ziel $ZIEL"
 while true; do
-    grep -q "Traceback\|MemoryError" forschung/konfluenz/day4.log forschung/konfluenz/day5.log 2>/dev/null && { echo "FEHLER in Stufe 4/5"; exit 1; }
+    grep -q "Traceback\|MemoryError" forschung/konfluenz/day5.log forschung/konfluenz/day6.log 2>/dev/null && { echo "FEHLER in Stufe 4/5"; exit 1; }
     c=$(count)
     if [ -n "$c" ] && [ "$c" != "$cnt" ]; then
         ls src/fibot/strategy/configs > /tmp/vv.txt
@@ -25,7 +25,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" > /dev/null 2>&1
         cnt=$c
     fi
     if [ -n "$cnt" ] && [ "$cnt" -ge "$ZIEL" ]; then
-        powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like '*search.py*' -or \$_.CommandLine -like '*run_day.sh*' -or \$_.CommandLine -like '*run_stage5.sh*' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" > /dev/null 2>&1
+        powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like '*search.py*' -or \$_.CommandLine -like '*run_day.sh*' -or \$_.CommandLine -like '*run_stage5.sh*' -or \$_.CommandLine -like '*run_stage6.sh*' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" > /dev/null 2>&1
         echo "ZIEL ERREICHT: $cnt bestaetigte Strategien -- Suche gestoppt, Push: $(git push origin main 2>&1 | tail -1)"
         exit 0
     fi
