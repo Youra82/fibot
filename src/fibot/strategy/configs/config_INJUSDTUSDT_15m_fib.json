@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "INJ/USDT:USDT",
+    "timeframe": "15m"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 5,
+    "window": 150,
+    "min_upper_touches": 2,
+    "max_break_frac": 0.03,
+    "min_width_atr": 3.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.5,
+    "fib_hi": 0.786,
+    "fib_sl": 0.886,
+    "zone_tol_atr": 0.75,
+    "sl_buf_atr": 0.4,
+    "min_rr": 1.0,
+    "max_age_mult": null,
+    "b_near_upper_atr": 0.5,
+    "tp_mode": "b",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 3,
+    "risk_per_entry_pct": 1.25,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 2.08,
+    "win_rate": 30.2,
+    "total_trades": 96,
+    "max_drawdown": 15.39,
+    "start_date": "2025-04-01",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": 22.52,
+      "max_drawdown": 9.13,
+      "total_trades": 56,
+      "win_rate": 41.1
+    }
+  }
+}
