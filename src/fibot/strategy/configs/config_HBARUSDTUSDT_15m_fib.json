@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "HBAR/USDT:USDT",
+    "timeframe": "15m"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 5,
+    "window": 150,
+    "min_upper_touches": 1,
+    "max_break_frac": 0.0,
+    "min_width_atr": 2.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.5,
+    "fib_hi": 0.786,
+    "fib_sl": 0.886,
+    "zone_tol_atr": 0.5,
+    "sl_buf_atr": 0.5,
+    "min_rr": 2.6,
+    "max_age_mult": 1.5,
+    "b_near_upper_atr": 0.5,
+    "tp_mode": "upper",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 5,
+    "risk_per_entry_pct": 2.25,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 103.89,
+    "win_rate": 30.8,
+    "total_trades": 91,
+    "max_drawdown": 26.66,
+    "start_date": "2025-04-01",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": 10.51,
+      "max_drawdown": 22.51,
+      "total_trades": 59,
+      "win_rate": 25.4
+    }
+  }
+}
