@@ -317,6 +317,24 @@ class Exchange:
             logger.error(f"Fehler beim Stornieren der Trigger Order {id} für {symbol}: {e}")
             raise e
             
+    def cancel_stale_entry_orders(self, keep_symbols):
+        """Kontoweit: Entry-Limit-Orders (tradeSide 'open') auf Symbolen stornieren, die NICHT in
+        keep_symbols (active_strategies) stehen. Nach einem Portfolio-Wechsel laeuft fuer diese Symbole
+        kein Prozess mehr, der ihre Orders je Kerze nachzieht/storniert -- sie blieben liegen und
+        konnten spaeter ungesteuert gefuellt werden (DOGE 2026-10-16/17; ltbbot-Muster 8dfd057).
+        TP/SL (tradeSide 'close') bleiben. Rueckgabe: Liste (symbol, orderId) der stornierten Orders."""
+        if not self.markets: return []
+        by_id = {m.get('id'): s for s, m in self.markets.items() if m.get('swap')}
+        resp = self.exchange.private_mix_get_v2_mix_order_orders_pending({'productType': 'USDT-FUTURES'})
+        cancelled = []
+        for o in (resp.get('data') or {}).get('entrustedList') or []:
+            sym = by_id.get(o.get('symbol'))
+            if o.get('tradeSide') != 'open' or not sym or sym in keep_symbols:
+                continue
+            self.cancel_order(o['orderId'], sym)
+            cancelled.append((sym, o['orderId']))
+        return cancelled
+
     def cancel_all_orders_for_symbol(self, symbol):
         """Storniert alle offenen Orders (normal und trigger) für ein Symbol."""
         if not self.markets: return 0

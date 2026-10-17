@@ -82,6 +82,25 @@ def main():
         logging.warning("Keine aktiven Strategien in settings.json.")
         return
 
+    # Housekeeper: Entry-Orders von Symbolen ausserhalb active_strategies (nach Portfolio-Wechsel
+    # liegengeblieben) stornieren -- sonst werden sie spaeter ungesteuert gefuellt.
+    try:
+        from fibot.utils.exchange import Exchange
+        from fibot.utils.telegram import send_message
+        acc = secrets['fibot'][0] if isinstance(secrets['fibot'], list) else secrets['fibot']
+        active_symbols = {s['symbol'] for s in active_strategies if s.get('active', False)}
+        cancelled = Exchange(acc).cancel_stale_entry_orders(active_symbols)
+        for sym, oid in cancelled:
+            logging.warning(f"Housekeeper: liegengebliebene Entry-Order {oid} auf {sym} "
+                            f"(nicht in active_strategies) storniert.")
+        if cancelled:
+            tg = secrets.get('telegram', {})
+            send_message(tg.get('bot_token'), tg.get('chat_id'),
+                         "FiBot Housekeeper: alte Entry-Order(s) ausserhalb des Portfolios storniert: "
+                         + ", ".join(s.split('/')[0] for s, _ in cancelled))
+    except Exception as e:
+        logging.error(f"Housekeeper: Stornieren alter Entry-Orders fehlgeschlagen: {e}")
+
     processes = []
     for strategy in active_strategies:
         if not strategy.get('active', False):

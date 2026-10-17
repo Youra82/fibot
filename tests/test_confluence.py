@@ -129,3 +129,19 @@ def test_position_api_error_aborts_cycle():
     hk.assert_not_called()
     ex.cancel_all_orders_for_symbol.assert_not_called()
     ex.place_limit_order_with_tpsl.assert_not_called()
+
+
+def test_cancel_stale_entry_orders_only_outside_portfolio():
+    """Nach Portfolio-Wechsel: Entry-Orders fremder Symbole stornieren, TP/SL und aktive Symbole bleiben."""
+    from fibot.utils.exchange import Exchange
+    ex = Exchange.__new__(Exchange)
+    ex.markets = {'DOGE/USDT:USDT': {'id': 'DOGEUSDT', 'swap': True},
+                  'XRP/USDT:USDT': {'id': 'XRPUSDT', 'swap': True}}
+    ex.exchange = MagicMock()
+    ex.exchange.private_mix_get_v2_mix_order_orders_pending.return_value = {'data': {'entrustedList': [
+        {'symbol': 'DOGEUSDT', 'tradeSide': 'open', 'orderId': 'D1'},
+        {'symbol': 'DOGEUSDT', 'tradeSide': 'close', 'orderId': 'D2'},
+        {'symbol': 'XRPUSDT', 'tradeSide': 'open', 'orderId': 'X1'}]}}
+    ex.cancel_order = MagicMock()
+    assert ex.cancel_stale_entry_orders({'XRP/USDT:USDT'}) == [('DOGE/USDT:USDT', 'D1')]
+    ex.cancel_order.assert_called_once_with('D1', 'DOGE/USDT:USDT')
