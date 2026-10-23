@@ -46,9 +46,16 @@ def _resolve_ambiguous_exit(fine_slice, sl_price, tp_price, side):
 def run_portfolio_simulation(start_capital: float,
                               strategies_data: dict,
                               start_date: str,
-                              end_date: str) -> dict | None:
+                              end_date: str,
+                              symbol_blocks: list | None = None) -> dict | None:
     """
     Chronologische Portfolio-Simulation für mehrere FiBot-Strategien.
+
+    Optional fuer den Live-Abgleich (daily_live_vs_backtest_check.py):
+      strategies_data[fname]['active_periods'] = [(von, bis), ...] -- Fuellung nur, wenn die
+        Fuellkerze im Team-Zeitraum der Strategie beginnt (bis=None: offen)
+      symbol_blocks = [(symbol, von, bis), ...] -- Symbol hat eine aeltere Live-Position, die der
+        Simulator nicht kennt; bis=None: noch offen
 
     strategies_data: {
         filename: {
@@ -93,6 +100,7 @@ def run_portfolio_simulation(start_capital: float,
             'confluence': strat['config'].get('strategy', {}).get('type') == 'confluence',
             'fine_df':   fine_df,
             'coarse_duration': coarse_duration,
+            'active_periods': strat.get('active_periods'),
         }
 
     if not processed:
@@ -199,6 +207,7 @@ def run_portfolio_simulation(start_capital: float,
                     'notional':   pos['notional'],
                     'leverage':   pos.get('leverage', 1),
                     'sl_dist_pct': sl_dist_pct,
+                    'entry_ts':   pos['entry_ts'],
                 })
                 del open_positions[fname]
                 closed_now.add(fname)
@@ -211,6 +220,12 @@ def run_portfolio_simulation(start_capital: float,
                     continue
                 # Konfluenz: kein Limit-Fill in der Kerze, in der die Position schloss
                 if strat.get('confluence') and fname in closed_now:
+                    continue
+                if strat.get('active_periods') is not None and not any(
+                        a <= ts and (b is None or ts < b) for a, b in strat['active_periods']):
+                    continue
+                if symbol_blocks and any(sym == strat['symbol'] and a <= ts and (b is None or ts < b)
+                                         for sym, a, b in symbol_blocks):
                     continue
                 i = strat['pos'][ts]
                 sig_dir_raw = strat['sd'][i]
@@ -266,7 +281,7 @@ def run_portfolio_simulation(start_capital: float,
                     trade_history.append({
                         'fname': fname, 'direction': sig_dir, 'entry': entry, 'exit': sl,
                         'pnl': net_pnl, 'ts': ts, 'notional': notional, 'leverage': leverage,
-                        'sl_dist_pct': sl_pct * 100,
+                        'sl_dist_pct': sl_pct * 100, 'entry_ts': ts,
                     })
                     del open_positions[fname]
 
@@ -316,4 +331,6 @@ def run_portfolio_simulation(start_capital: float,
         'liquidation_date':  liquidation_date,
         'equity_curve':      eq_df,
         'trade_history':     trade_history,
+        'open_positions':    [{'fname': f, 'direction': p['direction'], 'entry': p['entry'],
+                               'entry_ts': p['entry_ts']} for f, p in open_positions.items()],
     }

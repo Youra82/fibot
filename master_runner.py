@@ -12,6 +12,7 @@ import logging
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = SCRIPT_DIR
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
+from fibot.utils.team_history import record_team, strategy_key
 
 log_dir  = os.path.join(PROJECT_ROOT, 'logs')
 os.makedirs(log_dir, exist_ok=True)
@@ -42,6 +43,20 @@ def _run_auto_optimizer():
         logging.warning(f"[Auto-Optimizer] Konnte Scheduler nicht starten: {e}")
 
 
+def _run_daily_check():
+    """Taeglicher Live-vs-Backtest-Abgleich im Hintergrund (prueft selbst, ob faellig)."""
+    script     = os.path.join(SCRIPT_DIR, 'daily_live_vs_backtest_check.py')
+    python_exe = os.path.join(SCRIPT_DIR, '.venv', 'bin', 'python3')
+    if not os.path.exists(script) or not os.path.exists(python_exe):
+        return
+    try:
+        subprocess.Popen([python_exe, script],
+                         stdout=open(os.path.join(SCRIPT_DIR, 'logs', 'daily_live_vs_backtest_check.log'), 'a'),
+                         stderr=subprocess.STDOUT, cwd=SCRIPT_DIR)
+    except Exception as e:
+        logging.warning(f"[Live-vs-Backtest] Konnte Tagescheck nicht starten: {e}")
+
+
 def main():
     settings_file = os.path.join(SCRIPT_DIR, 'settings.json')
     secret_file   = os.path.join(SCRIPT_DIR, 'secret.json')
@@ -58,6 +73,7 @@ def main():
 
     # Auto-Optimizer im Hintergrund starten (non-blocking)
     _run_auto_optimizer()
+    _run_daily_check()
 
     try:
         with open(settings_file, 'r') as f:
@@ -102,17 +118,26 @@ def main():
         logging.error(f"Housekeeper: Stornieren alter Entry-Orders fehlgeschlagen: {e}")
 
     processes = []
+    started_keys = []
     for strategy in active_strategies:
         if not strategy.get('active', False):
             continue
         symbol    = strategy['symbol']
         timeframe = strategy['timeframe']
         logging.info(f"  Starte: {symbol} ({timeframe})")
+        started_keys.append(strategy_key(symbol, timeframe))
 
         cmd = [python_exe, run_script, '--symbol', symbol, '--timeframe', timeframe]
         proc = subprocess.Popen(cmd, cwd=SCRIPT_DIR)
         processes.append((symbol, timeframe, proc))
         time.sleep(3.0)
+
+    # Teamhistorie: welches Portfolio ab wann live lief (fuer Live-vs-Backtest-Abgleich)
+    try:
+        if record_team(started_keys, source='master_runner'):
+            logging.info(f"Teamhistorie: neues Team aufgezeichnet ({len(started_keys)} Strategien).")
+    except Exception as e:
+        logging.warning(f"Teamhistorie nicht geschrieben: {e}")
 
     # Wait for all to finish
     for symbol, timeframe, proc in processes:

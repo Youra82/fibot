@@ -133,6 +133,27 @@ def _telegram_send(bot_token: str, chat_id: str, message: str):
         log.warning(f"Telegram-Fehler: {e}")
 
 
+def _active_keys() -> list:
+    from fibot.utils.team_history import strategy_key
+    try:
+        with open(SETTINGS_FILE) as f:
+            active = json.load(f).get('live_trading_settings', {}).get('active_strategies', [])
+        return sorted(strategy_key(s['symbol'], s['timeframe']) for s in active if s.get('active', True))
+    except Exception:
+        return []
+
+
+def _record_selection(team_before: list) -> None:
+    """Teamhistorie: Ergebnis der Wochenauswahl festhalten, auch wenn das Team gleich bleibt."""
+    try:
+        from fibot.utils.team_history import record_team
+        after = _active_keys()
+        record_team(after, source='wochenauswahl: neu' if after != team_before else 'wochenauswahl: beibehalten',
+                    force=True)
+    except Exception as e:
+        log.warning(f"Teamhistorie nicht geschrieben: {e}")
+
+
 def _update_settings(portfolio_files: list) -> bool:
     """Schreibt das optimale Portfolio als active_strategies in settings.json."""
     try:
@@ -257,9 +278,12 @@ def main():
         if end_date not in ('auto', '', None):
             cmd += ['--to', end_date]
         log.info(f"Starte Portfolio-Optimizer: {' '.join(str(x) for x in cmd)}")
+        team_before = _active_keys()
         proc = subprocess.run(cmd, cwd=PROJECT_ROOT, timeout=7200)
         rc   = proc.returncode
         log.info(f"Portfolio-Optimizer beendet (rc={rc}).")
+        if rc == 0:
+            _record_selection(team_before)
 
         elapsed = (datetime.now() - start_time).total_seconds()
         h = int(elapsed // 3600)
