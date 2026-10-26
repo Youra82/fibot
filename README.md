@@ -22,6 +22,7 @@ Kein maschinelles Lernen. Die Regeln sind reine Preisstruktur, und Live-Bot und 
 - [Strategie im Detail](#strategie-im-detail)
 - [Live-Betrieb](#live-betrieb)
 - [Status und Forschungsergebnisse](#status-und-forschungsergebnisse)
+- [Marktphasen: wann die Strategie funktioniert](#marktphasen-wann-die-strategie-funktioniert)
 - [Architektur](#architektur)
 - [Konfiguration](#konfiguration)
 - [Installation](#installation)
@@ -177,6 +178,54 @@ Mit **einem** Parametersatz für alle Coins hat die Regel bisher keine messbare 
 deshalb **je Coin/Timeframe optimiert** und nach ihrem Out-of-Sample-Ergebnis ausgewählt. Wer so auswählt,
 findet auch Zufallssieger. Die Configs sollten deshalb mit kleinem Risiko live laufen und regelmäßig mit
 `daten/compare_live_vs_backtest.py` überprüft werden.
+
+---
+
+## Marktphasen: wann die Strategie funktioniert
+
+Ausgewertet wurden alle 38 Konfluenz-Configs mit ihren Backtest-Trades von 04/2023 bis 26.10.2026
+(4 972 Trades, In-Sample und Out-of-Sample). Jeder Trade wurde der BTC-Marktphase am Vortag zugeordnet.
+
+![BTC-Tageskerzen mit Marktphasen und fibot-Ergebnis](docs/img/marktphasen_btc.png)
+
+**So liest man das Bild:**
+
+- **Kerzen:** BTC-Tageskerzen, ein Jahr pro Zeile. Blau = Tag im Plus, rot = Tag im Minus. Gestrichelt: SMA200.
+- **Hintergrund:** BTC-Marktphase.
+  - **Hellblau = günstig:** BTC in 30 Tagen über +3 % oder unter −10 %. Im Schnitt etwa **+0,42 R pro Trade**.
+  - **Beige = ungünstig:** BTC seitwärts oder leicht fallend (−10 % bis +3 % in 30 Tagen). Nur etwa **+0,13 R pro Trade**.
+- **Farbstreifen unter jedem Jahr:** Ergebnis des fibot im Backtest über die letzten 30 Tage.
+  Kräftiges Blau = gut verdient, Rot = Verlust.
+
+**R pro Trade nach BTC-Bewegung der letzten 30 Tage:**
+
+| BTC in 30 Tagen | alle Trades | nur OOS | Trefferquote OOS |
+|---|---|---|---|
+| unter −10 % (Crash oder starke Korrektur) | +0,43 | +0,59 | 39 % |
+| −10 bis −3 % | +0,18 | +0,17 | 27 % |
+| ±3 % (seitwärts) | +0,10 | +0,03 | 28 % |
+| +3 bis +10 % | +0,42 | +0,29 | 33 % |
+| über +10 % (Rally) | +0,41 | +0,30 | 33 % |
+
+**Was man sieht:**
+
+- Die Strategie verdient vor allem, wenn BTC sich kräftig bewegt. Ob es hoch oder runter geht, ist fast egal.
+  Die besten Zeiträume:
+  - Nov.–Dez. 2024: Rally von 69k auf 100k.
+  - März 2025: Korrektur von 97k auf 76k.
+  - Juni 2023 und Mai–Juni 2025.
+- Seitwärtsphasen sind die Schwachstelle, etwa Sommer 2023, Januar 2024 und August bis Oktober 2025.
+  In ihnen liegen fast alle roten Stellen im Streifen.
+- Bulle oder Bär ist weniger entscheidend: +0,28 bis +0,34 R pro Trade.
+  - Shorts laufen in beiden Märkten gut.
+  - Longs bringen im Bärenmarkt kaum etwas (+0,08 R).
+- Niedrige BTC-Volatilität ist besser als hohe: +0,34 gegenüber +0,25 R pro Trade.
+- Live-Start am 15.10.2026: BTC lief um 80k seitwärts bis leicht fallend, also in der ungünstigen Phase.
+  Das erklärt den Drawdown der ersten Live-Wochen.
+
+**Einschränkung:** Die Phasen wurden im Nachhinein bestimmt. Ein BTC-Trendfilter (S4/S6/ltbbot-Regel)
+hat im Test geschadet. Ein Filter „nicht handeln, wenn BTC seitwärts läuft“ wäre eine neue Hypothese und
+müsste erst vorab festgelegt auf ungesehenen Daten bestehen, bevor er eingebaut wird.
 
 ---
 
