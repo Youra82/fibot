@@ -23,6 +23,7 @@ Kein maschinelles Lernen. Die Regeln sind reine Preisstruktur, und Live-Bot und 
 - [Live-Betrieb](#live-betrieb)
 - [Status und Forschungsergebnisse](#status-und-forschungsergebnisse)
 - [Marktphasen: wann die Strategie funktioniert](#marktphasen-wann-die-strategie-funktioniert)
+- [Trendfilter: nur in Richtung des übergeordneten Trends](#trendfilter-nur-in-richtung-des-übergeordneten-trends)
 - [Architektur](#architektur)
 - [Konfiguration](#konfiguration)
 - [Installation](#installation)
@@ -226,6 +227,39 @@ Ausgewertet wurden alle 38 Konfluenz-Configs mit ihren Backtest-Trades von 04/20
 **Einschränkung:** Die Phasen wurden im Nachhinein bestimmt. Ein BTC-Trendfilter (S4/S6/ltbbot-Regel)
 hat im Test geschadet. Ein Filter „nicht handeln, wenn BTC seitwärts läuft“ wäre eine neue Hypothese und
 müsste erst vorab festgelegt auf ungesehenen Daten bestehen, bevor er eingebaut wird.
+
+---
+
+## Trendfilter: nur in Richtung des übergeordneten Trends
+
+Seit 28.10.2026 aktiv. Ein Signal wird nur gehandelt, wenn **beide** Trends in Handelsrichtung zeigen:
+
+- **Höherer Timeframe:** Kerzen des Strategie-Timeframes zu 4-fachen Kerzen zusammengefasst (15m → 1h, 30m → 2h,
+  1h → 4h, 2h → 8h), Schluss über der EMA50 = aufwärts.
+- **Tag:** Tageskerze des Coins, Schluss über der SMA50 = aufwärts.
+
+Long nur bei beiden aufwärts, Short nur bei beiden abwärts. Gezählt werden nur Kerzen, die vor der Orderkerze
+abgeschlossen waren. Fehlt Historie, gibt es keinen Trade. Live, Backtest, Optimizer, wöchentliche
+Portfolio-Auswahl und Tagesbericht nutzen dieselben Funktionen (`src/fibot/strategy/trend_filter.py`).
+Gegen den Trend legt der Live-Bot keine Order; eine schon liegende Order wird storniert und per Telegram gemeldet.
+
+![Kontoverlauf mit und ohne Trendfilter](docs/img/trendfilter_vergleich.png)
+
+Nachgespielt mit wöchentlicher Portfolio-Auswahl seit 08.04.2026 (Start 100 USDT): **436 USDT mit Filter**
+gegen 138 USDT ohne; seit dem Live-Start am 15.10. −14 % statt −26 %. Im vorregistrierten Test stieg der Ertrag
+je Trade im Prüfzeitraum von +0,25R auf +0,39R, die Trefferquote von 32 auf 36 %.
+
+**Vorbehalt:** Vor April 2026 wirkte der Filter umgekehrt (Trades gegen den Trend waren dort besser), und ein
+großer Teil des Vorsprungs stammt aus dem Juni 2026. Ergebnisse, Vorregistrierung und Skripte:
+[`forschung/trendfilter/`](forschung/trendfilter/).
+
+Schalter in `settings.json`:
+
+```json
+"trend_filter": { "enabled": true, "htf_mult": 4, "htf_ema": 50, "daily_sma": 50 }
+```
+
+Fehlt der Block, ist der Filter an.
 
 ---
 

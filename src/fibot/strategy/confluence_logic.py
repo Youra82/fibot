@@ -12,6 +12,8 @@ from typing import List, Optional
 import numpy as np
 import pandas as pd
 
+from fibot.strategy import trend_filter
+
 DEFAULTS = {
     'pivot_k':          5,      # Extrem ueber +-k Kerzen, bestaetigt k Kerzen spaeter
     'window':           150,    # Kerzen fuer die Kanalsuche
@@ -377,6 +379,29 @@ def plan_both(df: pd.DataFrame, config: dict, cache_key=None):
     return lo, sh
 
 
+_TREND_CACHE: dict = {}
+
+
+def _trend_series_for_backtest(df: pd.DataFrame, config: dict, tf_cfg: dict):
+    """HTF- und Tagestrend fuer den Backtest: laedt Vorlauf (EMA eingeschwungen) und Tageskerzen.
+    Fehlen die Daten, bricht der Backtest ab statt ungefiltert weiterzurechnen."""
+    from fibot.analysis.backtester import load_ohlcv
+    symbol, tf = config['market']['symbol'], config['market']['timeframe']
+    start = df.index[0] - pd.Timedelta(tf) * trend_filter.base_bars_needed(tf_cfg)
+    key = (symbol, tf, start.floor('D'), df.index[-1].floor('D'), tuple(sorted(tf_cfg.items())))
+    if key not in _TREND_CACHE:
+        if len(_TREND_CACHE) > 200:
+            _TREND_CACHE.clear()
+        end_s = df.index[-1].strftime('%Y-%m-%d')
+        ext = load_ohlcv(symbol, tf, start.strftime('%Y-%m-%d'), end_s)
+        base = df[['close']] if ext is None or ext.empty else ext[['close']].combine_first(df[['close']])
+        daily = load_ohlcv(symbol, '1d', (df.index[0] - pd.Timedelta(days=trend_filter.DAILY_BARS_NEEDED)).strftime('%Y-%m-%d'), end_s)
+        if daily is None or daily.empty:
+            raise RuntimeError(f"Trendfilter: keine Tageskerzen fuer {symbol} -- Backtest abgebrochen")
+        _TREND_CACHE[key] = (trend_filter.htf_trend(base, tf, tf_cfg), trend_filter.daily_trend(daily, tf_cfg))
+    return _TREND_CACHE[key]
+
+
 def precompute_confluence_signals(df: pd.DataFrame, config: dict, cache_key=None) -> pd.DataFrame:
     """Signal-Spalten im Format des bestehenden Backtesters/Portfolio-Simulators.
     _sig_dir sitzt auf der FUELL-Kerze; _sig_entry ist der Limitpreis.
@@ -402,6 +427,10 @@ def precompute_confluence_signals(df: pd.DataFrame, config: dict, cache_key=None
                 sw_lo[i], sw_hi[i] = lv[A], hv[B]
             else:
                 sw_hi[i], sw_lo[i] = hv[A], lv[B]
+    tf_cfg = trend_filter.settings()
+    if tf_cfg['enabled'] and sig_dir.any():
+        htf, daily = _trend_series_for_backtest(df, config, tf_cfg)
+        sig_dir = trend_filter.mask_signals(sig_dir, df.index, htf, daily)
     df = df.copy()
     df['_sig_dir'] = sig_dir
     df['_sig_entry'] = entry

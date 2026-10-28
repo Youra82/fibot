@@ -281,6 +281,7 @@ LOG_REASONS = [
     ('< 5', 'Order unter Bitget-Minimum (5 USDT)'),
     ('Konfluenz-Order fehlgeschlagen', 'Order fehlgeschlagen'),
     ('Keine Kerzen geladen', 'Kerzendaten fehlen'),
+    ('Trendfilter', 'Trendfilter hat die Order live verhindert'),
     ('liegt bereits', 'Limit-Order lag, live nicht gefüllt'),
     ('Limit nachgezogen', 'Limit-Order lag, live nicht gefüllt'),
     ('Kein Konfluenz-Setup', 'Live-Code sah kein Setup (Daten weichen ab)'),

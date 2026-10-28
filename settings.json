@@ -79,6 +79,13 @@
     "telegram_order_updates": true,
     "_telegram_order_updates_info": "true = Telegram auch beim Nachziehen der Limit-Order und beim Storno ungueltiger Setups"
   },
+  "trend_filter": {
+    "_info": "Nur in Richtung des uebergeordneten Trends: HTF (htf_mult x Strategie-Timeframe, Schluss > EMA htf_ema) UND Tag (Schluss > SMA daily_sma) muessen in Handelsrichtung zeigen. Gilt fuer Live, Backtest, Optimizer, Portfolio-Auswahl und Tagesbericht. Fehlt der Block: an. Test 28.10.2026 siehe forschung/trendfilter/.",
+    "enabled": true,
+    "htf_mult": 4,
+    "htf_ema": 50,
+    "daily_sma": 50
+  },
   "optimization_settings": {
     "enabled": true,
     "num_trials": 100,

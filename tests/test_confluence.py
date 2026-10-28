@@ -93,6 +93,7 @@ def test_cycle_places_keeps_and_replaces(tmp_path):
          patch.object(tm, 'write_tracker', side_effect=lambda p, d: store.__setitem__(p, dict(d))), \
          patch.object(tm, 'send_message') as msg, \
          patch.object(tm, 'send_photo') as photo, \
+         patch.object(tm, '_trend_filter_reject', return_value=None), \
          patch('pandas.Timestamp.now', return_value=now):
         ex = _mock_exchange(win)
         tm.confluence_cycle(ex, CFG, {}, MagicMock())

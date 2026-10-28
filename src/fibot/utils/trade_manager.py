@@ -809,6 +809,40 @@ def _order_updates_enabled() -> bool:
         return True
 
 
+def _trend_filter_reject(exchange: Exchange, symbol: str, timeframe: str, df: pd.DataFrame,
+                         plan: dict, current_candle: str, logger) -> str | None:
+    """Trendfilter (dieselben Funktionen wie im Backtest). Rueckgabe: Grund der Ablehnung oder None.
+    Fehlen Daten, wird abgelehnt (lieber keine Order als eine ungefilterte)."""
+    from fibot.strategy import trend_filter
+    cfg = trend_filter.settings()
+    if not cfg['enabled']:
+        return None
+    now = pd.Timestamp.now(tz='UTC')
+    try:
+        base = df
+        need = trend_filter.base_bars_needed(cfg)
+        if len(base) < need:
+            base = exchange.fetch_recent_ohlcv(symbol, timeframe, limit=need + 5)
+            if not base.empty and base.index[-1] + pd.Timedelta(timeframe) > now:
+                base = base.iloc[:-1]
+        daily = exchange.fetch_recent_ohlcv(symbol, '1d', limit=trend_filter.DAILY_BARS_NEEDED)
+        if not daily.empty and daily.index[-1] + pd.Timedelta(days=1) > now:
+            daily = daily.iloc[:-1]
+        if len(base) < need or len(daily) < int(cfg['daily_sma']) + 1:
+            return f"zu wenig Kerzen ({len(base)} {timeframe}, {len(daily)} Tage)"
+        htf = trend_filter.htf_trend(base, timeframe, cfg)
+        day = trend_filter.daily_trend(daily, cfg)
+    except Exception as e:
+        logger.warning(f"Trendfilter: Daten nicht ladbar: {e}")
+        return "Trenddaten nicht ladbar"
+    ts = pd.Timestamp(current_candle)
+    if trend_filter.allowed(plan['direction'], ts, htf, day):
+        return None
+    h = trend_filter._value_at(htf, ts); d = trend_filter._value_at(day, ts)
+    lab = lambda v: 'auf' if v == 1.0 else ('ab' if v == 0.0 else '?')
+    return f"{int(cfg['htf_mult'])}x{timeframe} {lab(h)}, Tag {lab(d)}"
+
+
 def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, logger):
     """Ohne offene Position: Limit-Order fuer die laufende Kerze planen, nachziehen oder entfernen.
     Der Plan kommt aus plan_next_order() -- derselben Rechnung wie im Backtest."""
@@ -846,6 +880,12 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         return
     current_candle = (df.index[-1] + pd.Timedelta(seconds=tf_seconds)).isoformat()
     plan = plan_next_order(df, params)
+    filtered_reason = None
+    if plan is not None:
+        filtered_reason = _trend_filter_reject(exchange, symbol, timeframe, df, plan, current_candle, logger)
+        if filtered_reason:
+            logger.info(f"Trendfilter: {plan['direction'].upper()} @ {plan['limit']:.6g} nicht erlaubt ({filtered_reason}).")
+            plan = None
 
     # 3) Bestehende wartende Order pruefen
     cancelled_prev = None   # stornierte wartende Order (fuer Telegram: nachgezogen / ungueltig)
@@ -882,10 +922,12 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
 
     updates = _order_updates_enabled()
     if plan is None:
-        logger.info("Kein Konfluenz-Setup fuer die laufende Kerze.")
+        if not filtered_reason:
+            logger.info("Kein Konfluenz-Setup fuer die laufende Kerze.")
         if cancelled_prev and updates:
+            why = f"gegen den uebergeordneten Trend ({filtered_reason})" if filtered_reason else "Setup ungueltig"
             send_message(bot_token, chat_id,
-                         f"FiBot ({symbol} {timeframe}): Setup ungueltig - wartende "
+                         f"FiBot ({symbol} {timeframe}): {why} - wartende "
                          f"{str(cancelled_prev.get('direction', '')).upper()}-Order "
                          f"@ {float(cancelled_prev.get('entry_price', 0)):.6g} storniert.")
         return
