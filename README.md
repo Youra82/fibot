@@ -43,6 +43,7 @@ Kein maschinelles Lernen. Die Regeln sind reine Preisstruktur, und Live-Bot und 
 | **1 Impuls** | letztes bestätigtes Swing-Tief **A** und das höchste Hoch **B** danach | Das ist die Bewegung, deren Rücksetzer gehandelt wird. |
 | **2 Kanal** | untere Linie durch Pivot-Tiefs, obere parallel durch Pivot-Hochs | Dort haben Käufer bzw. Verkäufer schon mehrfach reagiert. |
 | **3 Konfluenz** | untere Kanallinie in die Zukunft verlängern: Wann kreuzt sie die Zone 50–61,8 %? | Zwei unabhängige Unterstützungen an einem Preis. |
+| **3b Trendfilter** | nur handeln, wenn der 4-fache Timeframe **und** die Tageskerze des Coins in Handelsrichtung zeigen | Ein Rücksetzer mit dem übergeordneten Trend prallt eher ab ([Details](#trendfilter-nur-in-richtung-des-übergeordneten-trends)). |
 | **4 Order** | Limit-Order **vorab** an diesem Preis, SL und TP direkt angehängt | Einstieg am Level statt irgendwo in der Zone. |
 | **5 Ausstieg** | TP an der oberen Kanallinie, SL unter 78,6 % bzw. unter der Linie | Strukturell begründet, typisch 2–5 R Chance-Risiko |
 
@@ -65,6 +66,10 @@ gespiegelten Kursreihe (Preis → −Preis), damit beide Seiten garantiert diese
 3. **Auto-Optimizer** stellt einmal pro Woche aus allen Configs das beste Team zusammen und schreibt es in
    `settings.json`.
 4. **Live:** `master_runner.py` läuft alle 15 Minuten und führt jede aktive Strategie aus.
+5. **Tagesbericht:** Einmal täglich vergleicht `daily_live_vs_backtest_check.py` jeden Live-Trade mit dem
+   Backtest und schickt das Ergebnis per Telegram.
+
+Der [Trendfilter](#trendfilter-nur-in-richtung-des-übergeordneten-trends) wirkt in allen fünf Schritten gleich.
 
 ---
 
@@ -138,7 +143,9 @@ Bei jedem Lauf (alle 15 Minuten) und für jede aktive Strategie:
 
 1. Abgeschlossene Kerzen laden (die laufende Kerze wird verworfen). Dann ruft der Bot
    **`plan_next_order()`** auf. Das ist exakt die Rechnung, mit der der Backtest Kerze *n* plant.
-2. **Kein Setup:** Es passiert nichts.
+2. **Kein Setup oder gegen den Trend:** Es wird keine Order gelegt. Zeigt der Trendfilter gegen das Setup,
+   storniert der Bot eine schon liegende Order und meldet den Grund per Telegram. Fehlen dem Filter Daten, gibt es
+   sicherheitshalber keine Order.
 3. **Setup:** Der Bot legt eine Limit-Order mit **angehängtem SL und TP** (Bitget `presetStopLossPrice` /
    `presetStopSurplusPrice`). Beide aktiviert Bitget im Moment des Fills. Die Position ist also ab der ersten
    Sekunde geschützt, auch wenn der Fill zwischen zwei Läufen passiert.
@@ -152,9 +159,15 @@ Bei jedem Lauf (alle 15 Minuten) und für jede aktive Strategie:
 **Positionsgröße:** Risiko = `risk_per_entry_pct` × **Gesamtkapital**, wie im Backtest. Die Margin wird nur auf
 das freie Guthaben gekappt. Positionen unter 5 USDT Notional werden nicht eröffnet.
 
+**Aufräumen nach Portfolio-Wechsel:** Vor den Strategien storniert `master_runner.py` kontoweit Entry-Orders auf
+Coins, die nicht mehr in `active_strategies` stehen. Sonst könnten sie später ohne Steuerung gefüllt werden.
+SL und TP offener Positionen bleiben unberührt; die Position läuft über sie aus.
+
 Die Parität ist getestet: [`tests/test_confluence.py`](tests/test_confluence.py) vergleicht für jede Kerze den
 Live-Plan (600 Kerzen Historie) mit dem Backtest-Plan (volle Historie). Zusätzlich prüft der Test den
 Live-Zyklus (legen / liegen lassen / aufräumen) mit einer Mock-Exchange.
+[`tests/test_trend_filter.py`](tests/test_trend_filter.py) prüft, dass die Trendentscheidung live (nur die
+zuletzt geladenen Kerzen) und im Backtest (volle Historie) auf echten Kerzen gleich ausfällt.
 
 ---
 
@@ -167,18 +180,27 @@ Ehrlich dokumentiert, damit niemand mehr erwartet, als belegt ist:
 | Alte Fibo-Logik (RSI-Score, Einstieg am Kerzenschluss), 63 Configs | In-Sample +0,20 R/Trade, **Out-of-Sample −0,43 R/Trade** |
 | Konfluenz mit festen Lehrbuch-Parametern, v1 (10 Coins, 4h/6h/1d) | 334 Trades, **−0,09 R/Trade**, nicht bestanden |
 | Konfluenz v2, strengerer Kanal (20 Coins) | 235 Trades, **−0,05 R/Trade**, brutto ≈ 0, nicht bestanden |
+| BTC-Trendfilter S4 / S6 / ltbbot-Regel (17.10.2026) | gleicher R/Trade, halb so viele Trades, **schadet** |
+| Wochenauswahl gegen Zufall (24.10.2026) | keine stabile Vorhersagekraft; kurze Rückblicke schaden |
+| Ausstiegsregeln Einstand / Teilschluss (28.10.2026, vorregistriert) | Trefferquote bis 52 %, Ertrag −70 %, **nicht bestanden** |
+| Trendfilter HTF + Tag (28.10.2026, vorregistriert) | Prüfzeitraum +0,39 statt +0,25 R/Trade, **bestanden, aktiv**; vor April umgekehrt |
 
-Vorregistrierung, Code und Trades: [`forschung/konfluenz/`](forschung/konfluenz/) ([`PREREG.md`](forschung/konfluenz/PREREG.md)).
+Vorregistrierungen, Code und Trades: [`forschung/konfluenz/`](forschung/konfluenz/) ([`PREREG.md`](forschung/konfluenz/PREREG.md))
+und [`forschung/trendfilter/`](forschung/trendfilter/).
 
-**Aktuelle Configs (15.10.2026):** 143 Coin/Timeframe-Kombinationen wurden optimiert (In-Sample bis 31.03.2026).
-12 davon erfüllen im Out-of-Sample ab 01.04.2026 alle Kriterien: PnL ≥ 10 %, MaxDD ≤ 30 %, ≥ 10 Trades, In-Sample
-positiv. Der Portfolio-Optimizer bewertet nur auf OOS-Daten und wählt daraus 4 aus, einen Timeframe je Coin:
-DOT 2h, SAND 1h, UNI 1h und XLM 30m.
+**Stand 28.10.2026:** 38 Coin/Timeframe-Configs erfüllen im Out-of-Sample ab 01.04.2026 alle Kriterien
+(PnL ≥ 10 %, MaxDD ≤ 30 %, ≥ 10 Trades, In-Sample positiv). Der wöchentliche Portfolio-Optimizer wählt daraus
+jeden Mittwoch ein Team von meist 15 bis 20 Strategien, einen Timeframe je Coin.
 
-Mit **einem** Parametersatz für alle Coins hat die Regel bisher keine messbare Kante. Die aktuellen Configs sind
-deshalb **je Coin/Timeframe optimiert** und nach ihrem Out-of-Sample-Ergebnis ausgewählt. Wer so auswählt,
-findet auch Zufallssieger. Die Configs sollten deshalb mit kleinem Risiko live laufen und regelmäßig mit
-`daten/compare_live_vs_backtest.py` überprüft werden.
+**Live seit 15.10.2026:** 37 Trades, davon 5 Gewinner; Konto 58,6 → 41,1 USDT (−30 %). Der Tagesbericht findet
+dabei dieselben Einstiege wie der Backtest (zuletzt 20 von 21). Der Bot handelt also korrekt; die Verluste kommen
+aus der Strategie, die im Backtest im selben Zeitraum ebenso verlor. Nachgespielt seit 08.04.2026 mit
+Wochenauswahl (ohne Trendfilter): +87 % bis 15.10. bei bis zu −45 % Drawdown, danach −26 %.
+
+Mit **einem** Parametersatz für alle Coins hat die Regel bisher keine messbare Kante. Die Configs sind deshalb
+**je Coin/Timeframe optimiert** und nach ihrem Out-of-Sample-Ergebnis ausgewählt. Wer so auswählt, findet auch
+Zufallssieger: Die Backtest-Zahlen bis 15.10. sind geschönt, erst danach sind die Daten wirklich ungesehen.
+Deshalb mit kleinem Risiko live laufen lassen und den täglichen Live-vs-Backtest-Bericht im Blick behalten.
 
 ---
 
@@ -243,6 +265,10 @@ abgeschlossen waren. Fehlt Historie, gibt es keinen Trade. Live, Backtest, Optim
 Portfolio-Auswahl und Tagesbericht nutzen dieselben Funktionen (`src/fibot/strategy/trend_filter.py`).
 Gegen den Trend legt der Live-Bot keine Order; eine schon liegende Order wird storniert und per Telegram gemeldet.
 
+<p align="center"><img src="docs/img/trendfilter.svg" alt="Trendfilter: Long-Setup im 1h-Kanal, 4h-Kerzen über EMA50 und Tageskerzen über SMA50, dann wird die Order gelegt; Tabelle aller Fälle" width="100%"></p>
+
+**Wirkung im Backtest mit wöchentlicher Portfolio-Auswahl:**
+
 ![Kontoverlauf mit und ohne Trendfilter](docs/img/trendfilter_vergleich.png)
 
 Nachgespielt mit wöchentlicher Portfolio-Auswahl seit 08.04.2026 (Start 100 USDT): **436 USDT mit Filter**
@@ -267,8 +293,10 @@ Fehlt der Block, ist der Filter an.
 
 ```
 fibot/
-├── master_runner.py                 # Cron-Orchestrator: startet alle aktiven Strategien
+├── master_runner.py                 # Cron-Orchestrator: räumt alte Orders auf, startet alle aktiven Strategien
 ├── auto_optimizer_scheduler.py      # wöchentliche Portfolio-Optimierung im Hintergrund
+├── daily_live_vs_backtest_check.py  # täglicher Live-vs-Backtest-Bericht per Telegram
+├── show_team_history.py             # welches Team wann aktiv war
 ├── run_pipeline.sh                  # Optuna-Optimierung (In-Sample) + OOS-Test je Coin/TF
 ├── show_results.sh                  # Ergebnis-Menü (4 Modi)
 ├── run_analysis.sh                  # 12 Analysen (Signifikanz, Monte Carlo, Regime/S6, …)
@@ -280,11 +308,13 @@ fibot/
 │
 ├── docs/                            # README-Illustrationen (make_illustrations.py)
 ├── forschung/konfluenz/             # Vorregistrierung, Tests, Strategiesuche
+├── forschung/trendfilter/           # Trendfilter + Ausstiegsregeln: Vorregistrierung, Ergebnis, Skripte
 ├── daten/compare_live_vs_backtest.py
 │
 └── src/fibot/
     ├── strategy/
     │   ├── confluence_logic.py      # KERN: Pivots, Kanal, Impuls, Konfluenz, plan_next_order()
+    │   ├── trend_filter.py          # Trendfilter HTF + Tag (geteilt von Live, Backtest, Optimizer)
     │   ├── signals.py               # Verteiler: strategy.type → Konfluenz- oder alte Fibo-Logik
     │   ├── fibonacci_logic.py       # alte Fibo-Logik (für Altkonfigs)
     │   ├── run.py                   # Einstieg für eine Strategie
@@ -298,7 +328,8 @@ fibot/
     │   └── analysis_suite.py        # Analysen für run_analysis.sh
     └── utils/
         ├── exchange.py              # Bitget-Wrapper (Limit + angehängtes SL/TP, Position-TP/SL)
-        ├── trade_manager.py         # Live-Zyklus inkl. confluence_cycle()
+        ├── trade_manager.py         # Live-Zyklus inkl. confluence_cycle() und Trendfilter-Prüfung
+        ├── team_history.py          # Teamhistorie für den Tagesbericht
         ├── confluence_chart.py      # Chart für Telegram und show_chart.py
         └── telegram.py
 ```
@@ -328,7 +359,9 @@ fibot/
     "send_telegram_on_completion": true,
     "schedule": { "day_of_week": 2, "hour": 3, "minute": 0,
                   "interval": { "value": 7, "unit": "days" } }
-  }
+  },
+  "trend_filter": { "enabled": true, "htf_mult": 4, "htf_ema": 50, "daily_sma": 50 },
+  "live_vs_backtest_check_settings": { "enabled": true, "rolling_window_days": 7, "send_hour": 8 }
 }
 ```
 
@@ -339,6 +372,8 @@ fibot/
 | `start_capital: "auto"` | Der Optimizer rechnet mit dem **aktuellen Kontostand** von Bitget, Fallback 100 USDT. So fallen Trades unter dem Bitget-Minimum (5 USDT) wie live weg. Alternativ eine feste Zahl. |
 | `start_date: "oos"` | Jede Strategie wird ab ihrem eigenen OOS-Beginn bewertet. |
 | `objective: "pnl"` | Höchstes Endkapital mit MaxDD ≤ `constraints.max_drawdown_pct`; `"calmar"` = bestes PnL/DD-Verhältnis. |
+| `trend_filter.enabled` | Trendfilter an/aus für Live, Backtest, Optimizer und Tagesbericht. Fehlt der Block, ist er an. |
+| `live_vs_backtest_check_settings` | Tagesbericht: an/aus, Rückblick in Tagen, Stunde (UTC) des Versands. |
 
 `update.sh` lässt das auf dem VPS gewählte Portfolio (`active_strategies`) unangetastet. Ein neues Portfolio entsteht dort
 durch den wöchentlichen Lauf oder sofort mit `.venv/bin/python3 auto_optimizer_scheduler.py --force`.
@@ -521,7 +556,8 @@ fällig (Zeitplan aus `settings.json`, Standard Mittwoch 03:00, Mindestabstand 7
 ```
 show_results.py --mode 3 --auto --from oos
   ├─ alle Configs backtesten: jede Strategie ab IHREM OOS-Beginn (_backtest.oos.start_date) bis heute
-  │    (Kanal-Vorlauf wird mitgeladen, Trades zählen erst ab OOS-Beginn; ohne OOS-Angabe ab 2025-01-01)
+  │    (Kanal-Vorlauf wird mitgeladen, Trades zählen erst ab OOS-Beginn; ohne OOS-Angabe ab 2025-01-01;
+  │     Trendfilter wie live)
   ├─ Greedy-Portfolio: objective "pnl" = max. Endkapital mit MaxDD ≤ constraints.max_drawdown_pct
   │    (Calmar-Greedy blieb früher nach 4 Strategien bei 12,7 % DD stehen, obwohl 9 bei 21,8 % DD
   │     deutlich mehr brachten — ein lokales Optimum)
@@ -540,6 +576,24 @@ tail -f logs/auto_optimizer.log
 
 ## Live vs. Backtest vergleichen
 
+**Täglich automatisch:** `master_runner.py` startet `daily_live_vs_backtest_check.py` im Hintergrund. Einmal am Tag
+(Standard 08:00 UTC) vergleicht er die echten Bitget-Trades der letzten 7 Tage Trade für Trade mit dem
+Portfolio-Simulator und schickt eine Telegram-Nachricht mit Bild und HTML-Übersicht:
+
+- gleiche Einstiege, fehlende und zusätzliche Trades, jeweils mit der Ursache aus dem Bot-Log
+  (zum Beispiel „Trendfilter hat die Order live verhindert“ oder „zu wenig freie Margin“),
+- abweichende Ausstiege, verwaiste oder doppelte SL/TP-Orders, offene Positionen ohne Stop-Loss.
+
+Welche Strategien zu welchem Zeitpunkt aktiv waren, kommt aus der Teamhistorie
+(`artifacts/db/team_history.jsonl`, `show_team_history.py`).
+
+```bash
+.venv/bin/python3 daily_live_vs_backtest_check.py --force          # sofort, nur Ausgabe
+.venv/bin/python3 daily_live_vs_backtest_check.py --force --send   # sofort, mit Telegram
+```
+
+**Langer Zeitraum:**
+
 ```bash
 .venv/bin/python3 daten/compare_live_vs_backtest.py --start 2026-10-01
 ```
@@ -557,10 +611,16 @@ Configs. Ausgegeben wird die Korrelation der kumulierten Kurven und der Wochen-P
 
 | Test | Prüft |
 |---|---|
-| `tests/test_confluence.py` | Live-Plan == Backtest-Plan je Kerze, Live-Zyklus mit Mock-Exchange |
-| `tests/test_fibot.py` | settings.json, Configs, Backtester-Grundfunktionen |
+| `tests/test_confluence.py` | Live-Plan == Backtest-Plan je Kerze, Live-Zyklus mit Mock-Exchange, API-Fehler bricht ab |
+| `tests/test_trend_filter.py` | Trendfilter: kein Blick in die Zukunft, Regel, Live == Backtest auf echten Kerzen, keine Order gegen den Trend |
+| `tests/test_daily_live_vs_backtest_check.py` | Tagesbericht: Zuordnung Live ↔ Backtest, Ursachen |
+| `tests/test_team_history.py` | Teamhistorie |
+| `tests/test_same_candle_guard.py` | kein zweiter Einstieg in derselben Kerze |
+| `tests/test_fibot.py` | settings.json, Configs, Backtester-Grundfunktionen, Live-Order auf Bitget (klein) |
 | `tests/test_signal_parity.py` | Parität der alten Fibo-Logik |
 | `tests/test_load_ohlcv.py` | Datenladen, Cache, Lücken |
+
+Der Live-Order-Test setzt eine echte, sehr kleine Order auf Bitget. Überspringen mit `FIBOT_SKIP_LIVE=1`.
 
 ---
 
@@ -580,6 +640,10 @@ Telegram meldet:
 | `KONFLUENZ-ORDER` + Chart (Kanal, Impuls A–B, Fibo-Zone, Limit, SL, TP) | einmal je neuem Impuls |
 | `Limit nachgezogen alt -> neu` | bei jeder neuen Kerze, in der die Order mit der Kanallinie wandert |
 | `Setup ungültig – Order storniert` | wenn Kanal, Impuls oder Zone nicht mehr gelten |
+| `gegen den übergeordneten Trend (4x1h ab, Tag ab) – Order storniert` | wenn der Trendfilter eine liegende Order nicht mehr erlaubt |
+| `Housekeeper: alte Entry-Order(s) außerhalb des Portfolios storniert` | nach einem Portfolio-Wechsel |
+| `Live vs. Simulator` mit Bild und HTML | einmal täglich, Tagesbericht |
+| `Portfolio-Optimizer GESTARTET` / `abgeschlossen` | wöchentliche Auswahl |
 | `ENTRY gefüllt` | Limit wurde gefüllt, SL/TP sind aktiv |
 | `Entry gefüllt und Position bereits geschlossen` | Fill und SL/TP zwischen zwei Läufen |
 | `Position geschlossen` | SL oder TP ausgelöst |

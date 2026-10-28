@@ -208,7 +208,101 @@ def zyklus():
     return svg(W, H, ''.join(o))
 
 
-for name, fn in (('konfluenz.svg', konfluenz), ('ablauf.svg', ablauf), ('live_zyklus.svg', zyklus)):
+# ---------------------------------------------------------------------------
+# 4) Trendfilter: Setup nur mit dem uebergeordneten Trend
+# ---------------------------------------------------------------------------
+def _mini_candles(x0, y0, w, h, closes, ma, ma_label, verdict, ok):
+    """Kleines Kerzenchart mit Durchschnittslinie; Urteil unten."""
+    lo, hi = min(min(closes), min(ma)) - 2, max(max(closes), max(ma)) + 2
+    n = len(closes)
+    X = lambda i: x0 + 14 + i * (w - 28) / (n - 1)
+    Y = lambda p: y0 + 8 + (hi - p) / (hi - lo) * (h - 16)
+    o = [f'<rect x="{x0}" y="{y0}" width="{w}" height="{h}" rx="10" fill="{C["card"]}" stroke="{C["line"]}"/>']
+    bw = max(3.0, (w - 28) / n * 0.55)
+    prev = closes[0]
+    for i, c in enumerate(closes):
+        op = prev; prev = c
+        top, bot = Y(max(op, c)), Y(min(op, c))
+        o.append(f'<line x1="{X(i):.1f}" x2="{X(i):.1f}" y1="{Y(max(op, c) + 0.8):.1f}" y2="{Y(min(op, c) - 0.8):.1f}" stroke="{C["candle"]}"/>')
+        o.append(f'<rect x="{X(i) - bw / 2:.1f}" y="{top:.1f}" width="{bw:.1f}" height="{max(1.2, bot - top):.1f}" '
+                 f'fill="{C["bg"] if c >= op else C["candle"]}" stroke="{C["candle"]}"/>')
+    pts = ' '.join(f'{X(i):.1f},{Y(v):.1f}' for i, v in enumerate(ma))
+    o.append(f'<polyline points="{pts}" fill="none" stroke="{C["fib"]}" stroke-width="2.2"/>')
+    o.append(t(X(n - 1), Y(ma[-1]) + 16, ma_label, 11, C['fib'], 600, 'end'))
+    col = C['tp'] if ok else C['sl']
+    o.append(f'<circle cx="{x0 + 18}" cy="{y0 + h + 22}" r="9" fill="{col}"/>')
+    o.append(t(x0 + 18, y0 + h + 26, '✓' if ok else '✗', 12, C['bg'], 700, 'middle'))
+    o.append(t(x0 + 34, y0 + h + 27, verdict, 13, C['fg'], 600))
+    return ''.join(o)
+
+
+def _series(n, drift, seed, start=100.0):
+    rnd = random.Random(seed)
+    v, out = start, []
+    for _ in range(n):
+        v += drift + rnd.gauss(0, 1.1)
+        out.append(v)
+    ma, a = [], out[0] - 6 * (1 if drift > 0 else -1)
+    for c in out:
+        a = a + (c - a) * 0.12
+        ma.append(a)
+    return out, ma
+
+
+def trendfilter():
+    W, H = 1000, 640
+    o = [DEFS, t(30, 38, 'Trendfilter: nur mit dem übergeordneten Trend', 22, C['fg'], 700),
+         t(30, 58, 'Beispiel Long-Setup einer 1h-Strategie. Gehandelt wird nur, wenn beide Trends in Handelsrichtung zeigen.', 13, C['muted'])]
+    # Spalte 1: Setup im Strategie-Timeframe (Kanal + Limit)
+    x0, y0, w, h = 30, 90, 280, 190
+    o.append(f'<rect x="{x0}" y="{y0}" width="{w}" height="{h}" rx="10" fill="{C["card"]}" stroke="{C["line"]}"/>')
+    lx = lambda u: x0 + 16 + u * (w - 32)
+    ly = lambda u, off: y0 + h - 30 - u * 90 - off
+    o.append(f'<line x1="{lx(0):.1f}" y1="{ly(0, 0):.1f}" x2="{lx(1):.1f}" y2="{ly(1, 0):.1f}" stroke="{C["chan"]}" stroke-width="2"/>')
+    o.append(f'<line x1="{lx(0):.1f}" y1="{ly(0, 62):.1f}" x2="{lx(1):.1f}" y2="{ly(1, 62):.1f}" stroke="{C["chan"]}" stroke-width="2"/>')
+    path = [(0.02, 4), (0.18, 58), (0.34, 6), (0.58, 60), (0.80, 14), (0.92, 2)]
+    pts = ' '.join(f'{lx(u):.1f},{ly(u, off):.1f}' for u, off in path)
+    o.append(f'<polyline points="{pts}" fill="none" stroke="{C["candle"]}" stroke-width="1.8"/>')
+    cx, cy = lx(0.95), ly(0.95, 0)
+    o.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="11" fill="none" stroke="{C["entry"]}" stroke-width="2.2"/>')
+    o.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="4" fill="{C["entry"]}"/>')
+    o.append(t(cx - 14, cy - 16, 'Limit Long', 12, C['entry'], 600, 'end'))
+    o.append(t(x0, y0 - 10, '1  Setup im Strategie-Timeframe (1h)', 14, C['fg'], 700))
+    o.append(t(x0 + 18, y0 + h + 27, 'Konfluenz gefunden: Long', 13, C['fg'], 600))
+    # Spalte 2 + 3: HTF (4h) und Tag
+    up4, ma4 = _series(26, 0.55, 3)
+    o.append(t(345, 80, '2  Vierfacher Timeframe (4h)', 14, C['fg'], 700))
+    o.append(_mini_candles(345, 90, 280, 190, up4, ma4, 'EMA50', 'Schluss über EMA50: aufwärts', True))
+    upd, mad = _series(26, 0.45, 11)
+    o.append(t(660, 80, '3  Tageskerze des Coins', 14, C['fg'], 700))
+    o.append(_mini_candles(660, 90, 310, 190, upd, mad, 'SMA50', 'Schluss über SMA50: aufwärts', True))
+    # Ergebnis
+    o.append(f'<rect x="30" y="335" width="940" height="56" rx="12" fill="{C["tp"]}" fill-opacity="0.10" stroke="{C["tp"]}"/>')
+    o.append(t(50, 369, 'Ergebnis: Long-Setup + 4h aufwärts + Tag aufwärts  →  Order wird gelegt', 16, C['fg'], 700))
+    # Entscheidungstabelle
+    o.append(t(30, 432, 'Alle Fälle', 15, C['fg'], 700))
+    cols = [30, 250, 470, 690]
+    heads = ['4-facher Timeframe', 'Tageskerze', 'Long-Setup', 'Short-Setup']
+    for x, hd in zip(cols, heads):
+        o.append(t(x, 460, hd, 12, C['muted'], 600))
+    rows = [('aufwärts', 'aufwärts', True, False), ('abwärts', 'abwärts', False, True),
+            ('aufwärts', 'abwärts', False, False), ('abwärts', 'aufwärts', False, False),
+            ('zu wenig Historie', 'beliebig', False, False)]
+    for k, (a, b, lg, sh) in enumerate(rows):
+        yy = 488 + k * 28
+        o.append(f'<line x1="30" x2="970" y1="{yy - 19}" y2="{yy - 19}" stroke="{C["grid"]}"/>')
+        o.append(t(cols[0], yy, a, 13, C['fg2']))
+        o.append(t(cols[1], yy, b, 13, C['fg2']))
+        for x, okk in ((cols[2], lg), (cols[3], sh)):
+            col = C['tp'] if okk else C['sl']
+            o.append(t(x, yy, '✓ wird gehandelt' if okk else '✗ keine Order', 13, col, 600))
+    o.append(t(30, 628, 'Gezählt werden nur Kerzen, die vor der Orderkerze abgeschlossen waren. '
+                        'Dreht der Trend, storniert der Live-Bot eine schon liegende Order.', 12, C['muted']))
+    return svg(W, H, ''.join(o))
+
+
+for name, fn in (('konfluenz.svg', konfluenz), ('ablauf.svg', ablauf), ('live_zyklus.svg', zyklus),
+                 ('trendfilter.svg', trendfilter)):
     with open(os.path.join(OUT, name), 'w', encoding='utf-8') as fh:
         fh.write(fn())
     print('geschrieben:', name)
