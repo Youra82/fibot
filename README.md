@@ -4,7 +4,7 @@
 
 > 🚧 **Baustelle:** Dieser Bot wird gerade grundlegend überarbeitet. Die Fibo-Kanal-Konfluenz hat sich seit dem
 > 15.10.2026 live und in der Prüfung vom 08.11.2026 (über 20 vorregistrierte Tests auf 241 Coins) nicht bewährt.
-> Die neue Richtung ist ein **Wick-Kauf an Mehrfach-Konfluenz** (Fib-Marke + runde Zahl + höhere Zeitebene),
+> Die neue Richtung ist ein **Wick-Kauf an Mehrfach-Konfluenz** (Fib-Marke + runde Zahl + höhere Zeitebene).
 > Tests und Ergebnisse: [`docs/FORSCHUNG.md`](docs/FORSCHUNG.md). **Diese README beschreibt den Bot so, wie er aktuell live handelt.**
 
 # fibot — Fibo-Kanal-Konfluenz Trading Bot
