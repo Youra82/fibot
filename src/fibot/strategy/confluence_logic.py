@@ -31,6 +31,8 @@ DEFAULTS = {
     'sl_buf_atr':       0.2,
     'min_rr':           1.5,
     'atr_period':       14,
+    'min_sl_atr':       0.0,    # 0 = aus (Standard). >0 nur als bewusst gewaehlte, noch nicht nachgewiesene Variante
+    'min_sl_atr_period': 14,
     'min_upper_touches': 1,     # v1: obere Linie nur durch das hoechste Hoch bestimmt
     'max_age_mult':     None,   # v2: Fill spaetestens max_age_mult * (B - A) Kerzen nach B
 }
@@ -80,6 +82,14 @@ def _atr(high, low, close, period):
     prev = np.concatenate([[close[0]], close[:-1]])
     tr = np.maximum.reduce([high - low, np.abs(high - prev), np.abs(low - prev)])
     return pd.Series(tr).ewm(span=period, min_periods=period).mean().values
+
+
+def _wilder_atr(high, low, close, period=14):
+    """Stop-Untergrenze: Wilder alpha=1/period, wie im Variantenvergleich.
+    Der Aufrufer verschiebt um eine Kerze; die Fuellkerze ist unbekannt."""
+    prev = np.concatenate([[close[0]], close[:-1]])
+    tr = np.maximum.reduce([high - low, np.abs(high - prev), np.abs(low - prev)])
+    return pd.Series(tr).ewm(alpha=1 / period, adjust=False, min_periods=period).mean().values
 
 
 def _pivots(arr, k, mode):
@@ -272,6 +282,13 @@ def strategy_params(config: dict) -> dict:
     for k in list(p):
         if k in s:
             p[k] = s[k]
+    multiple = float(p['min_sl_atr'])
+    period = p['min_sl_atr_period']
+    if not np.isfinite(multiple) or multiple < 0:
+        raise ValueError('min_sl_atr muss endlich und nichtnegativ sein.')
+    if isinstance(period, bool) or not isinstance(period, (int, np.integer)) or period < 1:
+        raise ValueError('min_sl_atr_period muss eine positive ganze Zahl sein.')
+    p['min_sl_atr'] = multiple
     return p
 
 
@@ -376,6 +393,19 @@ def plan_both(df: pd.DataFrame, config: dict, cache_key=None):
     sh = _plan_one_direction(-l, -h, -c, p, None if cache_key is None else (cache_key, 'S'))
     for key in ('limit', 'sl', 'tp'):
         sh[key] = -sh[key]
+    if p['min_sl_atr'] > 0 and len(c):
+        # Detektor und urspruenglicher min_rr-Filter bleiben eingefroren.
+        # Der Stop wird erst DANACH verbreitert; Entry, TP und verbrauchte B
+        # bleiben gleich. Das effektive CRV kann dadurch unter min_rr liegen.
+        known_atr = np.r_[np.nan, _wilder_atr(h, l, c, p['min_sl_atr_period'])]
+        for side, pl in ((1, lo), (-1, sh)):
+            widened = side * np.minimum(side * pl['sl'], side * pl['limit'] - p['min_sl_atr'] * known_atr)
+            valid = np.isfinite(widened) & (widened > 0) & (pl['limit'] > 0) & (pl['tp'] > 0)
+            pl['sl'] = np.where(valid, widened, np.nan)
+            pl['limit'] = np.where(valid, pl['limit'], np.nan)
+            pl['fill'] &= valid
+            pl['instant'][:len(c)] = pl['fill'][:len(c)] & (
+                l <= pl['sl'][:len(c)] if side == 1 else h >= pl['sl'][:len(c)])
     return lo, sh
 
 

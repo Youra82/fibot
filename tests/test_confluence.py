@@ -74,6 +74,13 @@ def _mock_exchange(df_with_open, order_status='open'):
     ex.amount_to_precision.side_effect = lambda s, a: f'{a:.4f}'
     ex.place_limit_order_with_tpsl.return_value = {'id': 'O1'}
     ex.fetch_order.return_value = {'status': order_status}
+    # wie Bitget: eine stornierte Order meldet danach 'canceled' (sonst gilt fetch_order.return_value)
+    from unittest.mock import DEFAULT
+    cancelled = set()
+    ex.cancel_order.side_effect = lambda oid, sym: cancelled.add(oid) or {'id': oid}
+    ex.fetch_order.side_effect = lambda oid, sym: {'status': 'canceled', 'filled': 0} if oid in cancelled else DEFAULT
+    counter = iter(range(1, 10**6))
+    ex.place_limit_order_with_tpsl.side_effect = lambda *a, **k: {'id': f'O{next(counter)}'}
     return ex
 
 

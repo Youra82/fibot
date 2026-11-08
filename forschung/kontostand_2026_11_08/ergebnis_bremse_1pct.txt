@@ -1,0 +1,14 @@
+
+pool38.py: 38 Configs
+  2024                   1 % fest:    +28 % DD   32 % | 1 % + Bremse:     +5 % DD   23 %
+  2025                   1 % fest:   +194 % DD   34 % | 1 % + Bremse:    +77 % DD   25 %
+  01.01.-09.05.2026      1 % fest:   +384 % DD   21 % | 1 % + Bremse:   +244 % DD   16 %
+  OOS 10.05.-08.11.2026  1 % fest:   +422 % DD   28 % | 1 % + Bremse:   +291 % DD   20 %
+  ab 15.10.2026          1 % fest:    -19 % DD   30 % | 1 % + Bremse:    -13 % DD   21 %
+
+live17.py: 17 Configs
+  2024                   1 % fest:    +63 % DD   12 % | 1 % + Bremse:    +60 % DD   10 %
+  2025                   1 % fest:    +83 % DD   27 % | 1 % + Bremse:    +41 % DD   21 %
+  01.01.-09.05.2026      1 % fest:   +163 % DD   15 % | 1 % + Bremse:   +135 % DD   12 %
+  OOS 10.05.-08.11.2026  1 % fest:   +109 % DD   15 % | 1 % + Bremse:    +81 % DD   13 %
+  ab 15.10.2026          1 % fest:    -11 % DD   14 % | 1 % + Bremse:    -10 % DD   12 %

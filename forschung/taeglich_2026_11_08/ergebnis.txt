@@ -1,0 +1,10 @@
+
+Fenster 14 Tage (Ø 21 von 407 Configs aktiv je Tag)
+  2025                   taeglich angepasst: +0.021 R (n=715) | alle: +0.149 (n=5050) | zufaellig: +0.134 | Anteil Zufall >= angepasst: 0.81
+  01.01.-09.05.2026      taeglich angepasst: -0.027 R (n=668) | alle: -0.009 (n=3294) | zufaellig: +0.031 | Anteil Zufall >= angepasst: 0.69
+  OOS 10.05.-08.11.2026  taeglich angepasst: -0.330 R (n=815) | alle: -0.197 (n=4865) | zufaellig: -0.261 | Anteil Zufall >= angepasst: 0.69
+
+Fenster 30 Tage (Ø 55 von 407 Configs aktiv je Tag)
+  2025                   taeglich angepasst: +0.164 R (n=1590) | alle: +0.149 (n=5050) | zufaellig: +0.118 | Anteil Zufall >= angepasst: 0.27
+  01.01.-09.05.2026      taeglich angepasst: -0.080 R (n=1298) | alle: -0.009 (n=3294) | zufaellig: -0.004 | Anteil Zufall >= angepasst: 0.83
+  OOS 10.05.-08.11.2026  taeglich angepasst: -0.229 R (n=1336) | alle: -0.197 (n=4865) | zufaellig: -0.215 | Anteil Zufall >= angepasst: 0.35

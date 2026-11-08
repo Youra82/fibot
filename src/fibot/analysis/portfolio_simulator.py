@@ -14,6 +14,7 @@ import pandas as pd
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
+from fibot.utils.risk_cap import capped_risk_pct, drawdown_factor, dynamic_settings, max_risk_pct
 from fibot.analysis.backtester import _get_fine_slice
 
 FEE_PCT     = 0.06 / 100   # Bitget Taker-Gebühr (je Seite)
@@ -47,7 +48,8 @@ def run_portfolio_simulation(start_capital: float,
                               strategies_data: dict,
                               start_date: str,
                               end_date: str,
-                              symbol_blocks: list | None = None) -> dict | None:
+                              symbol_blocks: list | None = None,
+                              start_peak: float | None = None) -> dict | None:
     """
     Chronologische Portfolio-Simulation für mehrere FiBot-Strategien.
 
@@ -73,8 +75,11 @@ def run_portfolio_simulation(start_capital: float,
 
     Gibt zurück:
       end_capital, total_pnl_pct, max_drawdown_pct, trade_count,
-      win_rate, liquidation_date, equity_curve
+      win_rate, liquidation_date, equity_curve, max_risk_per_entry_pct
     """
+    risk_cap = max_risk_pct()          # einmal je Lauf eingefroren (Codex-Review), steht im Ergebnis
+    dyn = dynamic_settings()           # Kontoverlauf-Anpassung, ebenfalls eingefroren
+    # start_peak: Konto-Hoechststand vor dem Zeitraum (Tagesbericht: Live-Wert), sonst Startkapital
     # 1. Strategien mit precomputed Signals vorbereiten ─────────────────────
     processed = {}
     for fname, strat in strategies_data.items():
@@ -136,7 +141,9 @@ def run_portfolio_simulation(start_capital: float,
 
     # 4. Simulation ──────────────────────────────────────────────────────────
     equity         = float(start_capital)
-    peak_equity    = equity
+    peak_equity    = equity                                   # fuer den gemeldeten Max-Drawdown
+    dyn_peak       = max(equity, float(start_peak or 0.0))   # fuer die Kontoverlauf-Anpassung (wie live)
+    total_eq       = equity                                   # letzter bekannter Kontostand inkl. offener Positionen
     max_dd_pct     = 0.0
     max_dd_date    = None
     liquidation_date = None
@@ -144,6 +151,15 @@ def run_portfolio_simulation(start_capital: float,
     open_positions: dict = {}   # fname → pos-dict
     trade_history:  list = []
     equity_curve:   list = []
+
+    def _marked_total() -> float:
+        """Kontostand inkl. offener Positionen zum letzten BEKANNTEN Kurs je Position (Codex-Review: eine
+        Position ohne Kerze am aktuellen Zeitstempel darf nicht mit 0 offenem Ergebnis bewertet werden)."""
+        u = 0.0
+        for p in open_positions.values():
+            px = p.get('last_px', p['entry'])
+            u += p['notional'] * ((px - p['entry']) if p['direction'] == 'long' else (p['entry'] - px)) / p['entry']
+        return equity + u
 
     for ts in sorted_ts:
         if liquidation_date:
@@ -245,10 +261,12 @@ def run_portfolio_simulation(start_capital: float,
 
                 risk     = strat['risk']
                 leverage = max(1, int(risk.get('leverage', 3)))
-                risk_pct = risk.get('risk_per_entry_pct', 0.5) / 100
-
-                # Notional aus aktuellem equity × risk_pct / sl_pct (dynamisch, wie Einzel-Backtester)
-                notional = (equity * risk_pct) / sl_pct
+                risk_pct = capped_risk_pct(risk.get('risk_per_entry_pct', 0.5), cap=risk_cap) / 100   # wie live (risk_cap.py)
+                # wie live: Risikobetrag UND Kontoverlauf-Faktor aus dem aktuellen Gesamtkontostand (inkl. offener PnL)
+                cur_total = _marked_total()
+                dyn_peak = max(dyn_peak, cur_total)
+                risk_pct *= drawdown_factor(cur_total, dyn_peak, dyn)
+                notional = (cur_total * risk_pct) / sl_pct
 
                 # Margin-Cap: auf verfügbare Margin kappen (wie live bot)
                 used_margin      = sum(p['margin'] for p in open_positions.values())
@@ -271,6 +289,7 @@ def run_portfolio_simulation(start_capital: float,
                     'margin':    margin,
                     'leverage':  leverage,
                     'entry_ts':  ts,
+                    'last_px':   entry,
                 }
 
                 # Konfluenz: Fuellkerze erreicht auch den SL -> sofort Verlust
@@ -286,21 +305,17 @@ def run_portfolio_simulation(start_capital: float,
                     del open_positions[fname]
 
         # ── C) Equity tracken (realized + unrealized) ────────────────────
-        unrealized = 0.0
         for fname, pos in open_positions.items():
-            strat = processed[fname]
-            i = strat['pos'].get(ts)
+            i = processed[fname]['pos'].get(ts)
             if i is not None:
-                close_p = float(strat['c'][i])
-                if pos['direction'] == 'long':
-                    unrealized += pos['notional'] * (close_p - pos['entry']) / pos['entry']
-                else:
-                    unrealized += pos['notional'] * (pos['entry'] - close_p) / pos['entry']
+                pos['last_px'] = float(processed[fname]['c'][i])     # sonst letzter bekannter Kurs bleibt
+        unrealized = _marked_total() - equity
 
         total_eq = equity + unrealized
         equity_curve.append({'timestamp': ts, 'equity': total_eq})
 
         peak_equity = max(peak_equity, total_eq)
+        dyn_peak = max(dyn_peak, total_eq)
         dd = (peak_equity - total_eq) / peak_equity if peak_equity > 0 else 0.0
         if dd > max_dd_pct:
             max_dd_pct = dd
@@ -321,6 +336,9 @@ def run_portfolio_simulation(start_capital: float,
         eq_df.set_index('timestamp', inplace=True, drop=False)
 
     return {
+        'max_risk_per_entry_pct': risk_cap,
+        'dynamic_risk':      dyn,
+        'start_peak':        start_peak,
         'start_capital':     start_capital,
         'end_capital':       final_equity,
         'total_pnl_pct':     total_pnl_pct,

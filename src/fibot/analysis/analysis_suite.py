@@ -18,6 +18,7 @@ import pandas as pd
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, 'src'))
 
+from fibot.utils.risk_cap import capped_risk_pct
 from fibot.analysis.backtester import run_backtest, load_ohlcv, FEE_PCT  # noqa: E402
 
 CONFIGS_DIR = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
@@ -61,10 +62,15 @@ def trades_frame(result, df) -> pd.DataFrame:
         sgn = 1 if t.direction == 'long' else -1
         r_gross = sgn * (t.exit_price - t.entry) / risk
         fee_r = 2 * FEE_PCT * t.entry / risk
+        risk_usdt = abs(t.contracts) * risk
+        # Fuer die Edge-Pruefung die tatsaechliche Netto-PnL verwenden.
+        # Das vermeidet eine zweite, vom Backtester abweichende Kostenrechnung.
+        r_actual = t.pnl_usdt / risk_usdt if risk_usdt > 0 else np.nan
         exit_ts = df.index[min(t.exit_bar, len(df) - 1)]
         rows.append({'ts': pd.Timestamp(t.timestamp), 'exit_ts': exit_ts, 'dir': t.direction,
                      'res': t.result, 'r_gross': r_gross, 'fee_r': fee_r, 'r': r_gross - fee_r,
-                     'pnl_pct': t.pnl_pct, 'pnl': t.pnl_usdt, 'entry': t.entry})
+                     'pnl_pct': t.pnl_pct, 'pnl': t.pnl_usdt, 'entry': t.entry,
+                     'r_actual': r_actual, 'risk_usdt': risk_usdt})
     return pd.DataFrame(rows)
 
 
@@ -289,20 +295,25 @@ def a9_correlation(cfgs, a):
 
 
 def a10_kelly(cfgs, a):
-    out('10) Kelly-Sizing: optimaler Risikoanteil je Trade (halbes Kelly empfohlen)')
+    from fibot.analysis.edge_math import empirical_log_optimum
+    out('10) Rueckblickendes log-Wachstumsmaximum: KEINE Sizing-Empfehlung')
+    out('    Tatsaechliche Netto-R-Verteilung, Suchgrenze 100%; keine automatische Risikoaenderung.')
     res = backtest_all(cfgs, a.date_from, a.date_to, a.capital)
-    out(f"{'Strategie':<12} {'Trades':>6} {'WR':>6} {'mittl. Gewinn R':>15} {'Kelly':>7} {'1/2 Kelly':>9} {'aktuell':>8}")
+    out(f"{'Strategie':<12} {'Trades':>6} {'WR':>6} {'mittl. Gewinn R':>15} {'empirisch f*':>13} {'aktuell':>8}")
     for d in res.values():
         t = d['trades']
         if len(t) < 10:
             continue
-        wins, losses = t[t.r > 0].r, t[t.r <= 0].r
-        p = len(wins) / len(t)
-        b = wins.mean() / abs(losses.mean()) if len(wins) and len(losses) else 0
-        kelly = (p - (1 - p) / b) if b > 0 else -1
-        cur = d['cfg']['risk'].get('risk_per_entry_pct', 0)
-        out(f"{label(d['cfg']):<12} {len(t):>6} {p * 100:>5.0f}% {wins.mean() if len(wins) else 0:>15.2f} "
-            f"{kelly * 100:>6.1f}% {kelly * 50:>8.1f}% {cur:>7.2f}%")
+        r = t.r_actual.values
+        r = r[np.isfinite(r)]
+        if len(r) < 10:
+            continue
+        wins = r[r > 0]
+        p = len(wins) / len(r)
+        optimum = empirical_log_optimum(r)
+        cur = capped_risk_pct(d['cfg']['risk'].get('risk_per_entry_pct', 0))   # Risiko nach Obergrenze, ohne Kontoverlauf-Faktor
+        out(f"{label(d['cfg']):<12} {len(r):>6} {p * 100:>5.0f}% {wins.mean() if len(wins) else 0:>15.2f} "
+            f"{optimum * 100:>12.2f}% {cur:>7.2f}%")
 
 
 def a11_dd_duration(cfgs, a):
@@ -342,14 +353,87 @@ def a12_time(cfgs, a):
         out(f"{h:02d}-{h + 4:02d} Uhr {int(r['size']):>6} {r['mean']:>+8.3f} {r['sum']:>+7.1f}")
 
 
+def a13_edge_math(cfgs, a):
+    from fibot.analysis.edge_math import (edge_metrics, growth_metrics,
+        empirical_log_optimum, recovery_required, block_bootstrap)
+    out('13) Trading-Edge: Netto-Erwartung, Payoff, Wachstum und Varianz')
+    out('   Kein neuer Entry-Filter. Historische Mathematik ist kein Profitabilitaetsnachweis.')
+    out('   Wachstum: Modell mit konstantem Risikoanteil und sequenziellen Trades, kein Konto-Replay.')
+    res = backtest_all(cfgs, a.date_from, a.date_to, a.capital)
+    for d in res.values():
+        t = d['trades']
+        if t.empty:
+            continue
+        valid = np.isfinite(t.r_actual.values)
+        if not valid.all():
+            out(f'{label(d["cfg"])}: {int((~valid).sum())} Trades ohne gueltigen Risikobetrag ausgeschlossen.')
+        t = t[valid].sort_values('exit_ts')
+        if t.empty:
+            continue
+        r = t.r_actual.values
+        m = edge_metrics(r, t.r_gross.values)
+        fraction = capped_risk_pct(d['cfg'].get('risk', {}).get('risk_per_entry_pct', 0)) / 100   # Obergrenze wie live, ohne Kontoverlauf-Faktor
+        g = growth_metrics(r, fraction)
+        boot = block_bootstrap(r, t.exit_ts, fraction)
+        out(f'\n{label(d["cfg"])} | {len(t)} geschlossene Trades | Risiko-Modell {fraction*100:.2f}%')
+        out(f'  Netto-Erwartung {m["expectancy_r"]:+.4f} R/Trade | Brutto {m["gross_expectancy_r"]:+.4f} R '
+            f'| mittlere Kosten {m["mean_cost_r"]:.4f} R')
+        if m['payoff'] is not None:
+            out(f'  Gewinner {m["win_rate"]*100:.2f}% | Ausgleich bei beobachteten Auszahlungen '
+                f'{m["break_even_win_rate"]*100:.2f}% | Payoff {m["payoff"]:.3f} '
+                f'| Profitfaktor {m["profit_factor"]:.3f}')
+            out(f'  Mittlerer Nettogewinn +{m["avg_win_r"]:.3f} R | mittlerer Nettoverlust -{m["avg_loss_r"]:.3f} R')
+        else:
+            out('  Nur Gewinne/Verluste/Null-Trades: Payoff-Ausgleich nicht schaetzbar.')
+        if g['insolvent']:
+            out('  Mindestens ein Trade wuerde bei diesem konstanten Risiko das Modellkapital aufbrauchen.')
+        else:
+            out(f'  Modellwachstum {g["total_return"]*100:+.2f}% | mittleres log-Wachstum '
+                f'{g["mean_log_growth"]:+.6f}/Trade | MaxDD {g["max_drawdown"]*100:.2f}%')
+            out(f'  Fuer Erholung von diesem MaxDD noetig: +{recovery_required(g["max_drawdown"])*100:.2f}%')
+        optimum = empirical_log_optimum(r)
+        out(f'  Maximum des Stichproben-log-Wachstums bei {optimum*100:.2f}% Risikobudget '
+            '(Suchgrenze 100%; rueckblickend, KEINE Sizing-Empfehlung).')
+        if boot['expectancy_ci'] is None:
+            out('  Unsicherheit: zu wenige 28-Tage-Bloecke; kein Konfidenzurteil.')
+        else:
+            lo, hi = boot['expectancy_ci']
+            out(f'  95%-Blockbootstrap-Bereich der Erwartung [{lo:+.4f}, {hi:+.4f}] R '
+                f'aus {boot["blocks"]} Kalenderbloecken.')
+            out(f'  Empirisches Blockmodell: Verlust {boot["loss_fraction"]*100:.1f}% '
+                f'| MaxDD >30% {boot["dd30_fraction"]*100:.1f}% '
+                '(bedingte Stichprobenhaeufigkeiten, keine Zukunftswahrscheinlichkeiten).')
+        out('  Risiko-Sensitivitaet (gleiche Netto-R-Folge, keine neuen Trades):')
+        for f in (.0025, .005, .01, .02, .05):
+            z = growth_metrics(r, f)
+            if z['insolvent']:
+                out(f'    Risiko {f*100:5.2f}%: Modellkapital aufgebraucht')
+            else:
+                out(f'    Risiko {f*100:5.2f}%: Wachstum {z["total_return"]*100:+8.2f}% '
+                    f'| MaxDD {z["max_drawdown"]*100:6.2f}%')
+    out('\nKeine Zusammenrechnung isolierter Strategie-Backtests als handelbares Portfolio.')
+    out('Keine automatische Aenderung an Hebel, Risiko, Configs oder Live-Freigabe.')
+
+
+def a14_edge_dashboard(cfgs, a):
+    from fibot.analysis.edge_dashboard import generate
+    out('14) Dynamische Edge-Diagnose: Netto-Payoff, Zeitspur und BTC-Marktzustaende')
+    path, data = generate(cfgs, a.date_from, a.date_to, a.capital,
+                          os.path.join(OUT_DIR, 'edge_dashboard.html'), root=PROJECT_ROOT)
+    out(f'Interaktive Offline-HTML: {path}')
+    out(f'{len(data["trades"])} geschlossene Trades der aktuellen Config-Auswahl; keine Live-Quote.')
+    out('Mathematische Ausgleichslinie fest; rollierende Punkte und Unsicherheit dynamisch.')
+    out('Nur lokale Kerzen, keine Orders und keine automatische Handelsfreigabe.')
+
+
 ANALYSES = {1: a1_is_oos, 2: a2_bootstrap, 3: a3_monte_carlo, 4: a4_fees, 5: a5_sensitivity,
             6: a6_quarters, 7: a7_long_short, 8: a8_regime, 9: a9_correlation, 10: a10_kelly,
-            11: a11_dd_duration, 12: a12_time}
+            11: a11_dd_duration, 12: a12_time, 13: a13_edge_math, 14: a14_edge_dashboard}
 
 
 def main():
     ap = argparse.ArgumentParser(description='FiBot Analysen')
-    ap.add_argument('--analysis', type=int, required=True, help='1-12, 0 = alle')
+    ap.add_argument('--analysis', type=int, required=True, help='1-14, 0 = alle')
     ap.add_argument('--from', dest='date_from', default='2025-01-01')
     ap.add_argument('--to', dest='date_to', default=date.today().isoformat())
     ap.add_argument('--capital', type=float, default=100.0)

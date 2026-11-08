@@ -35,6 +35,7 @@ def _exchange(positions, df):
     ex.fetch_open_positions.return_value = positions
     ex.fetch_recent_ohlcv.return_value = df
     ex.fetch_balance_usdt.return_value = 60.0
+    ex.fetch_equity_usdt.return_value = 60.0          # Gesamt-Kontostand (klassischer Pfad, Codex-Review)
     ex.markets = {SYMBOL: {'limits': {'amount': {'min': 0.1}}}}
     ex.amount_to_precision.side_effect = lambda s, c: f"{c:.1f}"
     ex.place_limit_order.return_value = {'id': 'x'}

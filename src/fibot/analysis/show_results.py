@@ -15,6 +15,7 @@ import pandas as pd
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
+from fibot.utils.risk_cap import capped_risk_pct
 from fibot.analysis.optimizer import _fetch_min_contracts
 
 logging.basicConfig(level=logging.WARNING, format='%(levelname)s %(message)s')
@@ -866,6 +867,8 @@ def _generate_trades_excel(final_sim: dict, portfolio: list, capital: float,
         if lev == '—':
             lev = risk.get('leverage', '—')
         risk_pct    = risk.get('risk_per_entry_pct', '—')
+        if isinstance(risk_pct, (int, float)):
+            risk_pct = capped_risk_pct(risk_pct)          # Risiko nach Obergrenze, ohne Kontoverlauf-Faktor (risk_cap.py)
         fib_sl      = strat_cfg.get('fib_sl_level')
         atr_sl_mult = strat_cfg.get('atr_sl_multiplier')
 
@@ -873,7 +876,7 @@ def _generate_trades_excel(final_sim: dict, portfolio: list, capital: float,
         if notional is not None:
             einsatz_str = f"{notional:.2f}"
         elif isinstance(risk_pct, (int, float)):
-            einsatz_str = f"~{(equity - pnl) * risk_pct / 100:.2f}"
+            einsatz_str = f"~{(equity - pnl) * risk_pct / 100:.2f} Risiko"   # Risikobetrag, kein Notional
         else:
             einsatz_str = '—'
 

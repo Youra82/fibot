@@ -393,6 +393,8 @@ class Exchange:
                          open_positions.append(p)
                  except (ValueError, TypeError, KeyError) as e:
                      logger.warning(f"Konnte Positionsgröße nicht prüfen: {e}. Positionsdaten: {p}")
+                     if strict:      # unklare Position darf nie als "geschlossen" gelten (Codex Runde 6)
+                         raise RuntimeError(f"Positionsdaten fuer {symbol} nicht interpretierbar: {e}")
                      continue
             return open_positions
         except Exception as e:
@@ -518,6 +520,46 @@ class Exchange:
         }
         logger.info(f"Platziere Limit+TP/SL: {side.upper()} {amount_str} {symbol} @ {price_str} | SL {sl_price} | TP {tp_price}")
         return self.exchange.create_order(symbol, 'limit', side, float(amount_str), float(price_str), params=order_params)
+
+    def fetch_cash_flows(self, since_ms: int):
+        """Ein-/Auszahlungen bzw. Umbuchungen (Bitget-Bill-Typen trans_*, deposit, withdraw) seit since_ms als
+        [(bill_id, ms, betrag)], betrag > 0 = Einzahlung. Muster: cockpit/server.py fetch_bills, ltbbot _is_cash_flow.
+        Fehler werden weitergereicht (der Aufrufer protokolliert und versucht es beim naechsten Lauf erneut)."""
+        if not self.markets: return []
+        now = int(time.time() * 1000)
+        since_ms = max(int(since_ms), now - 89 * 86400 * 1000)
+        rows, end = [], now
+        while end > since_ms:
+            start = max(end - 30 * 86400 * 1000, since_ms)
+            id_less = None
+            while True:
+                req = {'productType': 'USDT-FUTURES', 'startTime': str(start), 'endTime': str(end), 'limit': '100'}
+                if id_less:
+                    req['idLessThan'] = id_less
+                data = self.exchange.privateMixGetV2MixAccountBill(req).get('data') or {}
+                bills = data.get('bills') or []
+                for b in bills:
+                    bt = (b.get('businessType') or '').lower()
+                    if not (bt.startswith('trans_') or 'deposit' in bt or 'withdraw' in bt):
+                        continue
+                    amt = abs(float(b.get('amount') or 0.0))
+                    # Richtung aus dem Buchungstyp (trans_from_* / deposit = rein, trans_to_* / withdraw = raus);
+                    # nur unbekannte trans_-Typen nutzen das gemeldete Vorzeichen
+                    if bt.startswith('trans_from') or 'deposit' in bt or bt.startswith('transfer_in'):
+                        sign = 1.0
+                    elif bt.startswith('trans_to') or 'withdraw' in bt or bt.startswith('transfer_out'):
+                        sign = -1.0
+                    else:
+                        sign = 1.0 if float(b.get('amount') or 0.0) >= 0 else -1.0
+                    rows.append((str(b['billId']), int(b['cTime']), sign * amt))
+                if len(bills) < 100 or not data.get('endId'):
+                    break
+                id_less = data['endId']
+            end = start
+        uniq = {}
+        for r in rows:                      # dieselbe Buchung nie doppelt (Bill-ID)
+            uniq.setdefault(r[0], r)
+        return sorted(uniq.values(), key=lambda r: r[1])
 
     def fetch_equity_usdt(self) -> float:
         """Gesamtkapital (USDT total inkl. gebundener Margin) -- Basis fuer risikobasiertes Sizing."""

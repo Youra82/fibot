@@ -1,0 +1,9 @@
+Entwicklung je BTC-Trend: {'down': {'size': 224, 'mean': 0.534}, 'range': {'size': 155, 'mean': 0.356}, 'up': {'size': 177, 'mean': 0.15}} -> erlaubt: ['down', 'range', 'up']
+
+Entwicklung 01.01.2025-09.05.2026: Kontrolle n=533 R +0.338 | Konto 34->163.02 DD 27.3 %
+  G1: behalten n=437 R +0.390 | aussortiert n=98 R +0.070 (95 % -0.403 .. +0.744) | Konto 34->148.67 DD 24.3 %
+  G2: behalten n=533 R +0.338 | aussortiert n=0 R +nan (95 % +nan .. +nan) | Konto 34->163.02 DD 27.3 %
+
+OOS 10.05.-08.11.2026: Kontrolle n=271 R +0.223 | Konto 34->71.09 DD 15.4 %
+  G1: behalten n=216 R +0.228 | aussortiert n=55 R +0.205 (95 % -0.282 .. +5.068) | Konto 34->65.04 DD 10.4 %
+  G2: behalten n=271 R +0.223 | aussortiert n=0 R +nan (95 % +nan .. +nan) | Konto 34->71.09 DD 15.4 %

@@ -21,6 +21,7 @@ from tqdm import tqdm
 
 PROJECT_ROOT  = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, 'src'))
+from fibot.utils.risk_cap import capped_risk_pct  # noqa: E402  Obergrenze je Einstieg
 
 CONFIGS_DIR   = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
 SETTINGS_PATH = os.path.join(PROJECT_ROOT, 'settings.json')
@@ -221,7 +222,7 @@ def _write_to_settings(portfolio_files: list, strategies_data: dict) -> None:
             'timeframe':          timeframe,
             'leverage':           risk.get('leverage',           base.get('leverage',           2)),
             'margin_mode':        risk.get('margin_mode',        base.get('margin_mode',        'isolated')),
-            'risk_per_entry_pct': risk.get('risk_per_entry_pct', base.get('risk_per_entry_pct', 0.5)),
+            'risk_per_entry_pct': capped_risk_pct(risk.get('risk_per_entry_pct', base.get('risk_per_entry_pct', 0.5))),
             'active':             True,
         }
         new_strategies.append(entry)

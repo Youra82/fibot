@@ -392,7 +392,8 @@ def segment_stats(trades, start_ts=None, end_ts=None) -> dict:
 def _confluence_config(symbol, timeframe, sp: dict, risk_pct, leverage) -> dict:
     return {
         "market": {"symbol": symbol, "timeframe": timeframe},
-        "strategy": {"type": "confluence", **sp, "candle_limit": 600},
+        "strategy": {"type": "confluence", "min_sl_atr": 0.0, "min_sl_atr_period": 14,
+                     **sp, "candle_limit": 600},
         "risk": {"leverage": int(leverage), "risk_per_entry_pct": float(risk_pct), "margin_mode": "isolated"},
     }
 
@@ -417,6 +418,8 @@ def _suggest_confluence(trial) -> dict:
         "fib_sl":            fib_sl,
         "zone_tol_atr":      trial.suggest_float("zone_tol_atr", 0.1, 0.8, step=0.05),
         "sl_buf_atr":        trial.suggest_float("sl_buf_atr", 0.0, 0.6, step=0.05),
+        "min_sl_atr":        0.0,  # 2-ATR-Variante nicht nachgewiesen -> aus (Codex+Claude 08.11.); nur bewusst setzen
+        "min_sl_atr_period": 14,
         "min_rr":            trial.suggest_float("min_rr", 1.0, 3.0, step=0.1),
         "max_age_mult":      None if age == 0.0 else age,
         "b_near_upper_atr":  trial.suggest_categorical("b_near_upper_atr", [0.5, 1.0]),
@@ -497,7 +500,8 @@ def save_config(config: dict, symbol: str, timeframe: str) -> str | None:
                 existing = json.load(f)
             existing_pnl = existing.get('_backtest', {}).get('pnl_pct')
             same_type = (existing.get('strategy', {}).get('type') == config.get('strategy', {}).get('type'))
-            if same_type and existing_pnl is not None and new_pnl <= existing_pnl:
+            stale = existing.get('_backtest', {}).get('stale_for_current_strategy', False)
+            if same_type and not stale and existing_pnl is not None and new_pnl <= existing_pnl:
                 print(f"  Bestehende Config besser ({existing_pnl:.2f}% vs {new_pnl:.2f}%) "
                       f"— wird nicht ueberschrieben.")
                 return None

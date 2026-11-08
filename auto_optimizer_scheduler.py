@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 SCRIPT_DIR       = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT     = SCRIPT_DIR
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
+from fibot.utils.risk_cap import capped_risk_pct  # noqa: E402  Obergrenze je Einstieg
 
 SETTINGS_FILE     = os.path.join(PROJECT_ROOT, 'settings.json')
 CONFIGS_DIR       = os.path.join(PROJECT_ROOT, 'src', 'fibot', 'strategy', 'configs')
@@ -172,7 +173,7 @@ def _update_settings(portfolio_files: list) -> bool:
                 'timeframe':          market.get('timeframe',          ''),
                 'leverage':           risk.get('leverage',             10),
                 'margin_mode':        risk.get('margin_mode',   'isolated'),
-                'risk_per_entry_pct': risk.get('risk_per_entry_pct', 1.0),
+                'risk_per_entry_pct': capped_risk_pct(risk.get('risk_per_entry_pct', 1.0)),   # Obergrenze
                 'active':             True,
             })
 

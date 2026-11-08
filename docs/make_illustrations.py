@@ -39,7 +39,7 @@ def konfluenz():
     diff = B[1] - A[1]
     f = lambda r: B[1] - r * diff
     tC, ENTRY = 40, L(40)
-    SL = min(f(0.786), L(40)) - 1.4
+    SL = min(f(0.886), L(40)) - 1.4
     TP = U(56)
     t0, t1, p0, p1 = -22, 62, 86, 170
     x = lambda tt: PL + (tt - t0) / (t1 - t0) * (W - PL - PR)
@@ -57,14 +57,15 @@ def konfluenz():
            t(30, 58, 'Long im steigenden Kanal (Short spiegelbildlich im fallenden Kanal)', 13, C['muted'])]
     for p in range(90, 171, 10):
         out.append(f'<line x1="{PL}" x2="{W - PR}" y1="{y(p):.1f}" y2="{y(p):.1f}" stroke="{C["grid"]}"/>')
-    out.append(f'<rect x="{x(B[0]):.1f}" y="{y(f(0.5)):.1f}" width="{x(60) - x(B[0]):.1f}" '
-               f'height="{y(f(0.618)) - y(f(0.5)):.1f}" fill="{C["zone"]}"/>')
+    out.append(f'<rect x="{x(B[0]):.1f}" y="{y(f(0.382)):.1f}" width="{x(60) - x(B[0]):.1f}" '
+               f'height="{y(f(0.786)) - y(f(0.382)):.1f}" fill="{C["zone"]}"/>')
     for fn in (L, U):
         out.append(f'<line x1="{x(-22):.1f}" x2="{x(60):.1f}" y1="{y(fn(-22)):.1f}" y2="{y(fn(60)):.1f}" '
                    f'stroke="{C["chan"]}" stroke-width="2.2"/>')
     for tt, p in ((-18, L(-18)), (6, L(6)), (-6, U(-6)), (30, U(30))):
         out.append(f'<circle cx="{x(tt):.1f}" cy="{y(p):.1f}" r="6" fill="none" stroke="{C["chan"]}" stroke-width="1.6"/>')
-    for r, lab, strong in ((0.5, '50 %', False), (0.618, '61,8 %', True), (0.786, '78,6 %', False)):
+    for r, lab, strong in ((0.382, '38,2 %', True), (0.618, '61,8 %', False), (0.786, '78,6 %', True),
+                           (0.886, '88,6 % (SL-Level)', False)):
         p = f(r)
         out.append(f'<line x1="{x(A[0]):.1f}" x2="{x(60):.1f}" y1="{y(p):.1f}" y2="{y(p):.1f}" stroke="{C["fib"]}" '
                    f'stroke-width="{2 if strong else 1.2}" {"" if strong else "stroke-dasharray=\"6 5\""}/>')
@@ -119,9 +120,9 @@ def konfluenz():
     lx = W - PR + 40
     out.append(f'<line x1="{lx - 20}" x2="{lx - 20}" y1="{PT}" y2="{H - PB}" stroke="{C["line"]}"/>')
     items = [(1, 'Impuls', ['Swing-Tief A → Swing-Hoch B']),
-             (2, 'Kanal', ['je Linie ≥ 2 Berührungen,', 'kein Schlusskurs außerhalb']),
-             (3, 'Konfluenz', ['61,8 % trifft die untere', 'Kanallinie: dort wartet', 'eine Limit-Order im Voraus']),
-             (4, 'Ausstieg', ['TP an der oberen Kanallinie,', 'SL unter 78,6 % / Linie'])]
+             (2, 'Kanal', ['unten ≥ 2, oben ≥ 1 Berührung,', 'kein Schlusskurs außerhalb']),
+             (3, 'Konfluenz', ['untere Kanallinie in der', 'Fib-Zone (je Config, meist', '38,2–78,6 %): Limit im Voraus']),
+             (4, 'Ausstieg', ['TP an der oberen Kanallinie,', 'SL meist unter 88,6 % / Linie'])]
     yy = PT + 10
     for n, head, lines in items:
         out.append(step(n, lx + 2, yy))
@@ -157,22 +158,23 @@ DEFS = (f'<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidt
 
 
 def ablauf():
-    W, H = 1000, 460
+    W, H = 1000, 470
     o = [DEFS, t(30, 38, 'Ablauf: von der Optimierung bis zum Live-Trade', 22, C['fg'], 700)]
     o.append(box(30, 70, 290, 165, 'run_pipeline.sh', [
         'Optuna je Coin / Timeframe', 'optimiert NUR auf In-Sample', 'testet danach unverändert auf OOS',
         '→ configs/config_*.json'], C['entry']))
     o.append(box(355, 70, 290, 165, 'show_results.sh', [
-        '1  Einzel-Analyse', '2  Manuelles Portfolio', '3  Auto-Portfolio (greedy, Calmar)',
+        '1  Einzel-Analyse', '2  Manuelles Portfolio', '3  Auto-Portfolio (max. PnL, DD ≤ 30 %)',
         '4  Interaktive Charts mit Kanal'], C['fib']))
     o.append(box(680, 70, 290, 165, 'Auto-Optimizer (wöchentl.)', [
-        'auto_optimizer_scheduler.py', 'Modus 3 auf allen Configs', 'schreibt active_strategies',
-        'Telegram: Portfolio + Excel'], C['tp']))
-    o.append(box(30, 275, 940, 165, 'Live: master_runner.py alle 15 Minuten', [
-        'je aktiver Strategie: abgeschlossene Kerzen laden → plan_next_order() (dieselbe Funktion wie im Backtest)',
-        'kein Setup → nichts tun   |   Setup → Limit-Order mit angehängtem SL + TP legen',
-        'neue Kerze → Order auf die neue Kanalposition nachziehen   |   Fill → Bitget aktiviert SL/TP sofort',
-        'Position läuft → Self-Repair prüft SL/TP   |   Position zu → aufräumen, nächster Impuls'], C['sl']))
+        'auto_optimizer_scheduler.py', 'Modus 3 auf allen Configs (mittwochs)', 'schreibt active_strategies',
+        'Risiko je Einstieg ≤ 1 % wie live'], C['tp']))
+    o.append(box(30, 275, 940, 175, 'Live: master_runner.py alle 15 Minuten', [
+        'je Strategie: Kontostand → Höchststand  |  Kerzen laden → plan_next_order() (wie im Backtest) → Trendfilter (4×TF + Tag)',
+        'Setup → Limit-Order mit angehängtem SL + TP  |  Größe: Risiko ≤ 1 % × Kontoverlauf-Faktor (0,25–1)',
+        'neue Kerze → Order nachziehen (nur nach bestätigtem Storno)  |  Fill → Bitget aktiviert SL/TP sofort',
+        'Position läuft → Self-Repair prüft SL/TP  |  Position zu → aufräumen, Impuls gesperrt (kein 2. Einstieg)',
+        'täglich: Live-vs-Backtest-Bericht (Telegram)  |  wöchentlich: neues Team'], C['sl']))
     o.append(arrow(320, 152, 352, 152))
     o.append(arrow(645, 152, 677, 152))
     o.append(arrow(825, 235, 825, 272))
