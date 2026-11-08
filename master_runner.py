@@ -71,6 +71,10 @@ def main():
     logging.info("FiBot Master Runner")
     logging.info("=" * 55)
 
+    # Auto-Optimizer im Hintergrund starten (non-blocking)
+    _run_auto_optimizer()
+    _run_daily_check()
+
     try:
         with open(settings_file, 'r') as f:
             settings = json.load(f)
@@ -89,32 +93,6 @@ def main():
 
     live_settings    = settings.get('live_trading_settings', {})
     active_strategies = live_settings.get('active_strategies', [])
-
-    # Neuer Modus: EIN Konto-Zyklus fuer alle Coins (Fibo-Wick-Konfluenz). Ersetzt die Einzelstrategien,
-    # den Auto-Optimizer und den alten Tagescheck; handelt nur zu Beginn jeder 30m-Kerze.
-    mode = live_settings.get('strategy_mode')
-    if mode in ('wick_mtf', 'fibot2'):
-        # fibot2 = Kanal-Konfluenz 2.0 (alle Configs, Phasentor je Zeitebene, Mindest-Stop 2 ATR)
-        script = os.path.join(SCRIPT_DIR, 'src', 'fibot', 'strategy', f'{mode}_live.py')
-        limit = 840 if mode == 'fibot2' else 280
-        logging.info(f"Modus {mode}: starte Konto-Zyklus.")
-        if mode == 'fibot2':
-            report = os.path.join(SCRIPT_DIR, 'fibot2_daily_report.py')
-            try:   # taeglicher Live-vs-Backtest-Bericht, prueft selbst ob faellig
-                subprocess.Popen([python_exe, report], cwd=SCRIPT_DIR,
-                                 stdout=open(os.path.join(SCRIPT_DIR, 'logs', 'fibot2_report.log'), 'a'), stderr=subprocess.STDOUT)
-            except Exception as e:
-                logging.warning(f"fibot2-Bericht nicht gestartet: {e}")
-        try:
-            rc = subprocess.run([python_exe, script], cwd=SCRIPT_DIR, timeout=limit).returncode
-            logging.info(f"{mode} beendet mit Code {rc}.")
-        except subprocess.TimeoutExpired:
-            logging.error(f"{mode}: Timeout nach {limit} s.")
-        return
-
-    # Auto-Optimizer im Hintergrund starten (non-blocking) -- nur im alten Einzelstrategie-Modus
-    _run_auto_optimizer()
-    _run_daily_check()
 
     if not active_strategies:
         logging.warning("Keine aktiven Strategien in settings.json.")

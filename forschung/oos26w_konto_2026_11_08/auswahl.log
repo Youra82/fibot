@@ -1,8 +1,0 @@
-V0 {'end': 32.338, 'cagr_pct': np.float64(-2.477), 'dd_pct': 25.368, 'trades': 111, 'fills_per_day': 0.152, 'exits': {'tp': 90, 'sl': 21}, 'liquidations': 0, 'names': 62}
-V1 {'end': 26.203, 'cagr_pct': np.float64(-12.219), 'dd_pct': 40.493, 'trades': 278, 'fills_per_day': 0.381, 'exits': {'tp': 237, 'sl': 41}, 'liquidations': 0, 'names': 62}
-V2 {'end': 22.611, 'cagr_pct': np.float64(-18.463), 'dd_pct': 44.418, 'trades': 413, 'fills_per_day': 0.566, 'exits': {'tp': 353, 'sl': 60}, 'liquidations': 0, 'names': 62}
-V3 {'end': 20.286, 'cagr_pct': np.float64(-22.77), 'dd_pct': 58.297, 'trades': 311, 'fills_per_day': 0.426, 'exits': {'tp': 257, 'sl': 54}, 'liquidations': 0, 'names': 62}
-V4 {'end': 15.121, 'cagr_pct': np.float64(-33.33), 'dd_pct': 68.26, 'trades': 434, 'fills_per_day': 0.595, 'exits': {'tp': 359, 'sl': 75}, 'liquidations': 0, 'names': 62}
-V5 {'end': 20.775, 'cagr_pct': np.float64(-21.845), 'dd_pct': 57.564, 'trades': 387, 'fills_per_day': 0.53, 'exits': {'tp': 316, 'sl': 71}, 'liquidations': 0, 'names': 62}
-V6 {'end': 18.385, 'cagr_pct': np.float64(-26.481), 'dd_pct': 57.18, 'trades': 517, 'fills_per_day': 0.708, 'exits': {'tp': 425, 'sl': 92}, 'liquidations': 0, 'names': 62}
-AUSWAHL: None ersatz (max Fills/Tag)

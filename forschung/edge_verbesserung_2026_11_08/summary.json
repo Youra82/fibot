@@ -1,0 +1,1184 @@
+{
+  "chosen": "L_S_K",
+  "base": "L_S_K",
+  "comparison_start": "2026-05-10 00:00:00+00:00",
+  "end": "2026-11-08 07:45:00+00:00",
+  "results": {
+    "L_S_K": {
+      "training": {
+        "n": 569,
+        "wins": 187,
+        "losses": 382,
+        "breakeven": 0,
+        "win_rate": 0.3286467486818981,
+        "avg_win_r": 3.2386582321397026,
+        "avg_loss_r": 1.152207934309061,
+        "payoff": 2.810827920640742,
+        "break_even_win_rate": 0.2624101693450023,
+        "expectancy_r": 0.2908359551916752,
+        "profit_factor": 1.3759812072246564,
+        "win_rate_margin": 0.0662365793368958,
+        "ci": [
+          0.04191279451027108,
+          0.6006143059431966
+        ],
+        "status": "positive",
+        "open_end": 3,
+        "without_top5_R": 0.1349758042824477
+      },
+      "comparison": {
+        "n": 271,
+        "wins": 98,
+        "losses": 173,
+        "breakeven": 0,
+        "win_rate": 0.36162361623616235,
+        "avg_win_r": 2.861370827065449,
+        "avg_loss_r": 1.2712776690187515,
+        "payoff": 2.250783520231286,
+        "break_even_win_rate": 0.30761814614122696,
+        "expectancy_r": 0.22318562476815507,
+        "profit_factor": 1.2750103178188787,
+        "win_rate_margin": 0.05400547009493539,
+        "ci": [
+          -0.020583988366485045,
+          0.4058491369092036
+        ],
+        "status": "unclear",
+        "open_end": 0,
+        "without_top5_R": -0.02385074393040214,
+        "stress_R": -0.04213572787350849,
+        "halves_R": [
+          0.2974778462813229,
+          0.13894877517842155
+        ]
+      },
+      "account": {
+        "end_equity": 175.75575997165484,
+        "realized_equity": 175.75575997165484,
+        "ret_pct": 192.92626661942472,
+        "maxdd_pct": 33.69831286162645,
+        "closed": 261,
+        "open_end": 0
+      },
+      "stress_account": {
+        "end_equity": 72.09655889473292,
+        "realized_equity": 72.09655889473292,
+        "ret_pct": 20.160931491221532,
+        "maxdd_pct": 46.19562575535704,
+        "closed": 261,
+        "open_end": 0
+      }
+    },
+    "L_S_R15": {
+      "training": {
+        "n": 585,
+        "wins": 265,
+        "losses": 320,
+        "breakeven": 0,
+        "win_rate": 0.452991452991453,
+        "avg_win_r": 1.3774180194308168,
+        "avg_loss_r": 1.147053793297577,
+        "payoff": 1.2008312316992416,
+        "break_even_win_rate": 0.4543737773240836,
+        "expectancy_r": -0.003489638813774728,
+        "profit_factor": 0.9944383637509344,
+        "win_rate_margin": -0.0013823243326306356,
+        "ci": [
+          -0.12317266677939602,
+          0.1236941863829723
+        ],
+        "status": "unclear",
+        "open_end": 2,
+        "without_top5_R": -0.09665661212332066
+      },
+      "comparison": {
+        "n": 278,
+        "wins": 139,
+        "losses": 139,
+        "breakeven": 0,
+        "win_rate": 0.5,
+        "avg_win_r": 1.3692287392052944,
+        "avg_loss_r": 1.3002277923876133,
+        "payoff": 1.0530683525007372,
+        "break_even_win_rate": 0.4870758437155545,
+        "expectancy_r": 0.034500473408840424,
+        "profit_factor": 1.0530683525007372,
+        "win_rate_margin": 0.012924156284445487,
+        "ci": [
+          -0.21353463703237396,
+          0.24160385809894233
+        ],
+        "status": "unclear",
+        "open_end": 0,
+        "without_top5_R": -0.19663923822094984,
+        "stress_R": -0.22761011720985277,
+        "halves_R": [
+          0.048092683976954737,
+          0.019248145519429733
+        ]
+      },
+      "account": {
+        "end_equity": 106.79986314425055,
+        "realized_equity": 106.79986314425055,
+        "ret_pct": 77.99977190708425,
+        "maxdd_pct": 37.143414104370706,
+        "closed": 272,
+        "open_end": 0
+      },
+      "stress_account": {
+        "end_equity": 41.98149849639723,
+        "realized_equity": 41.98149849639723,
+        "ret_pct": -30.030835839337954,
+        "maxdd_pct": 49.751067127196,
+        "closed": 272,
+        "open_end": 0
+      }
+    },
+    "L_S_R20": {
+      "training": {
+        "n": 575,
+        "wins": 225,
+        "losses": 350,
+        "breakeven": 0,
+        "win_rate": 0.391304347826087,
+        "avg_win_r": 1.8742780829095682,
+        "avg_loss_r": 1.1428257148614498,
+        "payoff": 1.6400384227762987,
+        "break_even_win_rate": 0.3787823659582905,
+        "expectancy_r": 0.037780119048948554,
+        "profit_factor": 1.0543104146419062,
+        "win_rate_margin": 0.012521981867796461,
+        "ci": [
+          -0.07428572219760983,
+          0.1708473383683604
+        ],
+        "status": "unclear",
+        "open_end": 3,
+        "without_top5_R": -0.04575296461748845
+      },
+      "comparison": {
+        "n": 273,
+        "wins": 115,
+        "losses": 158,
+        "breakeven": 0,
+        "win_rate": 0.42124542124542125,
+        "avg_win_r": 1.8611969165607387,
+        "avg_loss_r": 1.2784743561211702,
+        "payoff": 1.4557952669520262,
+        "break_even_win_rate": 0.40720006812340476,
+        "expectancy_r": 0.044097791711868416,
+        "profit_factor": 1.0595978208828039,
+        "win_rate_margin": 0.01404535312201649,
+        "ci": [
+          -0.21283425567300773,
+          0.2800078763290817
+        ],
+        "status": "unclear",
+        "open_end": 0,
+        "without_top5_R": -0.17349850699308877,
+        "stress_R": -0.22314366726194917,
+        "halves_R": [
+          0.06243703049060499,
+          0.023626083307697356
+        ]
+      },
+      "account": {
+        "end_equity": 97.60901529858754,
+        "realized_equity": 97.60901529858754,
+        "ret_pct": 62.681692164312565,
+        "maxdd_pct": 39.10949550999276,
+        "closed": 267,
+        "open_end": 0
+      },
+      "stress_account": {
+        "end_equity": 38.356265886959584,
+        "realized_equity": 38.356265886959584,
+        "ret_pct": -36.0728901884007,
+        "maxdd_pct": 51.45703926047928,
+        "closed": 267,
+        "open_end": 0
+      }
+    },
+    "L_S_R30": {
+      "training": {
+        "n": 541,
+        "wins": 160,
+        "losses": 381,
+        "breakeven": 0,
+        "win_rate": 0.2957486136783734,
+        "avg_win_r": 2.8607883692760856,
+        "avg_loss_r": 1.1386007939364602,
+        "payoff": 2.5125473164176735,
+        "break_even_win_rate": 0.2846936738263972,
+        "expectancy_r": 0.044213006643959975,
+        "profit_factor": 1.055137980647842,
+        "win_rate_margin": 0.011054939851976198,
+        "ci": [
+          -0.15903821975073065,
+          0.23690439685764864
+        ],
+        "status": "unclear",
+        "open_end": 3,
+        "without_top5_R": -0.036678766335445916
+      },
+      "comparison": {
+        "n": 264,
+        "wins": 91,
+        "losses": 173,
+        "breakeven": 0,
+        "win_rate": 0.3446969696969697,
+        "avg_win_r": 2.8514485266320873,
+        "avg_loss_r": 1.2599735035229316,
+        "payoff": 2.2631019768743816,
+        "break_even_win_rate": 0.3064568643845655,
+        "expectancy_r": 0.1572212114168667,
+        "profit_factor": 1.1904178028645591,
+        "win_rate_margin": 0.03824010531240424,
+        "ci": [
+          -0.06559278241859523,
+          0.4110133240184952
+        ],
+        "status": "unclear",
+        "open_end": 1,
+        "without_top5_R": -0.09450463754590128,
+        "stress_R": -0.11388997499310818,
+        "halves_R": [
+          0.07807249886214314,
+          0.2479526623942327
+        ]
+      },
+      "account": {
+        "end_equity": 158.773834409138,
+        "realized_equity": 150.54654247927257,
+        "ret_pct": 164.62305734856332,
+        "maxdd_pct": 31.170019501350986,
+        "closed": 254,
+        "open_end": 1
+      },
+      "stress_account": {
+        "end_equity": 66.07505784465398,
+        "realized_equity": 62.63985318175771,
+        "ret_pct": 10.12509640775663,
+        "maxdd_pct": 39.10388094799991,
+        "closed": 254,
+        "open_end": 1
+      }
+    },
+    "L_A2_K": {
+      "training": {
+        "n": 566,
+        "wins": 230,
+        "losses": 336,
+        "breakeven": 0,
+        "win_rate": 0.40636042402826855,
+        "avg_win_r": 1.9076647945958358,
+        "avg_loss_r": 1.0772461462039595,
+        "payoff": 1.7708717745875784,
+        "break_even_win_rate": 0.3608972487183539,
+        "expectancy_r": 0.13570352938606334,
+        "profit_factor": 1.2122038933188781,
+        "win_rate_margin": 0.04546317530991467,
+        "ci": [
+          -0.004349379631746373,
+          0.27980702275964736
+        ],
+        "status": "unclear",
+        "open_end": 3,
+        "without_top5_R": 0.06551739479785534
+      },
+      "comparison": {
+        "n": 266,
+        "wins": 126,
+        "losses": 140,
+        "breakeven": 0,
+        "win_rate": 0.47368421052631576,
+        "avg_win_r": 1.8373795043454322,
+        "avg_loss_r": 1.084675107380098,
+        "payoff": 1.6939445662981987,
+        "break_even_win_rate": 0.3712028868411793,
+        "expectancy_r": 0.29945602448988995,
+        "profit_factor": 1.524550109668379,
+        "win_rate_margin": 0.10248132368513646,
+        "ci": [
+          0.12241931624077285,
+          0.4554288776694054
+        ],
+        "status": "positive",
+        "open_end": 0,
+        "without_top5_R": 0.14207146089158465,
+        "stress_R": 0.1955446189969564,
+        "halves_R": [
+          0.2720826705400426,
+          0.3298708622119426
+        ]
+      },
+      "account": {
+        "end_equity": 207.7641866731279,
+        "realized_equity": 207.7641866731279,
+        "ret_pct": 246.2736444552132,
+        "maxdd_pct": 27.341741106992767,
+        "closed": 261,
+        "open_end": 0
+      },
+      "stress_account": {
+        "end_equity": 125.47417066223586,
+        "realized_equity": 125.47417066223586,
+        "ret_pct": 109.1236177703931,
+        "maxdd_pct": 32.227584878801544,
+        "closed": 261,
+        "open_end": 0
+      }
+    },
+    "L_A2_R15": {
+      "training": {
+        "n": 581,
+        "wins": 275,
+        "losses": 306,
+        "breakeven": 0,
+        "win_rate": 0.47332185886402756,
+        "avg_win_r": 1.4329981048361382,
+        "avg_loss_r": 1.076425231967291,
+        "payoff": 1.3312565167365775,
+        "break_even_win_rate": 0.4289532245039493,
+        "expectancy_r": 0.11133968648527878,
+        "profit_factor": 1.1963906604658787,
+        "win_rate_margin": 0.04436863436007826,
+        "ci": [
+          -0.003789985597588645,
+          0.22423564028253798
+        ],
+        "status": "unclear",
+        "open_end": 3,
+        "without_top5_R": 0.04218993361714474
+      },
+      "comparison": {
+        "n": 273,
+        "wins": 148,
+        "losses": 125,
+        "breakeven": 0,
+        "win_rate": 0.5421245421245421,
+        "avg_win_r": 1.4291224785513132,
+        "avg_loss_r": 1.0858326921480168,
+        "payoff": 1.316153481918281,
+        "break_even_win_rate": 0.4317503169832172,
+        "expectancy_r": 0.27758622823110746,
+        "profit_factor": 1.5583257225912448,
+        "win_rate_margin": 0.11037422514132489,
+        "ci": [
+          0.15350757830916062,
+          0.38389659128586023
+        ],
+        "status": "positive",
+        "open_end": 0,
+        "without_top5_R": 0.12154160661829017,
+        "stress_R": 0.1759366532471313,
+        "halves_R": [
+          0.23199618454694917,
+          0.32773527628368165
+        ]
+      },
+      "account": {
+        "end_equity": 204.6381362807918,
+        "realized_equity": 204.6381362807918,
+        "ret_pct": 241.06356046798632,
+        "maxdd_pct": 24.50722059605892,
+        "closed": 269,
+        "open_end": 0
+      },
+      "stress_account": {
+        "end_equity": 122.27682171941841,
+        "realized_equity": 122.27682171941841,
+        "ret_pct": 103.79470286569736,
+        "maxdd_pct": 28.028335822495563,
+        "closed": 269,
+        "open_end": 0
+      }
+    },
+    "L_A2_R20": {
+      "training": {
+        "n": 565,
+        "wins": 223,
+        "losses": 342,
+        "breakeven": 0,
+        "win_rate": 0.39469026548672564,
+        "avg_win_r": 1.932550759035728,
+        "avg_loss_r": 1.0761940093811344,
+        "payoff": 1.7957271107158845,
+        "break_even_win_rate": 0.35768870150704235,
+        "expectancy_r": 0.111328262047114,
+        "profit_factor": 1.1708980868118195,
+        "win_rate_margin": 0.037001563979683294,
+        "ci": [
+          -0.03631281014493486,
+          0.2557917049217787
+        ],
+        "status": "unclear",
+        "open_end": 3,
+        "without_top5_R": 0.027661621923767876
+      },
+      "comparison": {
+        "n": 262,
+        "wins": 120,
+        "losses": 142,
+        "breakeven": 0,
+        "win_rate": 0.4580152671755725,
+        "avg_win_r": 1.92698572022697,
+        "avg_loss_r": 1.0842676506789974,
+        "payoff": 1.7772232889363064,
+        "break_even_win_rate": 0.36007187610147334,
+        "expectancy_r": 0.29493236652984256,
+        "profit_factor": 1.5018788357208224,
+        "win_rate_margin": 0.09794339107409916,
+        "ci": [
+          0.18336690899643793,
+          0.42476708878193814
+        ],
+        "status": "positive",
+        "open_end": 1,
+        "without_top5_R": 0.09805523877843873,
+        "stress_R": 0.1900308236526499,
+        "halves_R": [
+          0.24456529986172565,
+          0.35098603749919843
+        ]
+      },
+      "account": {
+        "end_equity": 194.26445240986453,
+        "realized_equity": 191.87325665689343,
+        "ret_pct": 223.77408734977422,
+        "maxdd_pct": 20.346008819897044,
+        "closed": 258,
+        "open_end": 1
+      },
+      "stress_account": {
+        "end_equity": 116.23625022153574,
+        "realized_equity": 115.37866547958589,
+        "ret_pct": 93.72708370255958,
+        "maxdd_pct": 25.274539979348642,
+        "closed": 258,
+        "open_end": 1
+      }
+    },
+    "L_A2_R30": {
+      "training": {
+        "n": 530,
+        "wins": 163,
+        "losses": 367,
+        "breakeven": 0,
+        "win_rate": 0.30754716981132074,
+        "avg_win_r": 2.9314595828847434,
+        "avg_loss_r": 1.0768525715374404,
+        "payoff": 2.7222478363026514,
+        "break_even_win_rate": 0.2686548676977164,
+        "expectancy_r": 0.15589248727541982,
+        "profit_factor": 1.209063752908262,
+        "win_rate_margin": 0.03889230211360434,
+        "ci": [
+          -0.03600610239303231,
+          0.32861930935937506
+        ],
+        "status": "unclear",
+        "open_end": 3,
+        "without_top5_R": 0.059332528121538705
+      },
+      "comparison": {
+        "n": 244,
+        "wins": 75,
+        "losses": 169,
+        "breakeven": 0,
+        "win_rate": 0.3073770491803279,
+        "avg_win_r": 2.9239743414730714,
+        "avg_loss_r": 1.0835456932701593,
+        "payoff": 2.698524261259779,
+        "break_even_win_rate": 0.2703781101220581,
+        "expectancy_r": 0.14827398954026003,
+        "profit_factor": 1.197569938428896,
+        "win_rate_margin": 0.036998939058269786,
+        "ci": [
+          -0.1215719782087412,
+          0.4373908262339015
+        ],
+        "status": "unclear",
+        "open_end": 2,
+        "without_top5_R": -0.010512448736569206,
+        "stress_R": 0.037895049097013266,
+        "halves_R": [
+          -0.13992677786385213,
+          0.461107301166946
+        ]
+      },
+      "account": {
+        "end_equity": 99.29020881082906,
+        "realized_equity": 93.56804501395722,
+        "ret_pct": 65.48368135138176,
+        "maxdd_pct": 45.40457946315095,
+        "closed": 237,
+        "open_end": 2
+      },
+      "stress_account": {
+        "end_equity": 61.17732372709477,
+        "realized_equity": 58.02533369805728,
+        "ret_pct": 1.962206211824613,
+        "maxdd_pct": 53.64875468501307,
+        "closed": 237,
+        "open_end": 2
+      }
+    },
+    "C_S_K": {
+      "training": {
+        "n": 339,
+        "wins": 160,
+        "losses": 179,
+        "breakeven": 0,
+        "win_rate": 0.471976401179941,
+        "avg_win_r": 1.5701315961944151,
+        "avg_loss_r": 1.0834024499591772,
+        "payoff": 1.4492597799216513,
+        "break_even_win_rate": 0.4082866212060154,
+        "expectancy_r": 0.1690029995528428,
+        "profit_factor": 1.2954277362428168,
+        "win_rate_margin": 0.06368977997392561,
+        "ci": [
+          0.007496624140654129,
+          0.3388308188725491
+        ],
+        "status": "positive",
+        "open_end": 3,
+        "without_top5_R": 0.07230963282470382
+      },
+      "comparison": {
+        "n": 168,
+        "wins": 82,
+        "losses": 86,
+        "breakeven": 0,
+        "win_rate": 0.4880952380952381,
+        "avg_win_r": 1.5124999819454448,
+        "avg_loss_r": 1.0837162695534663,
+        "payoff": 1.3956604919926634,
+        "break_even_win_rate": 0.4174214181610599,
+        "expectancy_r": 0.18348451986862133,
+        "profit_factor": 1.3307460505046327,
+        "win_rate_margin": 0.0706738199341782,
+        "ci": [
+          0.028677951038495346,
+          0.3357006408819242
+        ],
+        "status": "positive",
+        "open_end": 0,
+        "without_top5_R": -0.05884685464891645,
+        "stress_R": 0.07870474201114137,
+        "halves_R": [
+          0.3345539446182579,
+          0.004947926982687229
+        ]
+      },
+      "account": {
+        "end_equity": 89.67454289539715,
+        "realized_equity": 89.67454289539715,
+        "ret_pct": 49.45757149232859,
+        "maxdd_pct": 24.467936121106238,
+        "closed": 168,
+        "open_end": 0
+      },
+      "stress_account": {
+        "end_equity": 64.58480638938228,
+        "realized_equity": 64.58480638938228,
+        "ret_pct": 7.641343982303805,
+        "maxdd_pct": 35.619635713127536,
+        "closed": 168,
+        "open_end": 0
+      }
+    },
+    "C_S_R15": {
+      "training": {
+        "n": 340,
+        "wins": 170,
+        "losses": 170,
+        "breakeven": 0,
+        "win_rate": 0.5,
+        "avg_win_r": 1.4332822785212262,
+        "avg_loss_r": 1.0797324987480144,
+        "payoff": 1.3274420101119162,
+        "break_even_win_rate": 0.4296562473545429,
+        "expectancy_r": 0.17677488988660586,
+        "profit_factor": 1.3274420101119162,
+        "win_rate_margin": 0.07034375264545711,
+        "ci": [
+          0.03106395968205962,
+          0.313965643489831
+        ],
+        "status": "positive",
+        "open_end": 3,
+        "without_top5_R": 0.09316016283719315
+      },
+      "comparison": {
+        "n": 170,
+        "wins": 85,
+        "losses": 85,
+        "breakeven": 0,
+        "win_rate": 0.5,
+        "avg_win_r": 1.4205663733440632,
+        "avg_loss_r": 1.0828524893981726,
+        "payoff": 1.311874320142705,
+        "break_even_win_rate": 0.43254946485943624,
+        "expectancy_r": 0.16885694197294537,
+        "profit_factor": 1.3118743201427048,
+        "win_rate_margin": 0.06745053514056376,
+        "ci": [
+          0.05415346081404072,
+          0.2966464556473704
+        ],
+        "status": "positive",
+        "open_end": 1,
+        "without_top5_R": 0.006331584783726141,
+        "stress_R": 0.06297165399474733,
+        "halves_R": [
+          0.27097001925724984,
+          0.04841587645812467
+        ]
+      },
+      "account": {
+        "end_equity": 88.45242898776178,
+        "realized_equity": 88.78724577950432,
+        "ret_pct": 47.42071497960296,
+        "maxdd_pct": 14.837628583893526,
+        "closed": 170,
+        "open_end": 1
+      },
+      "stress_account": {
+        "end_equity": 62.985487075123984,
+        "realized_equity": 63.56460457160685,
+        "ret_pct": 4.975811791873297,
+        "maxdd_pct": 23.64265186233351,
+        "closed": 170,
+        "open_end": 1
+      }
+    },
+    "C_S_R20": {
+      "training": {
+        "n": 333,
+        "wins": 133,
+        "losses": 200,
+        "breakeven": 0,
+        "win_rate": 0.3993993993993994,
+        "avg_win_r": 1.9361055464265395,
+        "avg_loss_r": 1.080031282963827,
+        "payoff": 1.7926383957263436,
+        "break_even_win_rate": 0.3580843125018725,
+        "expectancy_r": 0.12461195520109435,
+        "profit_factor": 1.1921045331580187,
+        "win_rate_margin": 0.04131508689752689,
+        "ci": [
+          -0.06535871065414449,
+          0.3150042852226658
+        ],
+        "status": "unclear",
+        "open_end": 3,
+        "without_top5_R": 0.044874073187431314
+      },
+      "comparison": {
+        "n": 166,
+        "wins": 64,
+        "losses": 102,
+        "breakeven": 0,
+        "win_rate": 0.3855421686746988,
+        "avg_win_r": 1.9237348351933445,
+        "avg_loss_r": 1.0839115260916046,
+        "payoff": 1.7748079883696743,
+        "break_even_win_rate": 0.3603852966372442,
+        "expectancy_r": 0.07566297464476125,
+        "profit_factor": 1.113605012310384,
+        "win_rate_margin": 0.025156872037454592,
+        "ci": [
+          -0.04134323687948715,
+          0.20356972987033434
+        ],
+        "status": "unclear",
+        "open_end": 1,
+        "without_top5_R": -0.12855110115817026,
+        "stress_R": -0.03077598329275401,
+        "halves_R": [
+          0.1453204298694325,
+          -0.006826117068665246
+        ]
+      },
+      "account": {
+        "end_equity": 64.15783113278319,
+        "realized_equity": 64.40068618414656,
+        "ret_pct": 6.929718554638642,
+        "maxdd_pct": 27.450097121467977,
+        "closed": 166,
+        "open_end": 1
+      },
+      "stress_account": {
+        "end_equity": 45.86758437319955,
+        "realized_equity": 46.289312010238255,
+        "ret_pct": -23.55402604466742,
+        "maxdd_pct": 42.65820090238306,
+        "closed": 166,
+        "open_end": 1
+      }
+    },
+    "C_S_R30": {
+      "training": {
+        "n": 321,
+        "wins": 95,
+        "losses": 226,
+        "breakeven": 0,
+        "win_rate": 0.29595015576323985,
+        "avg_win_r": 2.9326806282472773,
+        "avg_loss_r": 1.0782266987841616,
+        "payoff": 2.719910971926636,
+        "break_even_win_rate": 0.268823637863052,
+        "expectancy_r": 0.10880194940271282,
+        "profit_factor": 1.143325408553232,
+        "win_rate_margin": 0.02712651790018783,
+        "ci": [
+          -0.12440580721538991,
+          0.34634731889212067
+        ],
+        "status": "unclear",
+        "open_end": 3,
+        "without_top5_R": -0.08550079532185594
+      },
+      "comparison": {
+        "n": 162,
+        "wins": 43,
+        "losses": 119,
+        "breakeven": 0,
+        "win_rate": 0.2654320987654321,
+        "avg_win_r": 2.916035683239139,
+        "avg_loss_r": 1.0795447583787732,
+        "payoff": 2.701171637958162,
+        "break_even_win_rate": 0.2701847138739217,
+        "expectancy_r": -0.018989455974018733,
+        "profit_factor": 0.9760536170773191,
+        "win_rate_margin": -0.004752615108489566,
+        "ci": [
+          -0.24633532211216852,
+          0.20200401264702536
+        ],
+        "status": "unclear",
+        "open_end": 2,
+        "without_top5_R": -0.25031627197711503,
+        "stress_R": -0.12808160864036527,
+        "halves_R": [
+          -0.030210413781448803,
+          -0.005973144917399847
+        ]
+      },
+      "account": {
+        "end_equity": 45.54806520278083,
+        "realized_equity": 43.53780918867216,
+        "ret_pct": -24.086557995365276,
+        "maxdd_pct": 44.71590907956011,
+        "closed": 162,
+        "open_end": 2
+      },
+      "stress_account": {
+        "end_equity": 32.61268496794662,
+        "realized_equity": 31.40747841698331,
+        "ret_pct": -45.6455250534223,
+        "maxdd_pct": 57.347190532394606,
+        "closed": 162,
+        "open_end": 2
+      }
+    },
+    "C_A2_K": {
+      "training": {
+        "n": 339,
+        "wins": 170,
+        "losses": 169,
+        "breakeven": 0,
+        "win_rate": 0.5014749262536873,
+        "avg_win_r": 1.4064140904706548,
+        "avg_loss_r": 1.068212750244674,
+        "payoff": 1.3166048524963925,
+        "break_even_win_rate": 0.4316661941385436,
+        "expectancy_r": 0.17275056220844065,
+        "profit_factor": 1.3243954137537675,
+        "win_rate_margin": 0.06980873211514366,
+        "ci": [
+          0.02192398358624491,
+          0.3323870466667612
+        ],
+        "status": "positive",
+        "open_end": 3,
+        "without_top5_R": 0.08959591573437764
+      },
+      "comparison": {
+        "n": 168,
+        "wins": 85,
+        "losses": 83,
+        "breakeven": 0,
+        "win_rate": 0.5059523809523809,
+        "avg_win_r": 1.2807975115686443,
+        "avg_loss_r": 1.0718171717085334,
+        "payoff": 1.194977600076126,
+        "break_even_win_rate": 0.4555855148432121,
+        "expectancy_r": 0.11849382875908608,
+        "profit_factor": 1.2237722410418157,
+        "win_rate_margin": 0.05036686610916885,
+        "ci": [
+          -0.0385214480415057,
+          0.21918127939029544
+        ],
+        "status": "unclear",
+        "open_end": 0,
+        "without_top5_R": -0.05911409506218237,
+        "stress_R": 0.02906639414567556,
+        "halves_R": [
+          0.22375612375477794,
+          -0.0059070653267316
+        ]
+      },
+      "account": {
+        "end_equity": 77.76334827487244,
+        "realized_equity": 77.76334827487244,
+        "ret_pct": 29.60558045812074,
+        "maxdd_pct": 23.100834111598612,
+        "closed": 168,
+        "open_end": 0
+      },
+      "stress_account": {
+        "end_equity": 58.2150618012562,
+        "realized_equity": 58.2150618012562,
+        "ret_pct": -2.97489699790634,
+        "maxdd_pct": 32.05786222817776,
+        "closed": 168,
+        "open_end": 0
+      }
+    },
+    "C_A2_R15": {
+      "training": {
+        "n": 339,
+        "wins": 170,
+        "losses": 169,
+        "breakeven": 0,
+        "win_rate": 0.5014749262536873,
+        "avg_win_r": 1.4435840788289431,
+        "avg_loss_r": 1.0666647074139222,
+        "payoff": 1.3533625597577368,
+        "break_even_win_rate": 0.42492390127211993,
+        "expectancy_r": 0.1921621175456267,
+        "profit_factor": 1.3613706222415103,
+        "win_rate_margin": 0.07655102498156735,
+        "ci": [
+          0.029757624574578426,
+          0.352443334261693
+        ],
+        "status": "positive",
+        "open_end": 3,
+        "without_top5_R": 0.12411988251074392
+      },
+      "comparison": {
+        "n": 170,
+        "wins": 83,
+        "losses": 87,
+        "breakeven": 0,
+        "win_rate": 0.48823529411764705,
+        "avg_win_r": 1.4384021016807338,
+        "avg_loss_r": 1.07381553586055,
+        "payoff": 1.3395243909634873,
+        "break_even_win_rate": 0.4274373047199434,
+        "expectancy_r": 0.1527377812919591,
+        "profit_factor": 1.2779370626433268,
+        "win_rate_margin": 0.060797989397703645,
+        "ci": [
+          0.06175139763128877,
+          0.23425321655012338
+        ],
+        "status": "positive",
+        "open_end": 1,
+        "without_top5_R": -0.01890686148811555,
+        "stress_R": 0.06351199137652606,
+        "halves_R": [
+          0.20262455249620615,
+          0.09389697423053944
+        ]
+      },
+      "account": {
+        "end_equity": 86.67406935422447,
+        "realized_equity": 86.9646156846805,
+        "ret_pct": 44.45678225704079,
+        "maxdd_pct": 16.310862922872104,
+        "closed": 170,
+        "open_end": 1
+      },
+      "stress_account": {
+        "end_equity": 64.57354749918584,
+        "realized_equity": 65.09901019324737,
+        "ret_pct": 7.622579165309729,
+        "maxdd_pct": 23.465998604744975,
+        "closed": 170,
+        "open_end": 1
+      }
+    },
+    "C_A2_R20": {
+      "training": {
+        "n": 333,
+        "wins": 138,
+        "losses": 195,
+        "breakeven": 0,
+        "win_rate": 0.4144144144144144,
+        "avg_win_r": 1.9440995507205687,
+        "avg_loss_r": 1.0671224766189853,
+        "payoff": 1.8218148275539574,
+        "break_even_win_rate": 0.3543818645487922,
+        "expectancy_r": 0.18077133651272165,
+        "profit_factor": 1.2892843394997235,
+        "win_rate_margin": 0.060032549865622176,
+        "ci": [
+          -0.021033791083913015,
+          0.3687331871814842
+        ],
+        "status": "unclear",
+        "open_end": 3,
+        "without_top5_R": 0.08216296413617974
+      },
+      "comparison": {
+        "n": 165,
+        "wins": 62,
+        "losses": 103,
+        "breakeven": 0,
+        "win_rate": 0.37575757575757573,
+        "avg_win_r": 1.9395770813830118,
+        "avg_loss_r": 1.0714932613122359,
+        "payoff": 1.8101626500269832,
+        "break_even_win_rate": 0.3558512885332093,
+        "expectancy_r": 0.059939231094462996,
+        "profit_factor": 1.0896124689482811,
+        "win_rate_margin": 0.019906287224366437,
+        "ci": [
+          -0.07291000404067059,
+          0.1656984079522516
+        ],
+        "status": "unclear",
+        "open_end": 1,
+        "without_top5_R": -0.11009189260748886,
+        "stress_R": -0.030679327488479142,
+        "halves_R": [
+          0.02936188119418015,
+          0.09404473675247077
+        ]
+      },
+      "account": {
+        "end_equity": 64.24297338225007,
+        "realized_equity": 64.45832683585928,
+        "ret_pct": 7.071622303750114,
+        "maxdd_pct": 25.91278219035692,
+        "closed": 165,
+        "open_end": 1
+      },
+      "stress_account": {
+        "end_equity": 47.97542068222912,
+        "realized_equity": 48.3658172885289,
+        "ret_pct": -20.040965529618127,
+        "maxdd_pct": 36.55211355239511,
+        "closed": 165,
+        "open_end": 1
+      }
+    },
+    "C_A2_R30": {
+      "training": {
+        "n": 321,
+        "wins": 99,
+        "losses": 222,
+        "breakeven": 0,
+        "win_rate": 0.308411214953271,
+        "avg_win_r": 2.9442641491206683,
+        "avg_loss_r": 1.067951993117784,
+        "payoff": 2.756925562285969,
+        "break_even_win_rate": 0.2661750900892303,
+        "expectancy_r": 0.1694604619651028,
+        "profit_factor": 1.2294397777761754,
+        "win_rate_margin": 0.042236124864040714,
+        "ci": [
+          -0.08734286952971085,
+          0.42523224664566245
+        ],
+        "status": "unclear",
+        "open_end": 3,
+        "without_top5_R": 0.042685174079089123
+      },
+      "comparison": {
+        "n": 160,
+        "wins": 41,
+        "losses": 119,
+        "breakeven": 0,
+        "win_rate": 0.25625,
+        "avg_win_r": 2.939679677934518,
+        "avg_loss_r": 1.0711777883062428,
+        "payoff": 2.744343385408289,
+        "break_even_win_rate": 0.2670695224954531,
+        "expectancy_r": -0.04339556258204812,
+        "profit_factor": 0.9455300739642004,
+        "win_rate_margin": -0.010819522495453149,
+        "ci": [
+          -0.3243310795565711,
+          0.21005101012595837
+        ],
+        "status": "unclear",
+        "open_end": 2,
+        "without_top5_R": -0.2540399671815042,
+        "stress_R": -0.1378558075871011,
+        "halves_R": [
+          -0.19189426745450008,
+          0.12918401335080143
+        ]
+      },
+      "account": {
+        "end_equity": 47.351777752424475,
+        "realized_equity": 45.24528595564289,
+        "ret_pct": -21.08037041262587,
+        "maxdd_pct": 45.967225831215096,
+        "closed": 160,
+        "open_end": 2
+      },
+      "stress_account": {
+        "end_equity": 33.95517866348464,
+        "realized_equity": 32.67084987071675,
+        "ret_pct": -43.408035560858934,
+        "maxdd_pct": 53.3227551108246,
+        "closed": 159,
+        "open_end": 2
+      }
+    },
+    "L_S_H": {
+      "training": {
+        "n": 590,
+        "wins": 269,
+        "losses": 321,
+        "breakeven": 0,
+        "win_rate": 0.4559322033898305,
+        "avg_win_r": 1.5480263956589804,
+        "avg_loss_r": 1.1544768670487506,
+        "payoff": 1.340889921524613,
+        "break_even_win_rate": 0.4271879642032478,
+        "expectancy_r": 0.07768140018579117,
+        "profit_factor": 1.1236741086919655,
+        "win_rate_margin": 0.0287442391865827,
+        "ci": [
+          -0.1013388472129316,
+          0.3032715756684421
+        ],
+        "status": "unclear",
+        "open_end": 2,
+        "without_top5_R": -0.013356399270869719
+      },
+      "comparison": {
+        "n": 279,
+        "wins": 138,
+        "losses": 141,
+        "breakeven": 0,
+        "win_rate": 0.4946236559139785,
+        "avg_win_r": 1.4596581114591112,
+        "avg_loss_r": 1.3061745762983037,
+        "payoff": 1.117506141939908,
+        "break_even_win_rate": 0.472253647908606,
+        "expectancy_r": 0.061871699366654306,
+        "profit_factor": 1.0937294155156545,
+        "win_rate_margin": 0.022370008005372477,
+        "ci": [
+          -0.09194176133372718,
+          0.18521159553049865
+        ],
+        "status": "unclear",
+        "open_end": 0,
+        "without_top5_R": -0.11343962058330102,
+        "stress_R": -0.1997000840964923,
+        "halves_R": [
+          0.01375566900937763,
+          0.11623179473212719
+        ]
+      },
+      "account": {
+        "end_equity": 115.03320807626864,
+        "realized_equity": 115.03320807626864,
+        "ret_pct": 91.72201346044773,
+        "maxdd_pct": 23.1622712188313,
+        "closed": 274,
+        "open_end": 0
+      },
+      "stress_account": {
+        "end_equity": 44.83226771665803,
+        "realized_equity": 44.83226771665803,
+        "ret_pct": -25.279553805569954,
+        "maxdd_pct": 35.38565887807618,
+        "closed": 274,
+        "open_end": 0
+      }
+    },
+    "C_S_H": {
+      "training": {
+        "n": 348,
+        "wins": 216,
+        "losses": 132,
+        "breakeven": 0,
+        "win_rate": 0.6206896551724138,
+        "avg_win_r": 0.7740782100101262,
+        "avg_loss_r": 1.0859686328726392,
+        "payoff": 0.7127997868248824,
+        "break_even_win_rate": 0.5838394000817566,
+        "expectancy_r": 0.06854320064080129,
+        "profit_factor": 1.1663996511679893,
+        "win_rate_margin": 0.0368502550906572,
+        "ci": [
+          -0.06683770140511179,
+          0.19926651215233776
+        ],
+        "status": "unclear",
+        "open_end": 3,
+        "without_top5_R": 0.0010514897335144296
+      },
+      "comparison": {
+        "n": 171,
+        "wins": 106,
+        "losses": 65,
+        "breakeven": 0,
+        "win_rate": 0.6198830409356725,
+        "avg_win_r": 0.775143219399983,
+        "avg_loss_r": 1.064367548301059,
+        "payoff": 0.7282664908726921,
+        "break_even_win_rate": 0.5786144702111581,
+        "expectancy_r": 0.07591398021537628,
+        "profit_factor": 1.1876345851154673,
+        "win_rate_margin": 0.0412685707245144,
+        "ci": [
+          -0.036700128704701386,
+          0.20676701261655872
+        ],
+        "status": "unclear",
+        "open_end": 0,
+        "without_top5_R": -0.04057544648293106,
+        "stress_R": -0.028098828069006317,
+        "halves_R": [
+          0.1769104229051288,
+          -0.04450485529932866
+        ]
+      },
+      "account": {
+        "end_equity": 71.11157700460794,
+        "realized_equity": 71.11157700460794,
+        "ret_pct": 18.519295007679904,
+        "maxdd_pct": 23.78037548679217,
+        "closed": 171,
+        "open_end": 0
+      },
+      "stress_account": {
+        "end_equity": 50.93026820946856,
+        "realized_equity": 50.93026820946856,
+        "ret_pct": -15.116219650885732,
+        "maxdd_pct": 36.87638348315193,
+        "closed": 171,
+        "open_end": 0
+      }
+    }
+  },
+  "paired_improvement_ci": [
+    0.0,
+    0.0
+  ],
+  "criteria_passed": false,
+  "caveat": "Wiederverwendete historische Daten; kein frischer Holdout. Keine Live-Aenderung."
+}

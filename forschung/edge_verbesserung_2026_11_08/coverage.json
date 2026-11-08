@@ -1,0 +1,121 @@
+{
+  "config_DOTUSDTUSDT_2h_fib.json": {
+    "first": "2024-09-23 00:00:00+00:00",
+    "last": "2026-11-08 04:00:00+00:00",
+    "bars": 9315,
+    "missing_intervals": 0,
+    "signal_candidates": 29
+  },
+  "config_BATUSDTUSDT_1h_fib.json": {
+    "first": "2024-11-12 00:00:00+00:00",
+    "last": "2026-11-08 06:00:00+00:00",
+    "bars": 17431,
+    "missing_intervals": 0,
+    "signal_candidates": 23
+  },
+  "config_APTUSDTUSDT_1h_fib.json": {
+    "first": "2024-11-12 00:00:00+00:00",
+    "last": "2026-11-08 06:00:00+00:00",
+    "bars": 17431,
+    "missing_intervals": 0,
+    "signal_candidates": 24
+  },
+  "config_JUPUSDTUSDT_1h_fib.json": {
+    "first": "2024-11-12 00:00:00+00:00",
+    "last": "2026-11-08 06:00:00+00:00",
+    "bars": 17431,
+    "missing_intervals": 0,
+    "signal_candidates": 32
+  },
+  "config_PYTHUSDTUSDT_4h_fib.json": {
+    "first": "2024-06-15 00:00:00+00:00",
+    "last": "2026-11-08 00:00:00+00:00",
+    "bars": 5257,
+    "missing_intervals": 0,
+    "signal_candidates": 35
+  },
+  "config_OPUSDTUSDT_1h_fib.json": {
+    "first": "2024-11-12 00:00:00+00:00",
+    "last": "2026-11-08 06:00:00+00:00",
+    "bars": 17431,
+    "missing_intervals": 0,
+    "signal_candidates": 47
+  },
+  "config_SANDUSDTUSDT_1h_fib.json": {
+    "first": "2024-11-12 00:00:00+00:00",
+    "last": "2026-11-08 06:00:00+00:00",
+    "bars": 17431,
+    "missing_intervals": 0,
+    "signal_candidates": 29
+  },
+  "config_SHIBUSDTUSDT_1h_fib.json": {
+    "first": "2024-11-12 00:00:00+00:00",
+    "last": "2026-11-08 06:00:00+00:00",
+    "bars": 17431,
+    "missing_intervals": 0,
+    "signal_candidates": 58
+  },
+  "config_MAGICUSDTUSDT_15m_fib.json": {
+    "first": "2025-03-19 00:00:00+00:00",
+    "last": "2026-11-08 07:30:00+00:00",
+    "bars": 57535,
+    "missing_intervals": 0,
+    "signal_candidates": 85
+  },
+  "config_SIRENUSDTUSDT_30m_fib.json": {
+    "first": "2025-03-24 00:00:00+00:00",
+    "last": "2026-11-08 07:00:00+00:00",
+    "bars": 28527,
+    "missing_intervals": 0,
+    "signal_candidates": 99
+  },
+  "config_FILUSDTUSDT_15m_fib.json": {
+    "first": "2025-03-19 00:00:00+00:00",
+    "last": "2026-11-08 07:30:00+00:00",
+    "bars": 57535,
+    "missing_intervals": 0,
+    "signal_candidates": 105
+  },
+  "config_WALUSDTUSDT_1h_fib.json": {
+    "first": "2025-03-27 10:00:00+00:00",
+    "last": "2026-11-08 06:00:00+00:00",
+    "bars": 14181,
+    "missing_intervals": 0,
+    "signal_candidates": 71
+  },
+  "config_TAOUSDTUSDT_30m_fib.json": {
+    "first": "2025-03-07 00:00:00+00:00",
+    "last": "2026-11-08 07:00:00+00:00",
+    "bars": 29343,
+    "missing_intervals": 0,
+    "signal_candidates": 67
+  },
+  "config_UNIUSDTUSDT_1h_fib.json": {
+    "first": "2024-11-12 00:00:00+00:00",
+    "last": "2026-11-08 06:00:00+00:00",
+    "bars": 17431,
+    "missing_intervals": 0,
+    "signal_candidates": 32
+  },
+  "config_PENGUUSDTUSDT_15m_fib.json": {
+    "first": "2025-03-19 00:00:00+00:00",
+    "last": "2026-11-08 07:30:00+00:00",
+    "bars": 57535,
+    "missing_intervals": 0,
+    "signal_candidates": 79
+  },
+  "config_XLMUSDTUSDT_30m_fib.json": {
+    "first": "2024-12-07 00:00:00+00:00",
+    "last": "2026-11-08 07:00:00+00:00",
+    "bars": 33663,
+    "missing_intervals": 0,
+    "signal_candidates": 21
+  },
+  "config_TRUMPUSDTUSDT_15m_fib.json": {
+    "first": "2025-03-19 00:00:00+00:00",
+    "last": "2026-11-08 07:30:00+00:00",
+    "bars": 57535,
+    "missing_intervals": 0,
+    "signal_candidates": 72
+  }
+}
