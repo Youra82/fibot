@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "RSR/USDT:USDT",
+    "timeframe": "1h"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 3,
+    "window": 100,
+    "min_upper_touches": 2,
+    "max_break_frac": 0.03,
+    "min_width_atr": 2.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.5,
+    "fib_hi": 0.705,
+    "fib_sl": 0.786,
+    "zone_tol_atr": 0.45000000000000007,
+    "sl_buf_atr": 0.15000000000000002,
+    "min_rr": 1.9,
+    "max_age_mult": 1.5,
+    "b_near_upper_atr": 1.0,
+    "tp_mode": "upper",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 10,
+    "risk_per_entry_pct": 2.75,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 207.3,
+    "win_rate": 29.2,
+    "total_trades": 72,
+    "max_drawdown": 24.54,
+    "start_date": "2023-04-08",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": -19.9,
+      "max_drawdown": 20.63,
+      "total_trades": 17,
+      "win_rate": 11.8
+    }
+  }
+}

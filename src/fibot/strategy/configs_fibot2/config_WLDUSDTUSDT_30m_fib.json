@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "WLD/USDT:USDT",
+    "timeframe": "30m"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 3,
+    "window": 150,
+    "min_upper_touches": 2,
+    "max_break_frac": 0.0,
+    "min_width_atr": 3.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.382,
+    "fib_hi": 0.705,
+    "fib_sl": 0.786,
+    "zone_tol_atr": 0.1,
+    "sl_buf_atr": 0.2,
+    "min_rr": 1.0,
+    "max_age_mult": 2.0,
+    "b_near_upper_atr": 1.0,
+    "tp_mode": "b",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 8,
+    "risk_per_entry_pct": 3.0,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 197.36,
+    "win_rate": 44.3,
+    "total_trades": 88,
+    "max_drawdown": 25.5,
+    "start_date": "2024-04-01",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": 13.13,
+      "max_drawdown": 21.29,
+      "total_trades": 35,
+      "win_rate": 31.4
+    }
+  }
+}

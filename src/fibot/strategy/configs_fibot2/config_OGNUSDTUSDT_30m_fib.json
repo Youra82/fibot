@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "OGN/USDT:USDT",
+    "timeframe": "30m"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 3,
+    "window": 100,
+    "min_upper_touches": 2,
+    "max_break_frac": 0.0,
+    "min_width_atr": 2.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.382,
+    "fib_hi": 0.786,
+    "fib_sl": 1.0,
+    "zone_tol_atr": 0.6,
+    "sl_buf_atr": 0.2,
+    "min_rr": 2.1,
+    "max_age_mult": null,
+    "b_near_upper_atr": 1.0,
+    "tp_mode": "upper",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 9,
+    "risk_per_entry_pct": 2.75,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 180.13,
+    "win_rate": 40.5,
+    "total_trades": 74,
+    "max_drawdown": 22.2,
+    "start_date": "2025-04-01",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": -45.56,
+      "max_drawdown": 45.56,
+      "total_trades": 29,
+      "win_rate": 10.3
+    }
+  }
+}

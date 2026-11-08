@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "AVA/USDT:USDT",
+    "timeframe": "5m"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 3,
+    "window": 150,
+    "min_upper_touches": 1,
+    "max_break_frac": 0.03,
+    "min_width_atr": 3.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.382,
+    "fib_hi": 0.705,
+    "fib_sl": 1.0,
+    "zone_tol_atr": 0.45000000000000007,
+    "sl_buf_atr": 0.35000000000000003,
+    "min_rr": 2.3,
+    "max_age_mult": 2.0,
+    "b_near_upper_atr": 1.0,
+    "tp_mode": "upper",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 9,
+    "risk_per_entry_pct": 1.0,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": -17.93,
+    "win_rate": 30.6,
+    "total_trades": 85,
+    "max_drawdown": 18.73,
+    "start_date": "2025-10-01",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": -24.53,
+      "max_drawdown": 34.9,
+      "total_trades": 83,
+      "win_rate": 26.5
+    }
+  }
+}

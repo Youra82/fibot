@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "APT/USDT:USDT",
+    "timeframe": "30m"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 5,
+    "window": 150,
+    "min_upper_touches": 2,
+    "max_break_frac": 0.03,
+    "min_width_atr": 2.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.382,
+    "fib_hi": 0.786,
+    "fib_sl": 0.886,
+    "zone_tol_atr": 0.35,
+    "sl_buf_atr": 0.30000000000000004,
+    "min_rr": 1.5,
+    "max_age_mult": 1.5,
+    "b_near_upper_atr": 1.0,
+    "tp_mode": "upper",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 6,
+    "risk_per_entry_pct": 1.5,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 104.51,
+    "win_rate": 37.3,
+    "total_trades": 110,
+    "max_drawdown": 14.26,
+    "start_date": "2023-04-08",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": 11.85,
+      "max_drawdown": 8.79,
+      "total_trades": 14,
+      "win_rate": 35.7
+    }
+  }
+}

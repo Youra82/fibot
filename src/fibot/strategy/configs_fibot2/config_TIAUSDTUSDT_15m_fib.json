@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "TIA/USDT:USDT",
+    "timeframe": "15m"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 3,
+    "window": 100,
+    "min_upper_touches": 1,
+    "max_break_frac": 0.0,
+    "min_width_atr": 2.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.382,
+    "fib_hi": 0.786,
+    "fib_sl": 1.0,
+    "zone_tol_atr": 0.15000000000000002,
+    "sl_buf_atr": 0.4,
+    "min_rr": 2.0,
+    "max_age_mult": null,
+    "b_near_upper_atr": 1.0,
+    "tp_mode": "upper",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 6,
+    "risk_per_entry_pct": 2.25,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 183.08,
+    "win_rate": 38.9,
+    "total_trades": 180,
+    "max_drawdown": 21.43,
+    "start_date": "2025-04-01",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": -61.63,
+      "max_drawdown": 63.63,
+      "total_trades": 100,
+      "win_rate": 20.0
+    }
+  }
+}

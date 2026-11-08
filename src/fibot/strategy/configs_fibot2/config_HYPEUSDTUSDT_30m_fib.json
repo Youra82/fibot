@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "HYPE/USDT:USDT",
+    "timeframe": "30m"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 5,
+    "window": 100,
+    "min_upper_touches": 1,
+    "max_break_frac": 0.0,
+    "min_width_atr": 2.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.5,
+    "fib_hi": 0.705,
+    "fib_sl": 0.786,
+    "zone_tol_atr": 0.45000000000000007,
+    "sl_buf_atr": 0.25,
+    "min_rr": 1.5,
+    "max_age_mult": 1.5,
+    "b_near_upper_atr": 1.0,
+    "tp_mode": "upper",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 7,
+    "risk_per_entry_pct": 2.5,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 161.23,
+    "win_rate": 30.1,
+    "total_trades": 83,
+    "max_drawdown": 26.06,
+    "start_date": "2025-04-01",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": 7.79,
+      "max_drawdown": 21.7,
+      "total_trades": 44,
+      "win_rate": 29.5
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "NIL/USDT:USDT",
+    "timeframe": "15m"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 3,
+    "window": 150,
+    "min_upper_touches": 1,
+    "max_break_frac": 0.0,
+    "min_width_atr": 3.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.5,
+    "fib_hi": 0.705,
+    "fib_sl": 0.886,
+    "zone_tol_atr": 0.65,
+    "sl_buf_atr": 0.30000000000000004,
+    "min_rr": 1.7000000000000002,
+    "max_age_mult": 3.0,
+    "b_near_upper_atr": 1.0,
+    "tp_mode": "upper",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 8,
+    "risk_per_entry_pct": 2.25,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 125.55,
+    "win_rate": 29.7,
+    "total_trades": 195,
+    "max_drawdown": 29.9,
+    "start_date": "2025-04-01",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": 28.07,
+      "max_drawdown": 21.64,
+      "total_trades": 97,
+      "win_rate": 29.9
+    }
+  }
+}

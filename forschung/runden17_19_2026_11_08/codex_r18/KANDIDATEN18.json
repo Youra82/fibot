@@ -1,0 +1,30 @@
+﻿{
+  "auftrag": 21,
+  "runde": 18,
+  "strategy_file": "strategie.py",
+  "entrypoint": "trades(root: str, variante: str)",
+  "variants": [
+    {"name": "impuls_382", "retracement": 0.382, "development_status": "rejected_negative_expectancy"},
+    {"name": "impuls_618", "retracement": 0.618, "development_status": "rejected_negative_expectancy"}
+  ],
+  "candidate_count": 2,
+  "previous_candidates_per_assignment": 13,
+  "cumulative_candidates_if_both_oos_tested": 15,
+  "recommended_for_live": [],
+  "recommended_for_oos": [],
+  "frozen_for_reproducibility": true,
+  "directions": ["long", "short"],
+  "timeframe": "4h",
+  "shared_parameters": {
+    "range_bars": 20, "atr_simple_bars": 14, "min_body_atr": 1.5,
+    "max_range_atr": 4, "close_extreme_fraction": 0.25,
+    "order_valid_bars": 3, "anchor_stop_buffer_atr": 0.25,
+    "minimum_stop_atr": 1, "extension": 0.618, "timeout_bar_difference": 18
+  },
+  "costs_percent": {"maker": 0.02, "taker": 0.06, "taker_slippage": 0.02, "funding_per_8h": 0.01, "stress_multiplier": 2},
+  "development_search": ["2022-01-01", "2025-06-30"],
+  "development_validation": ["2025-07-01", "2026-05-09"],
+  "bootstrap": {"calendar_block_days": 28, "replications": 10000, "seed": 18021, "interval": "percentile_95", "unit": "all_coins_jointly"},
+  "oos": {"performed": false, "custodian": "Claude", "multiple_testing": "cumulative Holm across all candidates; both supplied variants count if tested"},
+  "development_policy": "Exactly two hypotheses specified before first run; no parameter search or changes after results; no coin selection."
+}

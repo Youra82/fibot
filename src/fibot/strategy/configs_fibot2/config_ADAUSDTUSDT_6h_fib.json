@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "ADA/USDT:USDT",
+    "timeframe": "6h"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 3,
+    "window": 150,
+    "min_upper_touches": 1,
+    "max_break_frac": 0.0,
+    "min_width_atr": 2.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.382,
+    "fib_hi": 0.786,
+    "fib_sl": 0.886,
+    "zone_tol_atr": 0.35,
+    "sl_buf_atr": 0.35000000000000003,
+    "min_rr": 1.6,
+    "max_age_mult": null,
+    "b_near_upper_atr": 1.0,
+    "tp_mode": "upper",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 10,
+    "risk_per_entry_pct": 1.5,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 24.57,
+    "win_rate": 30.6,
+    "total_trades": 36,
+    "max_drawdown": 9.15,
+    "start_date": "2023-04-08",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": -11.05,
+      "max_drawdown": 13.26,
+      "total_trades": 14,
+      "win_rate": 14.3
+    }
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "rule": "VOL1",
+  "criterion": "highest training mean net R; >=200 trades"
+}

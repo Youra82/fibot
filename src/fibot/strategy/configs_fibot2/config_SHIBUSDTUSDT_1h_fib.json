@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "SHIB/USDT:USDT",
+    "timeframe": "1h"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 5,
+    "window": 150,
+    "min_upper_touches": 1,
+    "max_break_frac": 0.0,
+    "min_width_atr": 2.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.382,
+    "fib_hi": 0.786,
+    "fib_sl": 0.886,
+    "zone_tol_atr": 0.75,
+    "sl_buf_atr": 0.4,
+    "min_rr": 1.4,
+    "max_age_mult": null,
+    "b_near_upper_atr": 0.5,
+    "tp_mode": "upper",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 10,
+    "risk_per_entry_pct": 2.5,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 127.98,
+    "win_rate": 30.7,
+    "total_trades": 101,
+    "max_drawdown": 25.09,
+    "start_date": "2024-04-01",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": 98.09,
+      "max_drawdown": 13.22,
+      "total_trades": 33,
+      "win_rate": 39.4
+    }
+  }
+}

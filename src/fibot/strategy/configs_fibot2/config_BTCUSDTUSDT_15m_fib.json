@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "15m"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 5,
+    "window": 150,
+    "min_upper_touches": 1,
+    "max_break_frac": 0.0,
+    "min_width_atr": 3.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.5,
+    "fib_hi": 0.705,
+    "fib_sl": 1.0,
+    "zone_tol_atr": 0.65,
+    "sl_buf_atr": 0.0,
+    "min_rr": 1.2,
+    "max_age_mult": 2.0,
+    "b_near_upper_atr": 0.5,
+    "tp_mode": "upper",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 3,
+    "risk_per_entry_pct": 2.25,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": -7.26,
+    "win_rate": 31.9,
+    "total_trades": 116,
+    "max_drawdown": 24.99,
+    "start_date": "2025-04-01",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": -49.57,
+      "max_drawdown": 50.0,
+      "total_trades": 71,
+      "win_rate": 16.9
+    }
+  }
+}

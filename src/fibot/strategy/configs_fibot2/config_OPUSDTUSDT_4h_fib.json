@@ -1,0 +1,47 @@
+{
+  "market": {
+    "symbol": "OP/USDT:USDT",
+    "timeframe": "4h"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 5,
+    "window": 100,
+    "min_upper_touches": 1,
+    "max_break_frac": 0.0,
+    "min_width_atr": 2.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.382,
+    "fib_hi": 0.786,
+    "fib_sl": 0.886,
+    "zone_tol_atr": 0.55,
+    "sl_buf_atr": 0.4,
+    "min_rr": 2.2,
+    "max_age_mult": null,
+    "b_near_upper_atr": 0.5,
+    "tp_mode": "upper",
+    "candle_limit": 600
+  },
+  "risk": {
+    "leverage": 6,
+    "risk_per_entry_pct": 3.0,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 59.66,
+    "win_rate": 28.9,
+    "total_trades": 38,
+    "max_drawdown": 24.85,
+    "start_date": "2023-04-08",
+    "end_date": "2026-04-01",
+    "capital": 100.0,
+    "oos": {
+      "start_date": "2026-04-01",
+      "end_date": "2026-10-15",
+      "pnl_pct": -2.18,
+      "max_drawdown": 9.17,
+      "total_trades": 9,
+      "win_rate": 22.2
+    }
+  }
+}
