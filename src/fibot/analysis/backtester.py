@@ -15,7 +15,6 @@ import numpy as np
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from fibot.utils.risk_cap import capped_risk_pct
 from fibot.strategy.fibonacci_logic import (
     precompute_indicators, precompute_all_signals,
     # generate_signal kept for live trading in strategy/run.py
@@ -260,7 +259,7 @@ def run_backtest(df: pd.DataFrame, config: dict,
     strategy_cfg    = config.get('strategy', {})
     risk_cfg        = config.get('risk', {})
     leverage        = int(risk_cfg.get('leverage', 10))
-    risk_pct        = capped_risk_pct(risk_cfg.get('risk_per_entry_pct', 1.0))   # wie live (risk_cap.py)
+    risk_pct        = float(risk_cfg.get('risk_per_entry_pct', 1.0))
     swing_lookback  = int(strategy_cfg.get('swing_lookback', 100))
     pivot_order     = max(int(strategy_cfg.get('pivot_left', 5)),
                           int(strategy_cfg.get('pivot_right', 5)), 1)

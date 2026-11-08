@@ -1,5 +1,0 @@
-Lernen T1 (stop_atr <= 1.09): S_K +0.390  A2_K +0.063 -> S
-Lernen T2 (stop_atr <= 1.85): S_K +0.124  A2_K +0.077 -> S
-Lernen T3 (stop_atr <= max): S_K +0.122  A2_K +0.120 -> S
-Pruefen 01-05/2026: dynamischer Stop +0.091 vs S_K +0.091 | Diff +0.000 (95 % +0.000 .. +0.000) | je Coin +0.092 (n=2286) vs +0.092 (n=2286)
-OOS 10.05.-08.11.2026: dynamischer Stop -0.092 vs S_K -0.092 | Diff +0.000 (95 % +0.000 .. +0.000) | je Coin -0.014 (n=3263) vs -0.014 (n=3263)

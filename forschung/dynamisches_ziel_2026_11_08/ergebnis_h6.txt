@@ -1,5 +1,0 @@
-Lernen bis 2025        gehandelt  7975 Ø +0.220 | weggelassen  3617 Ø +0.194 | Summe R mit Tor  +1755.3 vs ohne  +2456.0 (Gewinn je Signal 95 % -0.095..-0.032) | je Coin +0.204 (n=5493) vs +0.200 (n=7663)
-Pruefen 01-05/2026     gehandelt  2544 Ø +0.151 | weggelassen   814 Ø -0.098 | Summe R mit Tor   +383.7 vs ohne   +304.2 (Gewinn je Signal 95 % -0.014..+0.082) | je Coin +0.160 (n=1737) vs +0.092 (n=2286)
-OOS 10.05.-08.11.2026  gehandelt  1155 Ø -0.142 | weggelassen  3396 Ø -0.074 | Summe R mit Tor   -164.0 vs ohne   -416.9 (Gewinn je Signal 95 % -0.088..+0.187) | je Coin -0.186 (n=906) vs -0.014 (n=3263)
-  davon ab 15.10.      gehandelt   115 Ø -0.230 | weggelassen   423 Ø -0.097 | Summe R mit Tor    -26.5 vs ohne    -67.7 (Gewinn je Signal 95 % +0.077..+0.077) | je Coin -0.292 (n=95) vs -0.075 (n=413)
-{'eng': 0.17, 'mittel': 0.1, 'weit': 0.48} <- Anteil offen je Segment im OOS

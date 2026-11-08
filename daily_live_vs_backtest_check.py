@@ -228,35 +228,6 @@ def active_periods(history, key):
     return periods
 
 
-APPROX_NOTES = []
-
-
-def _window_flows(acc, start):
-    """Summe der Ein-/Auszahlungen seit Fensterbeginn (gleiche Erkennung wie live: Exchange.fetch_cash_flows)."""
-    try:
-        from fibot.utils.exchange import Exchange
-        rows = Exchange(acc).fetch_cash_flows(int(pd.Timestamp(start).timestamp() * 1000))
-        if rows and abs(sum(a for _, _, a in rows)) < 1e-9:
-            APPROX_NOTES.append(f'{len(rows)} Kapitalbewegung(en) im Fenster mit Nettosumme 0 -- Positionsgroessen '
-                                f'zwischenzeitlich nicht nachgespielt')
-        return sum(a for _, _, a in rows)
-    except Exception as e:
-        APPROX_NOTES.append(f'Kapitalbewegungen nicht abrufbar ({e})')
-        return 0.0
-
-
-def _live_peak(start):
-    """Konto-Hoechststand des Live-Bots ZUM FENSTERBEGINN aus dem Kontoverlauf-Protokoll (risk_cap.peak_at).
-    Fehlt ein Eintrag, rechnet die Simulation ohne Vorgeschichte -- das wird im Bericht als Naeherung vermerkt.
-    Weitere bekannte Naeherungen: aeltere Positionen nur als Symbolsperre (ohne Margin/offene PnL)."""
-    from fibot.utils.risk_cap import peak_at
-    e = peak_at(int(pd.Timestamp(start).timestamp() * 1000))
-    if not e:
-        APPROX_NOTES.append('Kontoverlauf vor dem Fenster unbekannt -- Risikoanpassung ab Fensterbeginn genaehert')
-        return None
-    return float(e['peak'])
-
-
 def simulate(history, start, end, capital, carry):
     """Ein Portfolio-Lauf wie der Livebot: gemeinsames Kapital, dieselben Konfluenz-Plaene
     (Limit-Einstieg, SL/TP), Fuellungen nur waehrend der Team-Zugehoerigkeit, offene Positionen
@@ -285,8 +256,7 @@ def simulate(history, start, end, capital, carry):
         sd[key] = {'symbol': sym, 'timeframe': tf, 'df': df, 'config': cfg,
                    'fine_df': LazyFineData(sym, fine_tf) if fine_tf else None, 'active_periods': periods}
     blocks = [(f"{c['symbol'][:-4]}/USDT:USDT", c['entry_time'], c['exit_time']) for c in carry]
-    res = run_portfolio_simulation(capital, sd, start.strftime('%Y-%m-%d'), end_s, symbol_blocks=blocks,
-                                   start_peak=_live_peak(start)) or {}   # Kontoverlauf zum Fensterbeginn
+    res = run_portfolio_simulation(capital, sd, start.strftime('%Y-%m-%d'), end_s, symbol_blocks=blocks) or {}
 
     def as_utc(x):
         x = pd.Timestamp(x)
@@ -564,13 +534,6 @@ def run_check(days, send, history_path):
     # Kontostand zu Fensterbeginn: heutiges Equity ohne offene uPnL und ohne Ergebnis der Trades im Fenster
     realized_now = (equity or 25.0) - sum(float(p['unrealizedPL']) for p in open_pos)
     start_capital = realized_now - sum(t['pnl'] for t in live if t['exit_time'] is not None)
-    flows_net = _window_flows(acc, start)                     # Ein-/Auszahlungen im Fenster (Codex Runde 3)
-    if flows_net:
-        start_capital -= flows_net
-        APPROX_NOTES.append(f'Kapitalbewegungen im Fenster ({flows_net:+.2f} USDT) aus dem Startkapital herausgerechnet, '
-                            f'im Simulator nicht zeitgenau nachgespielt')
-    if carry:
-        APPROX_NOTES.append('aeltere Positionen nur als Symbolsperre simuliert (ohne Margin und offene PnL)')
     sim, data_flags = simulate(hist, start, end, start_capital, carry)
     rows, extra, missing, unknown = compare(live, sim, history_path)
     # Kopfzeile/Uebersicht nur ueber bewertete Trades (gleiches Team bekannt) -- sonst stuende
@@ -580,8 +543,6 @@ def run_check(days, send, history_path):
     order_flags = positions_without_sl(open_pos, plans) + data_flags + check_orders(open_pos, plans)
     team_lines = portfolio_lines(hist, start, end)
     msg = build_message(items, unknown, order_flags, live_eval, equity, days, team_lines)
-    if APPROX_NOTES:
-        msg += '\n\nHinweis (Naeherung): ' + '; '.join(sorted(set(APPROX_NOTES)))
     print(msg)
 
     keys = sorted({k for e in hist for k in e['team'] if pd.Timestamp(e['valid_from']) <= end})

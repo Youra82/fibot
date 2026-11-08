@@ -43,14 +43,12 @@ echo "   9) Korrelation der Strategien"
 echo "  10) Kelly-Sizing"
 echo "  11) Drawdown-Dauer"
 echo "  12) Wochentag & Tageszeit"
-echo "  13) Trading-Edge: Erwartung, Wachstum und Varianz"
-echo "  14) Dynamische Edge-Kurve             (interaktive HTML, Marktphasen, Unsicherheit)"
 echo ""
 echo "   0) Alle Analysen nacheinander"
 echo ""
-read -p "Auswahl (0-14): " MODE
+read -p "Auswahl (0-12): " MODE
 MODE="${MODE//[$'\r\n ']/}"
-if ! [[ "$MODE" =~ ^([0-9]|1[0-4])$ ]]; then
+if ! [[ "$MODE" =~ ^([0-9]|1[0-2])$ ]]; then
     echo -e "${RED}Ungueltige Auswahl. Abbruch.${NC}"
     exit 1
 fi

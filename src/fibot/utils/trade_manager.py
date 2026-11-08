@@ -16,8 +16,6 @@ import pandas as pd
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from fibot.utils import risk_cap
-from fibot.utils.risk_cap import capped_risk_pct, live_risk_pct, max_risk_pct
 from fibot.utils.exchange import Exchange
 from fibot.utils.telegram import send_message, send_photo
 from fibot.strategy.fibonacci_logic import generate_signal, signal_summary, FibSignal
@@ -149,7 +147,7 @@ def housekeeper_routine(exchange: Exchange, symbol: str, tracker_path: str, logg
         # Tracker leeren falls ein abgeschlossener Trade drin steht
         tracker_data = read_tracker(tracker_path)
         if tracker_data.get('status') in ('open', 'pending_entry'):
-            write_tracker(tracker_path, tracker_after_close(tracker_data))
+            write_tracker(tracker_path, {})
             logger.info(f"Housekeeper: Tracker für {symbol} geleert.")
 
         logger.info(f"Housekeeper: {symbol} ist sauber.")
@@ -163,24 +161,14 @@ def housekeeper_routine(exchange: Exchange, symbol: str, tracker_path: str, logg
 # Position sizing
 # ---------------------------------------------------------------------------
 
-def tracker_after_close(tracker_data: dict) -> dict:
-    """Tracker nach einer Schliessung: offene Daten weg, verbrauchte Impulse (consumed_b) + aktueller Impuls bleiben --
-    sonst koennte derselbe Impuls erneut gehandelt werden (Codex Runde 3: Notschliessung leerte den Tracker)."""
-    consumed = list(tracker_data.get('consumed_b') or [])
-    if tracker_data.get('b_ts') and tracker_data['b_ts'] not in consumed:
-        consumed.append(tracker_data['b_ts'])
-    return {'consumed_b': consumed[-30:], 'notified_b_ts': tracker_data.get('notified_b_ts')}
-
-
 def calc_position_size(balance: float, risk_pct: float, entry: float,
                         sl: float, leverage: int, logger,
-                        min_contracts: float = 0.0, free_balance: float = None) -> float:
+                        min_contracts: float = 0.0) -> float:
     """
     Risikobased Sizing:
       risk_amount = balance * risk_pct/100
       contracts   = risk_amount / |entry - sl|
-    Liegt die Menge unter dem Exchange-Minimum, entfaellt der Trade (KEIN Anheben -- das wuerde die
-    Risiko-Obergrenze aus risk_cap.py ueberschreiten; Codex-Review 08.11.2026).
+    Wird auf Exchange-Minimum angehoben wenn nötig (wie vbot).
     Capped by leverage, margin check, minimum notional.
     """
     risk_amount = balance * risk_pct / 100
@@ -190,10 +178,10 @@ def calc_position_size(balance: float, risk_pct: float, entry: float,
         return 0.0
     contracts = risk_amount / price_risk
 
+    # Auf Exchange-Minimum anheben wenn nötig (statt Trade zu skippen)
     if min_contracts > 0 and contracts < min_contracts:
-        logger.warning(f"Contracts {contracts:.6f} < Exchange-Minimum {min_contracts}: wuerde Risiko-Obergrenze "
-                       f"ueberschreiten. Kein Trade.")
-        return 0.0
+        logger.info(f"Contracts {contracts:.6f} < Exchange-Minimum {min_contracts}, hebe auf Minimum an.")
+        contracts = min_contracts
 
     # Cap: max notional = balance * leverage
     max_notional = balance * leverage
@@ -205,11 +193,10 @@ def calc_position_size(balance: float, risk_pct: float, entry: float,
         logger.warning(f"Notional {notional:.2f} USDT < Minimum {MIN_NOTIONAL_USDT} USDT. Kein Trade.")
         return 0.0
 
-    # Margin-Check: isolierte Margin darf das FREIE Guthaben nicht uebersteigen (Standard: balance)
+    # Margin-Check: isolierte Margin darf Kapital nicht übersteigen
     margin = notional / leverage
-    free = balance if free_balance is None else free_balance
-    if margin > free:
-        logger.warning(f"Margin {margin:.2f} USDT > freies Guthaben {free:.2f} USDT. Kein Trade.")
+    if margin > balance:
+        logger.warning(f"Margin {margin:.2f} USDT > Kapital {balance:.2f} USDT. Kein Trade.")
         return 0.0
 
     logger.info(f"Size: {contracts:.6f} Contracts | Notional: {notional:.2f} USDT | Risiko: {risk_amount:.2f} USDT")
@@ -443,42 +430,6 @@ def _send_fib_chart(df: pd.DataFrame, signal: FibSignal, symbol: str, timeframe:
 # Main trade cycle
 # ---------------------------------------------------------------------------
 
-def observe_account(exchange, logger) -> None:
-    """Kontostand + Kapitalbewegungen in den Kontoverlauf (risk_cap) schreiben -- in jedem Lauf, unabhaengig von
-    Einstiegen. Fehler blockieren den Lauf nicht (Positionen werden weiter verwaltet); ohne gueltigen Kontoverlauf
-    entsteht spaeter aber keine neue Order (live_risk_pct wirft dann)."""
-    if not risk_cap.dynamic_settings()['enabled']:
-        return
-    try:
-        version = risk_cap.state_version()
-        since = risk_cap.flows_since()
-        if since is None:                                   # allererste Beobachtung: Startpunkt = heutiger Kontostand
-            equity = exchange.fetch_equity_usdt()
-            if equity > 0:
-                risk_cap.observe_equity(equity, [], expected_version=None)
-            return
-        # Kontoauszug -> Kontostand -> Kontoauszug: nur wenn beide Auszuege gleich sind, passen Kontostand und
-        # Kapitalbewegungen zeitlich zusammen (Codex Runde 3, Punkt 2). Sonst keine Fortschreibung in diesem Lauf.
-        first = exchange.fetch_cash_flows(since)
-        equity = exchange.fetch_equity_usdt()
-        second = exchange.fetch_cash_flows(since)
-        if equity <= 0:
-            logger.warning("Kontoverlauf: Kontostand nicht abrufbar -- keine Beobachtung.")
-            return
-        if {f[0] for f in first} != {f[0] for f in second}:
-            logger.info("Kontoverlauf: Kapitalbewegung waehrend der Beobachtung -- naechster Lauf.")
-            return
-        # optimistisch: hat ein anderer Prozess inzwischen fortgeschrieben, ist dieser Snapshot veraltet -> verwerfen
-        peak = risk_cap.observe_equity(equity, first, expected_version=version)
-        if peak is None:
-            logger.info("Kontoverlauf: anderer Prozess hat gerade abgeglichen -- dieser Snapshot wird verworfen.")
-            return
-        if first:
-            logger.info(f"Kontoverlauf: Kapitalbewegungen abgeglichen, Hoechststand {peak:.2f}")
-    except Exception as e:
-        logger.error(f"Kontoverlauf-Beobachtung fehlgeschlagen ({e}) -- Hoechststand bleibt unveraendert.")
-
-
 def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, logger):
     """
     Called once per cron tick for one symbol/timeframe.
@@ -489,7 +440,7 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     timeframe = params['market']['timeframe']
     leverage  = int(params['risk'].get('leverage', 10))
     margin_mode = params['risk'].get('margin_mode', 'isolated')
-    risk_pct  = capped_risk_pct(params['risk'].get('risk_per_entry_pct', 1.0))   # Obergrenze (risk_cap.py)
+    risk_pct  = float(params['risk'].get('risk_per_entry_pct', 1.0))
     min_score = float(params['strategy'].get('min_signal_score', 4.0))
     candle_limit = int(params['strategy'].get('candle_limit', 300))
 
@@ -498,7 +449,6 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     tracker_path = get_tracker_path(symbol, timeframe)
 
     logger.info(f"--- FiBot Cycle: {symbol} {timeframe} ---")
-    observe_account(exchange, logger)
 
     # --- Set leverage & margin ---
     exchange.set_margin_mode(symbol, margin_mode)
@@ -678,7 +628,7 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
                     time.sleep(2)
                     remaining = exchange.fetch_open_positions(symbol)
                     if not remaining:
-                        write_tracker(tracker_path, tracker_after_close(read_tracker(tracker_path)))
+                        write_tracker(tracker_path, {})
                         logger.info(f"Position {symbol} geschlossen — Tracker geleert.")
                     else:
                         logger.error(f"Notschliessung {symbol}: Position noch offen nach Market-Order — Tracker bleibt!")
@@ -737,29 +687,21 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         return
 
     # --- Get balance ---
-    balance = exchange.fetch_balance_usdt()              # freies Guthaben: nur fuer die Margin-Pruefung
-    equity = exchange.fetch_equity_usdt()                # Gesamt-Kontostand: Risikobetrag und Kontoverlauf
-    if balance <= 0 or equity <= 0:
+    balance = exchange.fetch_balance_usdt()
+    if balance <= 0:
         logger.error("Kontostand 0 oder nicht abrufbar.")
         return
 
     # --- Calc size ---
     min_amount = exchange.markets.get(symbol, {}).get('limits', {}).get('amount', {}).get('min', 0.0)
-    logger.info(f"Risiko: Config {params['risk'].get('risk_per_entry_pct', 1.0)} % | Obergrenze {max_risk_pct()} % | "
-                f"nach Obergrenze {risk_pct} %")
-    risk_pct = live_risk_pct(risk_pct, equity, logger)           # dynamisch nach Kontoverlauf (risk_cap.py)
     contracts = calc_position_size(
-        equity, risk_pct, signal.entry_price, signal.sl_price, leverage, logger,
-        min_contracts=min_amount, free_balance=balance)
+        balance, risk_pct, signal.entry_price, signal.sl_price, leverage, logger,
+        min_contracts=min_amount)
     if contracts <= 0:
         return
 
-    sized_contracts = contracts
     contracts_str = exchange.amount_to_precision(symbol, contracts)
     contracts = float(contracts_str)
-    if contracts > sized_contracts * (1 + 1e-10):
-        logger.warning(f"Precision-Rundung erhoeht die Menge ({sized_contracts:.6f} -> {contracts:.6f}) und damit das Risiko. Kein Trade.")
-        return
 
     # Notional-Check nach Precision-Rundung (Rundung kann unter 5 USDT fallen)
     notional_after_round = contracts * signal.entry_price
@@ -767,10 +709,16 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         logger.warning(f"Notional {notional_after_round:.2f} USDT < Minimum {MIN_NOTIONAL_USDT} USDT nach Precision-Rundung. Kein Trade.")
         return
 
-    # Rundung darf weder unter das Exchange-Minimum fallen noch die Menge (und damit das Risiko) erhoehen
-    if (min_amount > 0 and contracts < min_amount) or contracts <= 0:
-        logger.warning(f"Nach Precision-Rundung {contracts:.6f} < Minimum {min_amount}. Kein Trade.")
-        return
+    # Sicherheitsnetz: amount_to_precision rundet ggf. unter Exchange-Minimum
+    if min_amount > 0 and contracts < min_amount:
+        logger.info(f"Nach Precision-Rundung {contracts:.6f} < Minimum {min_amount} — hebe erneut an.")
+        contracts = min_amount
+        contracts_str = exchange.amount_to_precision(symbol, contracts)
+        contracts = float(contracts_str)
+        notional = contracts * signal.entry_price
+        if notional < MIN_NOTIONAL_USDT:
+            logger.warning(f"Notional {notional:.2f} USDT < Minimum {MIN_NOTIONAL_USDT} USDT nach Korrektur. Kein Trade.")
+            return
 
     # --- Place entry (Limit at signal price, consistent with backtester) ---
     entry_side = 'buy' if signal.direction == 'long' else 'sell'
@@ -837,21 +785,13 @@ def _confluence_size(exchange: Exchange, symbol: str, plan: dict, risk_pct: floa
     risk = abs(plan['limit'] - plan['sl'])
     if equity <= 0 or risk <= 0:
         return 0.0
-    risk_pct = live_risk_pct(risk_pct, equity, logger)          # dynamisch nach Kontoverlauf (risk_cap.py)
     contracts = equity * risk_pct / 100 / risk
     max_by_margin = free * leverage * 0.95 / plan['limit']
     if contracts > max_by_margin:
         logger.warning(f"Margin-Kappung: {contracts:.6f} -> {max_by_margin:.6f} Contracts (frei {free:.2f} USDT)")
         contracts = max_by_margin
     min_amount = exchange.markets.get(symbol, {}).get('limits', {}).get('amount', {}).get('min', 0.0) or 0.0
-    if contracts < min_amount:
-        logger.warning('Mindestmenge wuerde Risiko-/Marginbudget ueberschreiten. Keine Order.')
-        return 0.0
-    sized_contracts = contracts
-    contracts = float(exchange.amount_to_precision(symbol, contracts))
-    if contracts < min_amount or contracts <= 0 or contracts > sized_contracts * (1 + 1e-10):
-        logger.warning('Praezisionsrundung verletzt Menge oder Risiko-/Marginbudget. Keine Order.')
-        return 0.0
+    contracts = float(exchange.amount_to_precision(symbol, max(contracts, min_amount)))
     if contracts * plan['limit'] < MIN_NOTIONAL_USDT:
         logger.warning(f"Notional {contracts * plan['limit']:.2f} USDT < {MIN_NOTIONAL_USDT} USDT. Keine Order.")
         return 0.0
@@ -911,26 +851,18 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     symbol    = params['market']['symbol']
     timeframe = params['market']['timeframe']
     leverage  = int(params['risk'].get('leverage', 5))
-    risk_pct  = capped_risk_pct(params['risk'].get('risk_per_entry_pct', 1.0))   # Obergrenze (risk_cap.py)
-    logger.info(f"Risiko: Config {params['risk'].get('risk_per_entry_pct', 1.0)} % | Obergrenze {max_risk_pct()} % | "
-                f"nach Obergrenze {risk_pct} % (Kontoverlauf-Faktor folgt beim Sizing)")
+    risk_pct  = float(params['risk'].get('risk_per_entry_pct', 1.0))
     bot_token = telegram_config.get('bot_token', '')
     chat_id   = telegram_config.get('chat_id', '')
     tracker_path = get_tracker_path(symbol, timeframe)
     tracker = read_tracker(tracker_path)
     tf_seconds = exchange.exchange.parse_timeframe(timeframe)
     # Impuls, zu dem schon eine Telegram-Nachricht ging (bleibt beim Nachziehen erhalten)
-    # Impulse, die schon gefuellt wurden: nie erneut handeln (Doppel-Einstieg-Bug, z. B. PYTH 4x in 45 Min.)
-    keep = {'notified_b_ts': tracker.get('notified_b_ts'), 'consumed_b': list(tracker.get('consumed_b') or [])}
-
-    def _consume(b_ts):
-        if b_ts and b_ts not in keep['consumed_b']:
-            keep['consumed_b'] = (keep['consumed_b'] + [b_ts])[-30:]
+    keep = {'notified_b_ts': tracker.get('notified_b_ts')}
 
     # 1) Position war offen und ist jetzt weg -> Reste aufraeumen
     if tracker.get('status') == 'open':
         logger.info("Position geschlossen (SL/TP). Raeume Rest-Orders auf.")
-        _consume(tracker.get('b_ts'))
         exchange.cancel_all_orders_for_symbol(symbol)
         write_tracker(tracker_path, keep)
         send_message(bot_token, chat_id, f"FiBot ({symbol} {timeframe}): Position geschlossen.")
@@ -964,87 +896,30 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         except Exception as e:
             logger.warning(f"Pending-Order nicht abrufbar: {e}")
         status = (order or {}).get('status')
-        if status not in ('open', 'closed', 'canceled', 'cancelled', 'expired', 'rejected'):
-            # Status unbekannt/unerwartet: alte Order koennte noch liegen -> keine Aenderung, kein neuer Einstieg
-            logger.error(f"Orderstatus {status!r} unbekannt -- Tracker bleibt, kein neuer Einstieg in diesem Lauf.")
-            return
-        if status in ('canceled', 'cancelled', 'expired', 'rejected') and float((order or {}).get('filled') or 0) > 0:
-            try:
-                still_open = exchange.fetch_open_positions(symbol, strict=True)
-            except Exception as e:
-                logger.error(f"Teilgefuellte Order: Positionsstatus unklar ({e}) -- Tracker bleibt.")
-                return
-            if still_open:
-                logger.warning("Order teilweise gefuellt und beendet -- Position wird im naechsten Lauf verwaltet.")
-                return
-            # Teilfuellung wurde bereits wieder geschlossen: Impuls verbraucht, Tracker aufloesen (Codex Runde 5)
-            logger.info("Teilgefuellte Order bereits wieder geschlossen -- Impuls verbraucht.")
-            _consume(tracker.get('b_ts'))
-            exchange.cancel_all_orders_for_symbol(symbol)
-            write_tracker(tracker_path, keep)
-            tracker = {}
-            status = 'erledigt'
         if status == 'closed':
             # gefuellt und (ohne Position) bereits wieder geschlossen -> Impuls verbraucht
             logger.info("Entry wurde gefuellt und Position ist schon wieder zu (SL/TP zwischen zwei Laeufen).")
             send_message(bot_token, chat_id, f"FiBot ({symbol} {timeframe}): Entry gefuellt und Position bereits geschlossen.")
-            _consume(tracker.get('b_ts'))
             exchange.cancel_all_orders_for_symbol(symbol)
             write_tracker(tracker_path, keep)
             tracker = {}
         elif status == 'open':
             same = (plan is not None and tracker.get('candle_ts') == current_candle
                     and tracker.get('direction') == plan['direction']
-                    and abs(float(tracker.get('entry_price', 0)) - plan['limit']) <= 1e-9 * max(1.0, plan['limit'])
-                    and abs(float(tracker.get('sl_price', 0)) - plan['sl']) <= 1e-9 * max(1.0, plan['sl'])
-                    and abs(float(tracker.get('tp1_price', 0)) - plan['tp']) <= 1e-9 * max(1.0, plan['tp']))
-            if same:
-                # Menge gegen das aktuelle Risikobudget pruefen (Obergrenze kann seit dem Platzieren gesunken sein)
-                try:
-                    eq_now = exchange.fetch_equity_usdt()
-                    if eq_now <= 0:
-                        raise ValueError('Kontostand nicht abrufbar')
-                    budget = eq_now * live_risk_pct(risk_pct, eq_now) / 100 / abs(plan['limit'] - plan['sl'])
-                except Exception as e:
-                    budget = 0.0           # nicht pruefbar -> sicherheitshalber stornieren, keine Ersatzorder in diesem Lauf
-                    logger.warning(f"Risikobudget fuer liegende Order nicht pruefbar ({e}) -- Order wird storniert.")
-                if float(tracker.get('contracts', 0)) > budget * (1 + 1e-6):
-                    logger.warning(f"Liegende Order ({tracker.get('contracts')}) > Risikobudget ({budget:.6f}): wird ersetzt.")
-                    same = False
+                    and abs(float(tracker.get('entry_price', 0)) - plan['limit']) <= 1e-9 * max(1.0, plan['limit']))
             if same:
                 logger.info(f"Limit-Order fuer {current_candle} liegt bereits @ {plan['limit']:.6f}.")
                 return
             logger.info("Neue Kerze bzw. neuer Plan: wartende Order wird storniert.")
             try:
-                res = exchange.cancel_order(tracker.get('order_id'), symbol)
+                exchange.cancel_order(tracker.get('order_id'), symbol)
             except Exception as e:
-                # Storno unklar -> KEINE Ersatzorder (sonst koennten zwei Orders gefuellt werden); Tracker bleibt,
-                # der naechste Lauf gleicht den tatsaechlichen Orderstatus erneut ab.
-                logger.error(f"Storno fehlgeschlagen ({e}) -- keine Ersatzorder in diesem Lauf.")
-                return
-            # Nach JEDEM Storno abgleichen: Teilfuellung oder Fuellung -> keine (volle) Ersatzorder (Codex Runde 4)
-            try:
-                after = exchange.fetch_order(tracker.get('order_id'), symbol) or {}
-            except Exception as e:
-                logger.error(f"Orderstatus nach Storno unklar ({e}) -- keine Ersatzorder in diesem Lauf.")
-                return
-            filled = max(float((res or {}).get('filled') or 0) if isinstance(res, dict) else 0.0,
-                         float(after.get('filled') or 0))
-            if filled > 0:
-                logger.warning(f"Order beim Storno bereits mit {filled} gefuellt -- keine Ersatzorder, Position wird verwaltet.")
-                return
-            if after.get('status') not in ('canceled', 'cancelled', 'expired', 'rejected'):
-                # auch 'open': Storno noch nicht bestaetigt -> alte Order koennte noch gefuellt werden (Codex Runde 5)
-                logger.warning(f"Order nach Storno im Status {after.get('status')!r} -- keine Ersatzorder, naechster Lauf gleicht ab.")
-                return
+                logger.warning(f"Storno fehlgeschlagen: {e}")
             cancelled_prev = dict(tracker)
             write_tracker(tracker_path, keep)
         else:
             write_tracker(tracker_path, keep)
 
-    if plan is not None and plan['b_ts'] in keep['consumed_b']:
-        logger.info(f"Impuls {plan['b_ts'][:16]} wurde bereits gehandelt -- kein erneuter Einstieg.")
-        plan = None
     updates = _order_updates_enabled()
     if plan is None:
         if not filtered_reason:
@@ -1074,7 +949,7 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         'status': 'pending_entry', 'strategy': 'confluence', 'order_id': str(order.get('id', '')),
         'candle_ts': current_candle, 'direction': plan['direction'], 'entry_price': plan['limit'],
         'sl_price': plan['sl'], 'tp1_price': plan['tp'], 'contracts': contracts,
-        'a_ts': plan['a_ts'], 'b_ts': plan['b_ts'], 'notified_b_ts': plan['b_ts'], 'consumed_b': keep['consumed_b'],
+        'a_ts': plan['a_ts'], 'b_ts': plan['b_ts'], 'notified_b_ts': plan['b_ts'],
         'timestamp': datetime.utcnow().isoformat(),
     })
     if keep['notified_b_ts'] == plan['b_ts']:

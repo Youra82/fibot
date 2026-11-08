@@ -1,4 +1,0 @@
-Configs mit Kelly>0: 236 von 407 | Median halbes Kelly 2.00%
-Entwicklung 2025               Kontrolle 1 %: 34->   266.49 DD  91.2 % n= 4186 R +0.149 | halbes Kelly: 34->  2535.15 DD  86.9 % n= 2515 R +0.346
-Entwicklung 01.01.-09.05.2026  Kontrolle 1 %: 34->     8.62 DD  94.9 % n= 2209 R -0.009 | halbes Kelly: 34->   132.61 DD  77.2 % n= 1159 R +0.275
-OOS 26W                        Kontrolle 1 %: 34->     0.07 DD  99.9 % n= 3522 R -0.197 | halbes Kelly: 34->     0.72 DD  99.0 % n= 1887 R -0.071

@@ -2,9 +2,8 @@
 
 Ein regelbasierter Trading-Bot für Bitget USDT-Futures. Er macht das, was ein Chart-Trader von Hand einzeichnet:
 **Impuls finden, Trendkanal ziehen, Fibonacci-Retracement darüberlegen.** Gekauft (bzw. verkauft) wird nur dort,
-wo die **Kanallinie durch die Fibonacci-Zone läuft** (je Config, meist 38,2–78,6 %). Dafür liegt die Limit-Order
-schon vorher an genau diesem Punkt. Das Risiko je Trade ist auf **1 %** gedeckelt und sinkt automatisch, wenn das
-Konto unter seinem Höchststand liegt.
+wo die **Kanallinie und das 61,8-%-Level zusammentreffen**. Dafür liegt die Limit-Order schon vorher an genau
+diesem Punkt.
 
 Kein maschinelles Lernen. Die Regeln sind reine Preisstruktur, und Live-Bot und Backtest benutzen dafür
 **dieselbe Funktion**.
@@ -12,7 +11,7 @@ Kein maschinelles Lernen. Die Regeln sind reine Preisstruktur, und Live-Bot und 
 > **Disclaimer:** Experimentelle Software, ausschließlich zu Forschungszwecken. Der Handel mit Kryptowährungen
 > birgt erhebliche finanzielle Risiken. Nutzung auf eigene Gefahr.
 
-<p align="center"><img src="docs/img/konfluenz.svg" alt="Fibo-Kanal-Konfluenz: Impuls A–B, steigender Kanal, Limit-Order dort, wo die untere Kanallinie die Fib-Zone 38,2–78,6 % kreuzt, SL unter 88,6 %" width="100%"></p>
+<p align="center"><img src="docs/img/konfluenz.svg" alt="Fibo-Kanal-Konfluenz: Impuls A–B, steigender Kanal, Limit-Order am Schnittpunkt von 61,8 % und unterer Kanallinie" width="100%"></p>
 
 ---
 
@@ -22,8 +21,8 @@ Kein maschinelles Lernen. Die Regeln sind reine Preisstruktur, und Live-Bot und 
 - [Ablauf im Überblick](#ablauf-im-überblick)
 - [Strategie im Detail](#strategie-im-detail)
 - [Live-Betrieb](#live-betrieb)
-- [Risikosteuerung: 1 % und Kontoverlauf](#risikosteuerung-1--und-kontoverlauf)
 - [Status und Forschungsergebnisse](#status-und-forschungsergebnisse)
+- [Marktphasen: wann die Strategie funktioniert](#marktphasen-wann-die-strategie-funktioniert)
 - [Trendfilter: nur in Richtung des übergeordneten Trends](#trendfilter-nur-in-richtung-des-übergeordneten-trends)
 - [Architektur](#architektur)
 - [Konfiguration](#konfiguration)
@@ -43,16 +42,15 @@ Kein maschinelles Lernen. Die Regeln sind reine Preisstruktur, und Live-Bot und 
 |---|---|---|
 | **1 Impuls** | letztes bestätigtes Swing-Tief **A** und das höchste Hoch **B** danach | Das ist die Bewegung, deren Rücksetzer gehandelt wird. |
 | **2 Kanal** | untere Linie durch Pivot-Tiefs, obere parallel durch Pivot-Hochs | Dort haben Käufer bzw. Verkäufer schon mehrfach reagiert. |
-| **3 Konfluenz** | untere Kanallinie in die Zukunft verlängern: Wann kreuzt sie die Fib-Zone (je Config, meist 38,2–78,6 %)? | Zwei unabhängige Unterstützungen an einem Preis. |
+| **3 Konfluenz** | untere Kanallinie in die Zukunft verlängern: Wann kreuzt sie die Zone 50–61,8 %? | Zwei unabhängige Unterstützungen an einem Preis. |
 | **3b Trendfilter** | nur handeln, wenn der 4-fache Timeframe **und** die Tageskerze des Coins in Handelsrichtung zeigen | Ein Rücksetzer mit dem übergeordneten Trend prallt eher ab ([Details](#trendfilter-nur-in-richtung-des-übergeordneten-trends)). |
 | **4 Order** | Limit-Order **vorab** an diesem Preis, SL und TP direkt angehängt | Einstieg am Level statt irgendwo in der Zone. |
-| **5 Ausstieg** | TP an der oberen Kanallinie (oder an B), SL unter dem SL-Level (meist 88,6 %) bzw. unter der Linie | Strukturell begründet; je Config Mindest-Chance-Risiko 1,0–2,9 |
-| **6 Größe** | Risiko je Einstieg ≤ 1 % des Kontos, weniger bei Abstand zum Konto-Höchststand | Begrenzt den Drawdown, wenn die Edge nachlässt ([Details](#risikosteuerung-1--und-kontoverlauf)). |
+| **5 Ausstieg** | TP an der oberen Kanallinie, SL unter 78,6 % bzw. unter der Linie | Strukturell begründet, typisch 2–5 R Chance-Risiko |
 
 Short-Setups laufen spiegelbildlich im fallenden Kanal. Technisch rechnet der Bot die Long-Logik auf der
 gespiegelten Kursreihe (Preis → −Preis), damit beide Seiten garantiert dieselben Regeln haben.
 
-<p align="center"><img src="docs/img/beispiel_trade.png" alt="Echter Live-Trade: TRUMP 15m Short am 17.10.2026 im fallenden Kanal, Limit 1,7863, SL 1,7967, Take-Profit 1,7381 an der unteren Kanallinie, +5,05 USDT" width="100%"></p>
+<p align="center"><img src="docs/img/beispiel_trade.png" alt="Echtes Beispiel: AAVE 4h Long im steigenden Kanal, Fill an der Konfluenz, Take-Profit an der oberen Kanallinie" width="100%"></p>
 
 ---
 
@@ -65,10 +63,9 @@ gespiegelten Kursreihe (Preis → −Preis), damit beide Seiten garantiert diese
    beide Ergebnisse stehen in der Config.
 2. **`show_results.sh`** bietet Einzel-Analyse, manuelles Portfolio, automatisches Portfolio und interaktive
    Charts mit eingezeichnetem Kanal.
-3. **Auto-Optimizer** stellt einmal pro Woche (mittwochs) aus allen Configs das beste Team zusammen und schreibt
-   es in `settings.json`. Er rechnet dabei mit demselben 1-%-Deckel wie live.
-4. **Live:** `master_runner.py` läuft alle 15 Minuten und führt jede aktive Strategie aus. Vorher hält der Bot
-   den Kontostand fest; daraus ergibt sich der Kontoverlauf-Faktor für die Positionsgröße.
+3. **Auto-Optimizer** stellt einmal pro Woche aus allen Configs das beste Team zusammen und schreibt es in
+   `settings.json`.
+4. **Live:** `master_runner.py` läuft alle 15 Minuten und führt jede aktive Strategie aus.
 5. **Tagesbericht:** Einmal täglich vergleicht `daily_live_vs_backtest_check.py` jeden Live-Trade mit dem
    Backtest und schickt das Ergebnis per Telegram.
 
@@ -113,8 +110,7 @@ der jüngere.
 ### 4 — Konfluenz und Limit-Order
 
 Für die kommende Kerze wird die untere Kanallinie projiziert. Liegt dieser Preis in der Zone
-`fib_hi` … `fib_lo` (Code-Standard 61,8 % … 50 %; die Live-Configs nutzen meist 78,6 % … 38,2 %; jeweils
-± `zone_tol_atr`) und der letzte Schlusskurs darüber, liegt dort
+`fib_hi` … `fib_lo` (Standard 61,8 % … 50 %, ± `zone_tol_atr`) und der letzte Schlusskurs darüber, liegt dort
 die Limit-Order. In der nächsten Kerze ist die Linie weitergewandert, und die Order wird nachgezogen.
 Optional verfällt ein Setup nach `max_age_mult` × (B − A) Kerzen.
 
@@ -125,7 +121,6 @@ Optional verfällt ein Setup nach `max_age_mult` × (B − A) Kerzen.
 | **SL** | min(`fib_sl`-Level, Kanallinie) − `sl_buf_atr` × ATR |
 | **TP** | obere Kanallinie (`tp_mode: upper`) oder Hoch B (`tp_mode: b`) |
 | **Filter** | (TP − Entry) / (Entry − SL) ≥ `min_rr` |
-| **Mindest-Stop (optional)** | Setups mit Stop näher als `min_sl_atr` × ATR werden verworfen. Standard 0 = aus; in keiner Live-Config gesetzt, weil die Verbesserung nicht nachgewiesen ist ([Forschung](forschung/edge_verbesserung_2026_11_08/ERGEBNIS.md)) |
 
 ### 6 — Konservative Backtest-Ausführung
 
@@ -155,19 +150,14 @@ Bei jedem Lauf (alle 15 Minuten) und für jede aktive Strategie:
    `presetStopSurplusPrice`). Beide aktiviert Bitget im Moment des Fills. Die Position ist also ab der ersten
    Sekunde geschützt, auch wenn der Fill zwischen zwei Läufen passiert.
 4. **Neue Kerze:** Die alte Order wird storniert und auf die neue Kanalposition nachgezogen. Bei gleicher Kerze
-   und gleichem Plan bleibt sie liegen. Eine Ersatzorder gibt es erst, wenn Bitget das Storno **bestätigt** hat
-   und nichts gefüllt wurde. Ist der Status unklar oder die alte Order (teilweise) gefüllt, bleibt der Tracker
-   stehen und der nächste Lauf gleicht ab. So entsteht nie eine zweite Position aus demselben Setup.
+   und gleichem Plan bleibt sie liegen.
 5. **Position offen:** Self-Repair prüft SL/TP, auch in Bitgets Kategorie „Position-TP/SL“, und setzt fehlende
    Orders neu. Der Overshoot-Check schließt notfalls per Market.
-6. **Geschlossen:** Der Bot räumt Rest-Orders auf. Der Impuls B wird im Tracker als verbraucht gespeichert
-   (`consumed_b`). Es gibt keinen zweiten Einstieg in denselben Impuls, auch dann nicht, wenn Fill und Ausstieg
-   zwischen zwei Läufen passiert sind oder eine Teilfüllung schon wieder geschlossen ist.
+6. **Geschlossen:** Der Bot räumt Rest-Orders auf. Da B laut Kerzenhistorie verbraucht ist, gibt es keinen
+   zweiten Einstieg in denselben Impuls.
 
-**Positionsgröße:** Risiko = min(`risk_per_entry_pct`, 1 %) × Kontoverlauf-Faktor × **Gesamtkapital**, wie im
-Portfolio-Backtest ([Risikosteuerung](#risikosteuerung-1--und-kontoverlauf)). Die Margin wird nur auf das freie
-Guthaben gekappt. Positionen unter 5 USDT Notional werden nicht eröffnet. Liegt die Menge unter dem
-Börsenminimum oder würde die Rundung sie vergrößern, entfällt der Trade (keine Aufrundung über das Risiko hinaus).
+**Positionsgröße:** Risiko = `risk_per_entry_pct` × **Gesamtkapital**, wie im Backtest. Die Margin wird nur auf
+das freie Guthaben gekappt. Positionen unter 5 USDT Notional werden nicht eröffnet.
 
 **Aufräumen nach Portfolio-Wechsel:** Vor den Strategien storniert `master_runner.py` kontoweit Entry-Orders auf
 Coins, die nicht mehr in `active_strategies` stehen. Sonst könnten sie später ohne Steuerung gefüllt werden.
@@ -178,51 +168,6 @@ Live-Plan (600 Kerzen Historie) mit dem Backtest-Plan (volle Historie). Zusätzl
 Live-Zyklus (legen / liegen lassen / aufräumen) mit einer Mock-Exchange.
 [`tests/test_trend_filter.py`](tests/test_trend_filter.py) prüft, dass die Trendentscheidung live (nur die
 zuletzt geladenen Kerzen) und im Backtest (volle Historie) auf echten Kerzen gleich ausfällt.
-
----
-
-## Risikosteuerung: 1 % und Kontoverlauf
-
-Seit 08.11.2026 aktiv. Code: [`src/fibot/utils/risk_cap.py`](src/fibot/utils/risk_cap.py). Live-Bot,
-Einzel-Backtest, Portfolio-Simulator, Auto-Optimizer und Tagesbericht benutzen dieselben Funktionen.
-
-| Stufe | Regel | Einstellung (`live_trading_settings`) |
-|---|---|---|
-| **Obergrenze** | Risiko je Einstieg höchstens **1 %**, egal welchen Wert der Optimizer einer Config gibt (dort 0,5–3 %) | `max_risk_per_entry_pct` (fehlt = 1.0; `null`/0 = aus) |
-| **Kontoverlauf** | Risiko × max(0,25; 1 − Drawdown / 30 %). Mit jedem neuen Konto-Hoch wieder voll | `dynamic_risk` (fehlt = an mit `{"enabled": true, "dd_full": 0.30, "floor": 0.25}`; `null` = aus) |
-
-Beispiel: Liegt das Konto 15 % unter seinem Höchststand, riskiert jeder neue Einstieg 0,5 %; ab 22,5 % Abstand nur
-noch 0,25 %. Erreicht das Konto ein neues Hoch, gilt wieder 1 %.
-
-![Kontoverlauf-Faktor und Drawdown je Zeitraum mit Config-Risiko, 1 % und 1 % + Kontoverlauf](docs/img/risikosteuerung.png)
-
-**Wie der Bot den Höchststand führt:**
-
-- Zu Beginn jedes Laufs liest `observe_account()` das Gesamtkapital (inklusive offener Positionen) und schreibt
-  den Höchststand unter einer Dateisperre fort: `artifacts/db/equity_peak.json`, Verlauf in
-  `artifacts/db/equity_history.jsonl`.
-- **Ein- und Auszahlungen** aus dem Bitget-Kontoauszug verschieben den Höchststand mit und zählen nicht als
-  Gewinn oder Verlust. Der Bot schreibt nur, wenn die Buchungen vor und nach der Kontostandsabfrage gleich
-  sind. Laufen zwei Strategien gleichzeitig, verwirft der langsamere Lauf seinen veralteten Stand.
-- Die Strategien lesen den Faktor nur. Vor der ersten Beobachtung gilt Faktor 1,0. Ist die Zustandsdatei
-  beschädigt, bricht der Lauf ab, statt mit falscher Größe zu handeln.
-
-```bash
-.venv/bin/python3 -m fibot.utils.risk_cap zeigen                    # Höchststand, Abstand, aktueller Faktor
-.venv/bin/python3 -m fibot.utils.risk_cap reset --kontostand 60 --grund "Neustart nach Umstellung"
-```
-
-**Was das bringt und was nicht:** Im Pool der 38 Configs (ein gemeinsames Konto, vereinfachte Rechnung,
-[`forschung/kontostand_2026_11_08`](forschung/kontostand_2026_11_08)) lag der Drawdown mit dem früheren
-Config-Risiko in jedem Zeitraum bei 38–60 %, mit 1 % bei 21–34 % und mit Kontoverlauf bei 16–25 %. Seit dem
-Live-Start am 15.10. wären es 48 %, 30 % und 21 % gewesen. In starken Phasen fällt die Rendite dafür
-kleiner aus. Die Regel macht keine verlierende Strategie profitabel; sie begrenzt den Schaden, solange die
-Edge schwach ist. Ein Filter, der die Strategie selbst „dynamisch“ an Markt oder Kontokurve anpasst, hat
-die Prüfung nicht bestanden ([Status](#status-und-forschungsergebnisse)).
-
-Der Entwurf wurde in sechs Runden von Codex geprüft; alle Einwände (Sperre, Ein-/Auszahlungen, Storno-Status,
-Teilfüllungen, verbrauchte Impulse) sind behoben und getestet. Protokoll:
-[`forschung/codex_reviews_2026_11_08`](forschung/codex_reviews_2026_11_08).
 
 ---
 
@@ -239,37 +184,71 @@ Ehrlich dokumentiert, damit niemand mehr erwartet, als belegt ist:
 | Wochenauswahl gegen Zufall (24.10.2026) | keine stabile Vorhersagekraft; kurze Rückblicke schaden |
 | Ausstiegsregeln Einstand / Teilschluss (28.10.2026, vorregistriert) | Trefferquote bis 52 %, Ertrag −70 %, **nicht bestanden** |
 | Trendfilter HTF + Tag (28.10.2026, vorregistriert) | Prüfzeitraum +0,39 statt +0,25 R/Trade, **bestanden, aktiv**; vor April umgekehrt |
-| 18 Varianten Einstieg/Stop/Ziel (08.11.2026, Codex, eingefroren) | Auswahl = Kontrolle; Stop ≥ 2 ATR im Vergleich +0,30 statt +0,22 R, Intervall umfasst null, **nicht übernommen** ([Ergebnis](forschung/edge_verbesserung_2026_11_08/ERGEBNIS.md)) |
-| Dynamisches Ziel / Stop je Lage (08.11.2026, H1–H6, vorregistriert) | im OOS 10.05.–08.11. je Trade nie besser als das feste Strukturziel, **nicht bestanden** ([`dynamisches_ziel_2026_11_08`](forschung/dynamisches_ziel_2026_11_08)) |
-| Halbes Kelly je Config (08.11.2026) | OOS 26 Wochen −0,07 R/Trade, Konto fast leer, **nicht bestanden** ([`kelly_2026_11_08`](forschung/kelly_2026_11_08)) |
-| Tägliche Config-Auswahl nach Rückblick 14/30 Tage (08.11.2026) | nicht besser als zufällige Auswahl, **nicht bestanden** ([`taeglich_2026_11_08`](forschung/taeglich_2026_11_08)) |
-| Freigabe nach BTC-Trend je Config (08.11.2026) | aussortierte Trades OOS fast so gut wie behaltene, **nicht bestanden** ([`freigabe_2026_11_08`](forschung/freigabe_2026_11_08)) |
-| Kontokurven-Filter / Drawdown-Bremse (08.11.2026) | Kurvenfilter ohne Nutzen; Bremse senkt den Drawdown in jedem Zeitraum (mit 1 %: 21–34 % → 16–25 %), **übernommen** als [Risikosteuerung](#risikosteuerung-1--und-kontoverlauf) ([`kontostand_2026_11_08`](forschung/kontostand_2026_11_08)) |
 
-Vorregistrierungen (mit SHA256 vor dem OOS-Blick eingefroren), Code und Trades:
-[`forschung/konfluenz/`](forschung/konfluenz/) ([`PREREG.md`](forschung/konfluenz/PREREG.md)),
-[`forschung/trendfilter/`](forschung/trendfilter/) und die Ordner `forschung/*_2026_11_08/`.
+Vorregistrierungen, Code und Trades: [`forschung/konfluenz/`](forschung/konfluenz/) ([`PREREG.md`](forschung/konfluenz/PREREG.md))
+und [`forschung/trendfilter/`](forschung/trendfilter/).
 
-**Stand 08.11.2026:** 38 Konfluenz-Configs auf 15m bis 4h; aktiv ist ein Team von 17 Strategien, das der
-Optimizer jeden Mittwoch neu wählt (ein Timeframe je Coin, höchstens 9 offene Positionen).
+**Stand 28.10.2026:** 38 Coin/Timeframe-Configs erfüllen im Out-of-Sample ab 01.04.2026 alle Kriterien
+(PnL ≥ 10 %, MaxDD ≤ 30 %, ≥ 10 Trades, In-Sample positiv). Der wöchentliche Portfolio-Optimizer wählt daraus
+jeden Mittwoch ein Team von meist 15 bis 20 Strategien, einen Timeframe je Coin.
 
-**Live seit 15.10.2026:** 63 Trades, Konto 58,6 → 33,7 USDT (−42 %). Der Tagesbericht findet dieselben
-Einstiege wie der Backtest; der Bot handelt also so, wie er soll. Die Verluste kommen aus der Strategie selbst:
-Auch der Backtest verliert im selben Zeitraum.
+**Live seit 15.10.2026:** 37 Trades, davon 5 Gewinner; Konto 58,6 → 41,1 USDT (−30 %). Der Tagesbericht findet
+dabei dieselben Einstiege wie der Backtest (zuletzt 20 von 21). Der Bot handelt also korrekt; die Verluste kommen
+aus der Strategie, die im Backtest im selben Zeitraum ebenso verlor. Nachgespielt seit 08.04.2026 mit
+Wochenauswahl (ohne Trendfilter): +87 % bis 15.10. bei bis zu −45 % Drawdown, danach −26 %.
 
-**Warum:** Die Konfluenz-Edge ist seit Mai 2026 verfallen. Bis April trugen vor allem Setups mit **engem Stop**
-den Gewinn. Seit Mai verlieren genau diese am stärksten:
+Mit **einem** Parametersatz für alle Coins hat die Regel bisher keine messbare Kante. Die Configs sind deshalb
+**je Coin/Timeframe optimiert** und nach ihrem Out-of-Sample-Ergebnis ausgewählt. Wer so auswählt, findet auch
+Zufallssieger: Die Backtest-Zahlen bis 15.10. sind geschönt, erst danach sind die Daten wirklich ungesehen.
+Deshalb mit kleinem Risiko live laufen lassen und den täglichen Live-vs-Backtest-Bericht im Blick behalten.
 
-![Ø R je Trade nach Stop-Abstand und Zeitraum: enge Stopps bis April stark positiv, seit Mai stark negativ](docs/img/edge_verfall.png)
+---
 
-Kein geprüfter Filter, kein dynamisches Ziel, kein Kelly-Sizing und keine tägliche Neuauswahl hat diesen
-Verfall im ungesehenen Zeitraum ausgeglichen (Tabelle oben). Übernommen wurde deshalb nur, was den Schaden
-begrenzt: der 1-%-Deckel und der Kontoverlauf-Faktor.
+## Marktphasen: wann die Strategie funktioniert
 
-**Einordnung:** Mit **einem** Parametersatz für alle Coins hat die Regel keine messbare Kante. Die Configs sind
-je Coin/Timeframe optimiert und nach ihrem Out-of-Sample-Ergebnis ausgewählt. Wer so auswählt, findet auch
-Zufallssieger; Backtest-Renditen der heutigen Auswahl sind deshalb überzeichnet. Maßstab ist der tägliche
-Live-vs-Backtest-Bericht.
+Ausgewertet wurden alle 38 Konfluenz-Configs mit ihren Backtest-Trades von 04/2023 bis 26.10.2026
+(4 972 Trades, In-Sample und Out-of-Sample). Jeder Trade wurde der BTC-Marktphase am Vortag zugeordnet.
+
+![BTC-Tageskerzen mit Marktphasen und fibot-Ergebnis](docs/img/marktphasen_btc.png)
+
+**So liest man das Bild:**
+
+- **Kerzen:** BTC-Tageskerzen, ein Jahr pro Zeile. Blau = Tag im Plus, rot = Tag im Minus. Gestrichelt: SMA200.
+- **Hintergrund:** BTC-Marktphase.
+  - **Hellblau = günstig:** BTC in 30 Tagen über +3 % oder unter −10 %. Im Schnitt etwa **+0,42 R pro Trade**.
+  - **Beige = ungünstig:** BTC seitwärts oder leicht fallend (−10 % bis +3 % in 30 Tagen). Nur etwa **+0,13 R pro Trade**.
+- **Farbstreifen unter jedem Jahr:** Ergebnis des fibot im Backtest über die letzten 30 Tage.
+  Kräftiges Blau = gut verdient, Rot = Verlust.
+
+**R pro Trade nach BTC-Bewegung der letzten 30 Tage:**
+
+| BTC in 30 Tagen | alle Trades | nur OOS | Trefferquote OOS |
+|---|---|---|---|
+| unter −10 % (Crash oder starke Korrektur) | +0,43 | +0,59 | 39 % |
+| −10 bis −3 % | +0,18 | +0,17 | 27 % |
+| ±3 % (seitwärts) | +0,10 | +0,03 | 28 % |
+| +3 bis +10 % | +0,42 | +0,29 | 33 % |
+| über +10 % (Rally) | +0,41 | +0,30 | 33 % |
+
+**Was man sieht:**
+
+- Die Strategie verdient vor allem, wenn BTC sich kräftig bewegt. Ob es hoch oder runter geht, ist fast egal.
+  Die besten Zeiträume:
+  - Nov.–Dez. 2024: Rally von 69k auf 100k.
+  - März 2025: Korrektur von 97k auf 76k.
+  - Juni 2023 und Mai–Juni 2025.
+- Seitwärtsphasen sind die Schwachstelle, etwa Sommer 2023, Januar 2024 und August bis Oktober 2025.
+  In ihnen liegen fast alle roten Stellen im Streifen.
+- Bulle oder Bär ist weniger entscheidend: +0,28 bis +0,34 R pro Trade.
+  - Shorts laufen in beiden Märkten gut.
+  - Longs bringen im Bärenmarkt kaum etwas (+0,08 R).
+- Niedrige BTC-Volatilität ist besser als hohe: +0,34 gegenüber +0,25 R pro Trade.
+- Live-Start am 15.10.2026: BTC lief um 80k seitwärts bis leicht fallend, also in der ungünstigen Phase.
+  Das erklärt den Drawdown der ersten Live-Wochen.
+
+**Einschränkung:** Die Phasen wurden im Nachhinein bestimmt. Ein BTC-Trendfilter (S4/S6/ltbbot-Regel)
+hat im Test geschadet. Ein Filter „nicht handeln, wenn BTC seitwärts läuft“ wäre eine neue Hypothese und
+müsste erst vorab festgelegt auf ungesehenen Daten bestehen, bevor er eingebaut wird.
 
 ---
 
@@ -288,7 +267,7 @@ Gegen den Trend legt der Live-Bot keine Order; eine schon liegende Order wird st
 
 <p align="center"><img src="docs/img/trendfilter.svg" alt="Trendfilter: Long-Setup im 1h-Kanal, 4h-Kerzen über EMA50 und Tageskerzen über SMA50, dann wird die Order gelegt; Tabelle aller Fälle" width="100%"></p>
 
-**Wirkung im Backtest mit wöchentlicher Portfolio-Auswahl (Stand 28.10.2026, damaliges Config-Risiko 1–3 %):**
+**Wirkung im Backtest mit wöchentlicher Portfolio-Auswahl:**
 
 ![Kontoverlauf mit und ohne Trendfilter](docs/img/trendfilter_vergleich.png)
 
@@ -327,14 +306,9 @@ fibot/
 ├── cron_setup.sh                    # Cron alle 15 Minuten
 ├── settings.json                    # aktive Strategien + Auto-Optimizer
 │
-├── docs/
-│   ├── make_illustrations.py        # Schemas (SVG): Konfluenz, Ablauf, Live-Zyklus, Trendfilter
-│   ├── make_status_plots.py         # Risikosteuerung + Edge-Verfall (PNG) aus den Forschungsdaten
-│   ├── TRADING_EDGE.md              # Analyse 13: Erwartung, Wachstum, Varianz
-│   └── DYNAMISCHE_EDGE.md           # Analyse 14: dynamische Edge-Kurve
+├── docs/                            # README-Illustrationen (make_illustrations.py)
 ├── forschung/konfluenz/             # Vorregistrierung, Tests, Strategiesuche
 ├── forschung/trendfilter/           # Trendfilter + Ausstiegsregeln: Vorregistrierung, Ergebnis, Skripte
-├── forschung/*_2026_11_08/          # Tests vom 08.11.: Ziele, Kelly, Auswahl, Kontostand, Codex-Reviews
 ├── daten/compare_live_vs_backtest.py
 │
 └── src/fibot/
@@ -351,12 +325,10 @@ fibot/
     │   ├── portfolio_simulator.py   # gemeinsames Kapital, Margin-Check, chronologisch
     │   ├── interactive_chart.py     # Plotly-Chart mit Kanal je Trade
     │   ├── show_results.py          # Modi 1–4
-    │   ├── analysis_suite.py        # Analysen für run_analysis.sh
-    │   └── edge_*.py                # Analyse 13/14: Edge-Mathematik, Zustand, Dashboard
+    │   └── analysis_suite.py        # Analysen für run_analysis.sh
     └── utils/
         ├── exchange.py              # Bitget-Wrapper (Limit + angehängtes SL/TP, Position-TP/SL)
-        ├── trade_manager.py         # Live-Zyklus: confluence_cycle(), Trendfilter, observe_account()
-        ├── risk_cap.py              # 1-%-Deckel, Kontoverlauf-Faktor, Höchststand (geteilt Live/Backtest)
+        ├── trade_manager.py         # Live-Zyklus inkl. confluence_cycle() und Trendfilter-Prüfung
         ├── team_history.py          # Teamhistorie für den Tagesbericht
         ├── confluence_chart.py      # Chart für Telegram und show_chart.py
         └── telegram.py
@@ -371,12 +343,10 @@ fibot/
 ```json
 {
   "live_trading_settings": {
-    "max_open_positions": 9,
-    "max_risk_per_entry_pct": 1.0,
-    "dynamic_risk": { "enabled": true, "dd_full": 0.30, "floor": 0.25 },
+    "max_open_positions": 8,
     "active_strategies": [
-      { "symbol": "TRUMP/USDT:USDT", "timeframe": "15m", "leverage": 4,
-        "margin_mode": "isolated", "risk_per_entry_pct": 1.75, "active": true }
+      { "symbol": "NEAR/USDT:USDT", "timeframe": "1h", "leverage": 5,
+        "margin_mode": "isolated", "risk_per_entry_pct": 1.0, "active": true }
     ]
   },
   "optimization_settings": {
@@ -396,16 +366,12 @@ fibot/
 ```
 
 `active_strategies` schreibt normalerweise der Auto-Optimizer, bzw. `show_results.sh` Modus 3 auf Nachfrage.
-`max_risk_per_entry_pct`, `dynamic_risk`, `trend_filter` und `live_vs_backtest_check_settings` dürfen fehlen;
-dann gelten die gezeigten Standardwerte.
 
 | Einstellung | Wirkung |
 |---|---|
 | `start_capital: "auto"` | Der Optimizer rechnet mit dem **aktuellen Kontostand** von Bitget, Fallback 100 USDT. So fallen Trades unter dem Bitget-Minimum (5 USDT) wie live weg. Alternativ eine feste Zahl. |
 | `start_date: "oos"` | Jede Strategie wird ab ihrem eigenen OOS-Beginn bewertet. |
 | `objective: "pnl"` | Höchstes Endkapital mit MaxDD ≤ `constraints.max_drawdown_pct`; `"calmar"` = bestes PnL/DD-Verhältnis. |
-| `max_risk_per_entry_pct` | Obergrenze für das Risiko je Einstieg in % (Standard 1.0). Gilt live, im Backtest und im Optimizer. `null` oder 0 = kein Deckel. |
-| `dynamic_risk` | Kontoverlauf-Faktor: volle Größe am Höchststand, linear weniger bis `floor` bei `dd_full` Abstand. `null` oder `"enabled": false` = aus. |
 | `trend_filter.enabled` | Trendfilter an/aus für Live, Backtest, Optimizer und Tagesbericht. Fehlt der Block, ist er an. |
 | `live_vs_backtest_check_settings` | Tagesbericht: an/aus, Rückblick in Tagen, Stunde (UTC) des Versands. |
 
@@ -416,28 +382,25 @@ durch den wöchentlichen Lauf oder sofort mit `.venv/bin/python3 auto_optimizer_
 
 ```json
 {
-  "market":   { "symbol": "TRUMP/USDT:USDT", "timeframe": "15m" },
+  "market":   { "symbol": "AAVE/USDT:USDT", "timeframe": "4h" },
   "strategy": {
     "type": "confluence",
     "pivot_k": 5, "window": 150, "touch_atr": 0.3,
-    "max_break_frac": 0.0, "min_width_atr": 2.0, "min_upper_touches": 1,
-    "fib_lo": 0.5, "fib_hi": 0.705, "fib_sl": 0.886,
-    "zone_tol_atr": 0.45, "sl_buf_atr": 0.2, "min_rr": 2.7,
-    "max_age_mult": 3.0, "b_near_upper_atr": 0.5, "tp_mode": "upper",
+    "max_break_frac": 0.0, "min_width_atr": 3.0, "min_upper_touches": 2,
+    "fib_lo": 0.5, "fib_hi": 0.618, "fib_sl": 0.786,
+    "zone_tol_atr": 0.25, "sl_buf_atr": 0.2, "min_rr": 1.5,
+    "max_age_mult": 2.0, "b_near_upper_atr": 0.5, "tp_mode": "upper",
     "candle_limit": 600
   },
-  "risk": { "leverage": 4, "risk_per_entry_pct": 1.75, "margin_mode": "isolated" },
+  "risk": { "leverage": 5, "risk_per_entry_pct": 1.0, "margin_mode": "isolated" },
   "_backtest": {
-    "start_date": "2025-04-01", "end_date": "2026-04-01",
-    "pnl_pct": 52.33, "max_drawdown": 23.82, "total_trades": 90, "win_rate": 31.1,
+    "start_date": "2023-04-08", "end_date": "2026-04-01",
+    "pnl_pct": 0.0, "max_drawdown": 0.0, "total_trades": 0, "win_rate": 0.0,
     "oos": { "start_date": "2026-04-01", "end_date": "2026-10-15",
-             "pnl_pct": 37.26, "max_drawdown": 12.46, "total_trades": 49, "win_rate": 32.7 }
+             "pnl_pct": 0.0, "max_drawdown": 0.0, "total_trades": 0, "win_rate": 0.0 }
   }
 }
 ```
-
-Die echte Live-Config von TRUMP 15m (aus dem Beispiel-Trade oben). Ihre Backtest-Zahlen stammen von vor dem
-Edge-Verfall und vor der Risikosteuerung; live riskiert sie 1 % statt 1,75 %.
 
 | Parameter | Bereich im Optimizer | Bedeutung |
 |---|---|---|
@@ -454,8 +417,7 @@ Edge-Verfall und vor der Risikosteuerung; live riskiert sie 1 % statt 1,75 %.
 | `max_age_mult` | aus / 1,5 / 2 / 3 | Setup verfällt nach × (B − A) Kerzen |
 | `tp_mode` | upper / b | TP an oberer Kanallinie oder an B |
 | `leverage` | 3–10 | nur Margin, nicht Risiko |
-| `risk_per_entry_pct` | 0,5–3,0 | Risiko pro Trade in % des Kapitals; überall auf `max_risk_per_entry_pct` (1 %) gedeckelt |
-| `min_sl_atr` | nicht optimiert | Setups mit Stop näher als x ATR verwerfen; 0 = aus (Standard) |
+| `risk_per_entry_pct` | 0,5–3,0 | Risiko pro Trade in % des Kapitals |
 
 Configs ohne `"type": "confluence"` laufen weiter mit der alten Fibo-Logik. `update.sh` verschiebt sie beim
 Wechsel nach `configs_alt_fibo/`.
@@ -538,23 +500,9 @@ Leere Eingaben bei Coin oder Timeframe brechen die Pipeline sofort ab.
 | 10 | Kelly-Sizing | Passt das Risiko pro Trade zur Trefferquote? |
 | 11 | Drawdown-Dauer | Wie lange dauern Durststrecken? |
 | 12 | Wochentag & Tageszeit | Gibt es Zeitmuster? |
-| 13 | Trading-Edge: Erwartung, Wachstum und Varianz | Reichen die tatsächlichen Netto-Auszahlungen, und wie verändert das Risiko den Kapitalpfad? |
-| 14 | Dynamische Edge-Kurve (HTML) | Wo liegen Gesamtpunkt, jüngste Trades und vergleichbare Marktphasen relativ zum Netto-Ausgleich? |
 | 0 | alle nacheinander | |
 
 Abgefragt werden: aktives Portfolio oder alle Configs, Zeitraum, Kapital. Berichte landen in `artifacts/analysis/`.
-
-Analyse 13 ergänzt Trefferquote und CRV um tatsächliches Netto-R, Kostenverlust,
-geometrisches Wachstum, Drawdown-Erholung und ein Kalenderblock-Modell der
-Unsicherheit. Sie verändert keine Handelsregeln oder Risikoeinstellungen.
-Herleitung, Bezug zum Video „The Math Every Trader Gets Wrong“ und Grenzen:
-[`docs/TRADING_EDGE.md`](docs/TRADING_EDGE.md).
-
-Analyse 14 erzeugt `artifacts/analysis/edge_dashboard.html`: eine interaktive,
-offline nutzbare Ausgleichskurve mit rollierenden Punkten, Kalenderblock-
-Unsicherheit und zeitpunktgerechten BTC-Tagesregimen. Neue Daten erfordern
-erneutes Generieren. Die Ansicht verändert keine Handelsfreigabe; Details
-und Aufruf stehen in [`docs/DYNAMISCHE_EDGE.md`](docs/DYNAMISCHE_EDGE.md).
 
 ### 2c. Aktuelles Chart per Telegram — `show_chart.py`
 
@@ -609,11 +557,11 @@ fällig (Zeitplan aus `settings.json`, Standard Mittwoch 03:00, Mindestabstand 7
 show_results.py --mode 3 --auto --from oos
   ├─ alle Configs backtesten: jede Strategie ab IHREM OOS-Beginn (_backtest.oos.start_date) bis heute
   │    (Kanal-Vorlauf wird mitgeladen, Trades zählen erst ab OOS-Beginn; ohne OOS-Angabe ab 2025-01-01;
-  │     Trendfilter und Risiko-Deckel 1 % wie live)
+  │     Trendfilter wie live)
   ├─ Greedy-Portfolio: objective "pnl" = max. Endkapital mit MaxDD ≤ constraints.max_drawdown_pct
   │    (Calmar-Greedy blieb früher nach 4 Strategien bei 12,7 % DD stehen, obwohl 9 bei 21,8 % DD
   │     deutlich mehr brachten — ein lokales Optimum)
-  ├─ active_strategies in settings.json schreiben (Risiko je Strategie bereits gedeckelt)
+  ├─ active_strategies in settings.json schreiben
   └─ Telegram: Portfolio, Equity-Chart (HTML), Trades (Excel)
 ```
 
@@ -637,10 +585,7 @@ Portfolio-Simulator und schickt eine Telegram-Nachricht mit Bild und HTML-Übers
 - abweichende Ausstiege, verwaiste oder doppelte SL/TP-Orders, offene Positionen ohne Stop-Loss.
 
 Welche Strategien zu welchem Zeitpunkt aktiv waren, kommt aus der Teamhistorie
-(`artifacts/db/team_history.jsonl`, `show_team_history.py`). Der Simulator startet mit dem Konto-Höchststand,
-den der Live-Bot zu Fensterbeginn kannte (`equity_history.jsonl`), und rechnet Ein- und Auszahlungen aus dem
-Bitget-Kontoauszug ein. Damit hat er denselben Kontoverlauf-Faktor wie live. Wo das nur näherungsweise geht
-(zum Beispiel Ein- und Auszahlungen mit Summe null im Fenster), steht ein Hinweis am Ende der Nachricht.
+(`artifacts/db/team_history.jsonl`, `show_team_history.py`).
 
 ```bash
 .venv/bin/python3 daily_live_vs_backtest_check.py --force          # sofort, nur Ausgabe
@@ -666,10 +611,7 @@ Configs. Ausgegeben wird die Korrelation der kumulierten Kurven und der Wochen-P
 
 | Test | Prüft |
 |---|---|
-| `tests/test_confluence.py` | Live-Plan == Backtest-Plan je Kerze, Live-Zyklus mit Mock-Exchange (Storno-Status wie Bitget), API-Fehler bricht ab, kein zweiter Einstieg in einen verbrauchten Impuls |
-| `tests/test_risk_cap.py` | 1-%-Deckel: Einstellung lesen, ungültige Werte, kein Aufrunden, Live-Größe und Simulator rechnen gleich |
-| `tests/test_risk_dynamik.py`, `tests/test_risk_dynamik2.py` | Kontoverlauf-Faktor, Höchststand mit Dateisperre und Versionsprüfung, Ein-/Auszahlungen, Storno- und Teilfüllungsfälle, Tagesbericht-Startwert |
-| `tests/test_edge_*.py` | Analyse 13/14: Edge-Mathematik, Zustand, Bericht und Dashboard |
+| `tests/test_confluence.py` | Live-Plan == Backtest-Plan je Kerze, Live-Zyklus mit Mock-Exchange, API-Fehler bricht ab |
 | `tests/test_trend_filter.py` | Trendfilter: kein Blick in die Zukunft, Regel, Live == Backtest auf echten Kerzen, keine Order gegen den Trend |
 | `tests/test_daily_live_vs_backtest_check.py` | Tagesbericht: Zuordnung Live ↔ Backtest, Ursachen |
 | `tests/test_team_history.py` | Teamhistorie |
@@ -679,8 +621,6 @@ Configs. Ausgegeben wird die Korrelation der kumulierten Kurven und der Wochen-P
 | `tests/test_load_ohlcv.py` | Datenladen, Cache, Lücken |
 
 Der Live-Order-Test setzt eine echte, sehr kleine Order auf Bitget. Überspringen mit `FIBOT_SKIP_LIVE=1`.
-`tests/conftest.py` leitet Höchststand und Verlauf in ein Testverzeichnis um; die Tests berühren den echten
-Kontostand-Zustand nicht.
 
 ---
 
@@ -689,9 +629,8 @@ Kontostand-Zustand nicht.
 ```bash
 tail -f logs/cron.log
 tail -n 100 logs/fibot_AAVEUSDTUSDT_4h.log
-cat artifacts/tracker/fibot_AAVEUSDTUSDT_4h.json   # pending_entry / open, Limit, SL, TP, Impuls A/B, consumed_b
+cat artifacts/tracker/fibot_AAVEUSDTUSDT_4h.json   # pending_entry / open, Limit, SL, TP, Impuls A/B
 .venv/bin/python3 src/fibot/strategy/run.py --symbol AAVE/USDT:USDT --timeframe 4h
-.venv/bin/python3 -m fibot.utils.risk_cap zeigen    # Konto-Höchststand, Abstand, aktuelles Risiko je Einstieg
 ```
 
 Telegram meldet:
@@ -717,15 +656,11 @@ Die Meldungen zum Nachziehen und zum Storno lassen sich mit `"telegram_order_upd
 
 ## Wichtige Regeln
 
-- `secret.json`, `artifacts/tracker/`, `artifacts/db/` und `.last_optimization_run` sind nicht in Git.
+- `secret.json`, `artifacts/tracker/` und `.last_optimization_run` sind nicht in Git.
 - Pro Coin nur ein Timeframe aktiv. Bitget führt Positionen pro Coin, nicht pro Timeframe.
 - Neue Configs immer über `run_pipeline.sh` erzeugen und vor dem Live-Schalten mit `show_results.sh`
   (Modus 1 oder 3) prüfen.
-- Risiko je Einstieg höchstens 1 %, mit Kontoverlauf-Faktor. Den Deckel nicht anheben, solange die Live-Ergebnisse
-  negativ sind (siehe [Status](#status-und-forschungsergebnisse)).
-- `risk_cap reset` nur bewusst nutzen (zum Beispiel nach einem Neustart mit anderem Kapital). Ein Reset setzt den
-  Faktor sofort wieder auf voll.
-- Neue Filter oder Regeln erst vorab festlegen (Vorregistrierung) und auf ungesehenen Daten prüfen, dann einbauen.
+- Risiko klein halten, bis Live-Ergebnisse den Backtest bestätigen (siehe [Status](#status-und-forschungsergebnisse)).
 
 ---
 

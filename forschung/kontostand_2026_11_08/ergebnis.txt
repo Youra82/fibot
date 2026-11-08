@@ -1,5 +1,0 @@
-2024                   | Kontrolle 1 %:   402.85 (DD 68.5 %, n=1954) | E1 Kurvenfilter:   150.97 (DD 55.3 %, n=1377) | E2 DD-Bremse:    56.25 (DD 39.0 %, n=1977) | E3 beides:    44.11 (DD 34.4 %, n=1389)
-2025                   | Kontrolle 1 %:   338.96 (DD 91.1 %, n=4053) | E1 Kurvenfilter:   117.36 (DD 92.9 %, n=2403) | E2 DD-Bremse:   243.64 (DD 52.9 %, n=4694) | E3 beides:   115.08 (DD 53.1 %, n=2700)
-01.01.-09.05.2026      | Kontrolle 1 %:    22.99 (DD 87.5 %, n=1791) | E1 Kurvenfilter:    22.96 (DD 76.9 %, n=1042) | E2 DD-Bremse:    35.63 (DD 58.9 %, n=2258) | E3 beides:    41.35 (DD 39.1 %, n=1246)
-OOS 10.05.-08.11.2026  | Kontrolle 1 %:     1.03 (DD 98.2 %, n=2713) | E1 Kurvenfilter:     7.06 (DD 87.5 %, n=1195) | E2 DD-Bremse:    12.15 (DD 77.5 %, n=3231) | E3 beides:    24.68 (DD 53.2 %, n=1381)
-ab 15.10.2026          | Kontrolle 1 %:    19.07 (DD 49.6 %, n=339) | E1 Kurvenfilter:    19.07 (DD 49.6 %, n=339) | E2 DD-Bremse:    25.52 (DD 27.6 %, n=406) | E3 beides:    25.52 (DD 27.6 %, n=406)
