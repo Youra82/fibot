@@ -1,3 +1,11 @@
+<p align="center">
+  <img src="https://img.shields.io/badge/%F0%9F%9A%A7%20BAUSTELLE-in%20%C3%9Cberarbeitung-orange?style=for-the-badge" alt="Baustelle – in Überarbeitung">
+</p>
+
+> 🚧 **Baustelle:** Dieser Bot wird gerade grundlegend überarbeitet. Die Fibo-Kanal-Konfluenz hat sich seit dem
+> 15.10.2026 live und in der Prüfung vom 08.11.2026 (über 20 vorregistrierte Tests auf 241 Coins) nicht bewährt.
+> Eine neue Strategie ist in Forschung. Die Beschreibung unten zeigt den bisherigen Stand.
+
 # fibot — Fibo-Kanal-Konfluenz Trading Bot
 
 Ein regelbasierter Trading-Bot für Bitget USDT-Futures. Er macht das, was ein Chart-Trader von Hand einzeichnet:
