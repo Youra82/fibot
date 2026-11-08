@@ -4,7 +4,8 @@
 
 > 🚧 **Baustelle:** Dieser Bot wird gerade grundlegend überarbeitet. Die Fibo-Kanal-Konfluenz hat sich seit dem
 > 15.10.2026 live und in der Prüfung vom 08.11.2026 (über 20 vorregistrierte Tests auf 241 Coins) nicht bewährt.
-> Eine neue Strategie ist in Forschung. Die Beschreibung unten zeigt den bisherigen Stand.
+> Die neue Richtung ist ein **Wick-Kauf an Mehrfach-Konfluenz** (Fib-Marke + runde Zahl + höhere Zeitebene),
+> siehe [Forschungsstand 08.11.2026](#forschungsstand-08112026-neue-richtung). Die Beschreibung darunter zeigt den bisherigen Stand.
 
 # fibot — Fibo-Kanal-Konfluenz Trading Bot
 
@@ -25,6 +26,7 @@ Kein maschinelles Lernen. Die Regeln sind reine Preisstruktur, und Live-Bot und 
 
 ## Inhalt
 
+- [Forschungsstand 08.11.2026: neue Richtung](#forschungsstand-08112026-neue-richtung)
 - [Grundidee](#grundidee)
 - [Ablauf im Überblick](#ablauf-im-überblick)
 - [Strategie im Detail](#strategie-im-detail)
@@ -41,6 +43,67 @@ Kein maschinelles Lernen. Die Regeln sind reine Preisstruktur, und Live-Bot und 
 - [Tests](#tests)
 - [Tägliche Verwaltung](#tägliche-verwaltung)
 - [Wichtige Regeln](#wichtige-regeln)
+
+---
+
+## Forschungsstand 08.11.2026: neue Richtung
+
+Am 08.11.2026 wurde der fibot gemeinsam von Claude und Codex (ChatGPT) gründlich untersucht und weiterentwickelt.
+Jede Regel wurde **vor** der Rechnung schriftlich festgelegt und mit Prüfsumme eingefroren, entwickelt auf einer
+Hälfte der Coins bzw. auf Daten bis 2024 und erst danach auf ungesehenen Coins und 2025/26 geprüft.
+
+### Warum das Konto seit dem 15.10. gefallen ist
+
+<p align="center"><img src="docs/img/verlust_zerlegung.png" alt="Zerlegung des Verlusts seit 15.10.: Konfluenz-Trades −31,2 USDT, Doppel-Einstiege +2,8, alte Positionen +4,0, Alt/Test −0,5, gesamt −24,9 USDT" width="100%"></p>
+
+- **Der Bot hat korrekt gehandelt:** 56 von 59 Live-Trades stimmen mit dem 1-Minuten-Backtest überein, meist sogar
+  auf die Minute des Ausstiegs. Es ist kein Problem zu grober Backtest-Kerzen.
+- **Die Konfluenz-Signale selbst haben keinen Vorteil:** 6 Gewinner aus 52 Signalen, ohne jeden Vorteil wären bei
+  diesen Chance-Risiko-Verhältnissen etwa 13 zu erwarten. Über alle 407 Kandidaten der damaligen Suche liegt die
+  Konfluenz auf ungesehenen Daten **vor Gebühren bei ±0 R**, nach Gebühren bei −0,15 R pro Trade.
+- Die 38 „OOS-bestätigten“ Configs waren aus 407 Kandidaten **auf genau diesem Zeitraum ausgewählt**. Seit dem
+  15.10. sind sie genauso schlecht wie die 369 aussortierten.
+- Ein Live-Fehler: Nach Füllung und Sofort-Stop in derselben Kerze legte der nächste 15-Minuten-Lauf dieselbe Order
+  erneut (Doppel-Einstiege). Diesmal zufällig im Plus, behoben wird er beim Umbau.
+
+### Was getestet wurde
+
+| Ansatz | Ergebnis |
+|---|---|
+| Konfluenz „wie ein Trader“: Bestätigungskerze, Volumen, ≥ 3 Berührungen, liquide Coins, Stop ≥ 1 % | alle negativ |
+| Anderes Ziel (1 R), Teilschluss, Trailing-Ausstieg wie beim dnabot | verringert Verluste, bleibt negativ |
+| Einstellungen je Config nachträglich anpassen | im Nachhinein findet man immer welche, vorher wählen geht nicht |
+| Konfluenz + MERS-Reaktion (wie mbot) | 1h knapp positiv, 2026 negativ, nicht robust |
+| Ausbruch-, Sweep- und Kapitulations-Regeln | durchgefallen |
+| **Wick-Kauf an Fib-Marke + runder Zahl (R25)** | **bestanden** (ungesehene Coins +0,43 % je Trade, p < 0,0001) |
+| **R25 + Fib-Marke der höheren Zeitebene (MTF)** | **halbiert den Crash-Schaden**, Konto-MaxDD unter 30 % |
+
+### Der Kern, der funktioniert: Wick-Kauf an Mehrfach-Konfluenz
+
+<p align="center"><img src="docs/img/neue_konfluenz_konzept.png" alt="Schema: Kauf-Limit 7 % unter der Donchian-Mitte, dort wo Fib-Marke, Fib-Marke der höheren Zeitebene und runde Zahl zusammentreffen; Ziel ist die Mitte" width="100%"></p>
+
+Statt in einem Trendkanal auf den Rücksetzer zu warten, liegt die Kauforder **tief unter der kurzfristigen Mitte**,
+aber **nur dort, wo mehrere Marken zusammentreffen**: eine Fib-Marke des 7-Tage-Bereichs, eine runde Preiszahl und
+eine Fib-Marke der nächsthöheren Zeitebene. Sticht ein Docht in diese Zone, wird gekauft. Das Ziel ist die Rückkehr
+zur Mitte, und gehandelt wird nur, solange BTC über seiner 200-Tage-Linie liegt.
+
+<p align="center"><img src="docs/img/konfluenz_staerke.png" alt="Ertrag je Trade steigt mit Kauftiefe (7 % +0,9 %, 11 % +2,2 %, 15 % +5,0 %) und mit der Zahl zusammentreffender Marken" width="100%"></p>
+
+Je mehr Konfluenz am Kaufpreis zusammentrifft, desto besser ist der einzelne Trade. Tiefe Kaufstufen allein
+verstärken an Crash-Tagen aber auch die Verluste, deshalb braucht es einen Crash-Schutz.
+
+<p align="center"><img src="docs/img/mtf_kontoverlauf.png" alt="Kontoverlauf 2025–2026 mit 34 USDT: R25 einfach fällt auf 19,5 USDT, R25 mit Zeitebenen-Konfluenz endet bei 33,7 USDT" width="100%"></p>
+
+Mit der Zeitebenen-Konfluenz übersteht das Konto das Crash-Jahr 2025 mit −21 % statt −41 % und bleibt unter
+30 % Drawdown. 2026 liegt es bei +26 %. Über beide Jahre zusammen steht es noch etwa bei null.
+
+**Nächster Schritt (läuft):** Zeitebenen-Konfluenz plus Crash-Schutz, der am Crash-Tag selbst greift
+(MERS-Marktbremse, Abkühlpause, Konto-Notschalter bei Stop-Häufung). Erst wenn das auf ungesehenen Daten trägt,
+wird der Live-Bot umgebaut.
+
+Unterlagen: [`forschung/untersuchung_2026_11_08/`](forschung/untersuchung_2026_11_08/),
+[`forschung/strategie_suche_2026_11_08/`](forschung/strategie_suche_2026_11_08/),
+[`forschung/mers_konfluenz_2026_11_08/`](forschung/mers_konfluenz_2026_11_08/).
 
 ---
 

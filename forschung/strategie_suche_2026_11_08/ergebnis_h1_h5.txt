@@ -1,0 +1,48 @@
+Regime-Fenster H5: [('2020-02-12', '2020-03-03'), ('2020-04-30', '2020-05-20'), ('2021-08-10', '2021-08-30'), ('2021-10-02', '2021-10-22'), ('2023-01-14', '2023-02-03'), ('2023-08-30', '2023-09-19'), ('2023-10-17', '2023-11-06'), ('2024-08-24', '2024-09-13'), ('2024-09-25', '2024-10-15'), ('2024-10-15', '2024-11-04'), ('2025-04-23', '2025-05-13'), ('2026-08-20', '2026-09-09')]
+
+===== H1 (845 Trades) =====
+SUCHE  A bis 2025                  n    347 | +1.195 %/Trade (Median -6.05) t -1.5 | Treffer 36 % | Coins+ 48 % | ohne Top5 +0.148 | H1 +1.063 H2 +1.225 | 87/J | nein
+PRUEF  B bis 14.10.26              n    435 | +1.746 %/Trade (Median -5.72) t -2.6 | Treffer 40 % | Coins+ 50 % | ohne Top5 +0.800 | H1 +0.232 H2 +2.377 | 89/J | nein
+PRUEF  A 2026 bis 14.10.           n     60 | +5.430 %/Trade (Median +4.57) t +0.9 | Treffer 62 % | Coins+ 62 % | ohne Top5 +3.146 | H1 -1.188 H2 +10.157 | 608/J | nein
+ENDTEST alle ab 15.10.             n      3 | -8.493 %/Trade (Median -8.38) t +nan | Treffer 0 % | Coins+ 0 % | ohne Top5 +nan | H1 -7.270 H2 -10.941 | 3000000000/J | nein
+  Tagesmittel %: SUCHE  A bis 2025 -1.794 | PRUEF  B bis 14.10.26 -2.320 | PRUEF  A 2026 bis 14.10. +2.319 | ENDTEST alle ab 15.10. -9.105
+  P1 Block-Bootstrap p = 0.9850 | Breite (>=5 Trades) 55 % | Stress P1 +1.430 %/Trade
+
+===== H2 (9080 Trades) =====
+SUCHE  A bis 2025                  n   4075 | -1.195 %/Trade (Median -5.90) t -3.1 | Treffer 32 % | Coins+ 26 % | ohne Top5 -1.429 | H1 +0.389 H2 -1.473 | 1018/J | nein
+PRUEF  B bis 14.10.26              n   4434 | -0.777 %/Trade (Median -5.66) t -2.1 | Treffer 34 % | Coins+ 33 % | ohne Top5 -0.967 | H1 +0.502 H2 -1.341 | 896/J | nein
+PRUEF  A 2026 bis 14.10.           n    408 | +2.658 %/Trade (Median -2.27) t +0.1 | Treffer 46 % | Coins+ 65 % | ohne Top5 +1.797 | H1 +3.442 H2 +1.827 | 2708/J | nein
+ENDTEST alle ab 15.10.             n    163 | -4.389 %/Trade (Median -6.43) t -1.2 | Treffer 13 % | Coins+ 14 % | ohne Top5 -5.434 | H1 -4.210 H2 -4.830 | 3966/J | nein
+  Tagesmittel %: SUCHE  A bis 2025 -1.331 | PRUEF  B bis 14.10.26 -0.914 | PRUEF  A 2026 bis 14.10. +0.175 | ENDTEST alle ab 15.10. -3.017
+  P1 Block-Bootstrap p = 0.9120 | Breite (>=5 Trades) 32 % | Stress P1 -1.060 %/Trade
+
+===== H3 (33 Trades) =====
+SUCHE  A bis 2025                  n     15 | +3.408 %/Trade (Median +4.01) t +1.5 | Treffer 60 % | Coins+ 60 % | ohne Top5 -0.074 | H1 +4.659 H2 -0.032 | 8/J | nein
+PRUEF  B bis 14.10.26              n     16 | +1.150 %/Trade (Median +0.34) t +0.4 | Treffer 56 % | Coins+ 56 % | ohne Top5 -0.714 | H1 +2.129 H2 -1.004 | 5/J | nein
+PRUEF  A 2026 bis 14.10.           n      2 | +2.030 %/Trade (Median +2.03) t +nan | Treffer 50 % | Coins+ 50 % | ohne Top5 +nan | H1 +9.347 H2 -5.287 | 36/J | nein
+ENDTEST alle ab 15.10.: keine Trades
+  Tagesmittel %: SUCHE  A bis 2025 +2.647 | PRUEF  B bis 14.10.26 +0.389 | PRUEF  A 2026 bis 14.10. +2.030 | ENDTEST alle ab 15.10. +nan
+  P1 Block-Bootstrap p = 0.3565 | Breite (>=5 Trades) nan % | Stress P1 +0.971 %/Trade
+
+===== H4 (1193 Trades) =====
+SUCHE  A bis 2025                  n    566 | -0.882 %/Trade (Median -2.57) t -1.2 | Treffer 41 % | Coins+ 34 % | ohne Top5 -1.401 | H1 +0.585 H2 -1.410 | 241/J | nein
+PRUEF  B bis 14.10.26              n    597 | -0.039 %/Trade (Median -0.98) t +0.7 | Treffer 46 % | Coins+ 48 % | ohne Top5 -0.744 | H1 +0.262 H2 -0.815 | 182/J | nein
+PRUEF  A 2026 bis 14.10.           n     21 | +2.897 %/Trade (Median +0.95) t -0.0 | Treffer 57 % | Coins+ 60 % | ohne Top5 -0.904 | H1 -0.293 H2 +3.429 | 163/J | nein
+ENDTEST alle ab 15.10.             n      9 | -0.120 %/Trade (Median -1.44) t -0.3 | Treffer 44 % | Coins+ 44 % | ohne Top5 -6.312 | H1 -0.458 H2 +0.555 | 219/J | nein
+  Tagesmittel %: SUCHE  A bis 2025 -1.094 | PRUEF  B bis 14.10.26 +1.065 | PRUEF  A 2026 bis 14.10. -0.106 | ENDTEST alle ab 15.10. -0.469
+  P1 Block-Bootstrap p = 0.2430 | Breite (>=5 Trades) 44 % | Stress P1 -0.242 %/Trade
+
+===== H5 (955 Trades) =====
+SUCHE  A bis 2025                  n    369 | +1.105 %/Trade (Median -5.05) t -1.1 | Treffer 40 % | Coins+ 48 % | ohne Top5 +0.376 | H1 +5.467 H2 -0.724 | 159/J | nein
+PRUEF  B bis 14.10.26              n    478 | +3.048 %/Trade (Median -3.85) t -1.7 | Treffer 44 % | Coins+ 66 % | ohne Top5 +2.268 | H1 +0.995 H2 +5.456 | 131/J | nein
+PRUEF  A 2026 bis 14.10.           n    108 | +7.762 %/Trade (Median +4.46) t +0.3 | Treffer 57 % | Coins+ 57 % | ohne Top5 +6.047 | H1 +9.044 H2 -0.840 | 2075/J | nein
+ENDTEST alle ab 15.10.: keine Trades
+  Tagesmittel %: SUCHE  A bis 2025 -1.546 | PRUEF  B bis 14.10.26 -2.111 | PRUEF  A 2026 bis 14.10. +1.048 | ENDTEST alle ab 15.10. +nan
+  P1 Block-Bootstrap p = 0.9270 | Breite (>=5 Trades) 76 % | Stress P1 +2.739 %/Trade
+
+===== Holm (5 %) und Gesamturteil =====
+H1: 1 Tagesmittel>0 nein | 2 Holm nein (p 0.9850) | 3 Breite/Top5 nein | 4 Stress ja -> nicht bestanden
+H2: 1 Tagesmittel>0 nein | 2 Holm nein (p 0.9120) | 3 Breite/Top5 nein | 4 Stress nein -> nicht bestanden
+H3: 1 Tagesmittel>0 ja | 2 Holm nein (p 0.3565) | 3 Breite/Top5 nein | 4 Stress ja -> nicht bestanden
+H4: 1 Tagesmittel>0 nein | 2 Holm nein (p 0.2430) | 3 Breite/Top5 nein | 4 Stress nein -> nicht bestanden
+H5: 1 Tagesmittel>0 nein | 2 Holm nein (p 0.9270) | 3 Breite/Top5 ja | 4 Stress ja -> nicht bestanden

@@ -1,0 +1,10 @@
+161 Trades
+SUCHE  A bis 2025                  n     58 | -3.975 %/Trade (Median -10.50) t -2.3 | Treffer 21 % | Coins+ 26 % | ohne Top5 -7.885 | H1 -3.017 H2 -4.441 | 16/J | nein
+    Tagesmittel -5.258 %  R -0.204
+PRUEF  B bis 14.10.26              n     88 | -1.745 %/Trade (Median -9.55) t -0.4 | Treffer 24 % | Coins+ 28 % | ohne Top5 -4.889 | H1 +1.486 H2 -3.027 | 21/J | nein
+    Tagesmittel -0.935 %  R -0.123
+PRUEF  A 2026 bis 14.10.           n     12 | +4.016 %/Trade (Median -5.65) t +0.7 | Treffer 33 % | Coins+ 40 % | ohne Top5 -10.690 | H1 +15.223 H2 -11.673 | 16/J | nein
+    Tagesmittel +4.016 %  R +0.132
+ENDTEST alle ab 15.10.             n      3 | -5.585 %/Trade (Median -4.84) t -1.4 | Treffer 33 % | Coins+ 33 % | ohne Top5 +nan | H1 -5.959 H2 -4.836 | 156/J | nein
+    Tagesmittel -5.585 %  R -0.515
+P1 p 0.6209 | Stress -2.478
