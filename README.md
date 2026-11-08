@@ -11,8 +11,8 @@
 
 Ein regelbasierter Trading-Bot für Bitget USDT-Futures. Er macht das, was ein Chart-Trader von Hand einzeichnet:
 **Impuls finden, Trendkanal ziehen, Fibonacci-Retracement darüberlegen.** Gekauft (bzw. verkauft) wird nur dort,
-wo die **Kanallinie und das 61,8-%-Level zusammentreffen**. Dafür liegt die Limit-Order schon vorher an genau
-diesem Punkt.
+wo die **Kanallinie die Fibonacci-Zone des letzten Impulses trifft** (je Config optimiert, meist 38,2–78,6 %).
+Dafür liegt die Limit-Order schon vorher an genau diesem Punkt.
 
 Kein maschinelles Lernen. Die Regeln sind reine Preisstruktur, und Live-Bot und Backtest benutzen dafür
 **dieselbe Funktion**.
@@ -20,7 +20,7 @@ Kein maschinelles Lernen. Die Regeln sind reine Preisstruktur, und Live-Bot und 
 > **Disclaimer:** Experimentelle Software, ausschließlich zu Forschungszwecken. Der Handel mit Kryptowährungen
 > birgt erhebliche finanzielle Risiken. Nutzung auf eigene Gefahr.
 
-<p align="center"><img src="docs/img/konfluenz.svg" alt="Fibo-Kanal-Konfluenz: Impuls A–B, steigender Kanal, Limit-Order am Schnittpunkt von 61,8 % und unterer Kanallinie" width="100%"></p>
+<p align="center"><img src="docs/img/konfluenz.svg" alt="Fibo-Kanal-Konfluenz: Impuls A–B, steigender Kanal, Limit-Order dort, wo die untere Kanallinie die Fib-Zone 38,2–78,6 % trifft, SL unter 88,6 %" width="100%"></p>
 
 ---
 
@@ -50,15 +50,15 @@ Kein maschinelles Lernen. Die Regeln sind reine Preisstruktur, und Live-Bot und 
 |---|---|---|
 | **1 Impuls** | letztes bestätigtes Swing-Tief **A** und das höchste Hoch **B** danach | Das ist die Bewegung, deren Rücksetzer gehandelt wird. |
 | **2 Kanal** | untere Linie durch Pivot-Tiefs, obere parallel durch Pivot-Hochs | Dort haben Käufer bzw. Verkäufer schon mehrfach reagiert. |
-| **3 Konfluenz** | untere Kanallinie in die Zukunft verlängern: Wann kreuzt sie die Zone 50–61,8 %? | Zwei unabhängige Unterstützungen an einem Preis. |
+| **3 Konfluenz** | untere Kanallinie in die Zukunft verlängern: Wann kreuzt sie die Fib-Zone (je Config, meist 38,2–78,6 %)? | Zwei unabhängige Unterstützungen an einem Preis. |
 | **3b Trendfilter** | nur handeln, wenn der 4-fache Timeframe **und** die Tageskerze des Coins in Handelsrichtung zeigen | Ein Rücksetzer mit dem übergeordneten Trend prallt eher ab ([Details](#trendfilter-nur-in-richtung-des-übergeordneten-trends)). |
 | **4 Order** | Limit-Order **vorab** an diesem Preis, SL und TP direkt angehängt | Einstieg am Level statt irgendwo in der Zone. |
-| **5 Ausstieg** | TP an der oberen Kanallinie, SL unter 78,6 % bzw. unter der Linie | Strukturell begründet, typisch 2–5 R Chance-Risiko |
+| **5 Ausstieg** | TP an der oberen Kanallinie (oder am Hoch B), SL meist unter 88,6 % bzw. unter der Linie | Strukturell begründet; Mindest-Chance-Risiko je Config 1,0–2,9 |
 
 Short-Setups laufen spiegelbildlich im fallenden Kanal. Technisch rechnet der Bot die Long-Logik auf der
 gespiegelten Kursreihe (Preis → −Preis), damit beide Seiten garantiert dieselben Regeln haben.
 
-<p align="center"><img src="docs/img/beispiel_trade.png" alt="Echtes Beispiel: AAVE 4h Long im steigenden Kanal, Fill an der Konfluenz, Take-Profit an der oberen Kanallinie" width="100%"></p>
+<p align="center"><img src="docs/img/beispiel_trade.png" alt="Echter Live-Trade TRUMP 15m Short am 17.10.2026: fallender Kanal, Fill an der Konfluenz bei 1,7863, Take-Profit an der Kanallinie nach 28 Minuten" width="100%"></p>
 
 ---
 
@@ -118,7 +118,7 @@ der jüngere.
 ### 4 — Konfluenz und Limit-Order
 
 Für die kommende Kerze wird die untere Kanallinie projiziert. Liegt dieser Preis in der Zone
-`fib_hi` … `fib_lo` (Standard 61,8 % … 50 %, ± `zone_tol_atr`) und der letzte Schlusskurs darüber, liegt dort
+`fib_hi` … `fib_lo` (Standard 61,8 % … 50 %, in den Live-Configs meist 78,6 % … 38,2 %, ± `zone_tol_atr`) und der letzte Schlusskurs darüber, liegt dort
 die Limit-Order. In der nächsten Kerze ist die Linie weitergewandert, und die Order wird nachgezogen.
 Optional verfällt ein Setup nach `max_age_mult` × (B − A) Kerzen.
 
@@ -300,24 +300,26 @@ durch den wöchentlichen Lauf oder sofort mit `.venv/bin/python3 auto_optimizer_
 
 ### Strategie-Config (Konfluenz)
 
+Echte Live-Config (`config_TRUMPUSDTUSDT_15m_fib.json`):
+
 ```json
 {
-  "market":   { "symbol": "AAVE/USDT:USDT", "timeframe": "4h" },
+  "market":   { "symbol": "TRUMP/USDT:USDT", "timeframe": "15m" },
   "strategy": {
     "type": "confluence",
     "pivot_k": 5, "window": 150, "touch_atr": 0.3,
-    "max_break_frac": 0.0, "min_width_atr": 3.0, "min_upper_touches": 2,
-    "fib_lo": 0.5, "fib_hi": 0.618, "fib_sl": 0.786,
-    "zone_tol_atr": 0.25, "sl_buf_atr": 0.2, "min_rr": 1.5,
-    "max_age_mult": 2.0, "b_near_upper_atr": 0.5, "tp_mode": "upper",
+    "max_break_frac": 0.0, "min_width_atr": 2.0, "min_upper_touches": 1,
+    "fib_lo": 0.5, "fib_hi": 0.705, "fib_sl": 0.886,
+    "zone_tol_atr": 0.45, "sl_buf_atr": 0.2, "min_rr": 2.7,
+    "max_age_mult": 3.0, "b_near_upper_atr": 0.5, "tp_mode": "upper",
     "candle_limit": 600
   },
-  "risk": { "leverage": 5, "risk_per_entry_pct": 1.0, "margin_mode": "isolated" },
+  "risk": { "leverage": 4, "risk_per_entry_pct": 1.75, "margin_mode": "isolated" },
   "_backtest": {
-    "start_date": "2023-04-08", "end_date": "2026-04-01",
-    "pnl_pct": 0.0, "max_drawdown": 0.0, "total_trades": 0, "win_rate": 0.0,
+    "start_date": "2025-04-01", "end_date": "2026-04-01",
+    "pnl_pct": 52.33, "max_drawdown": 23.82, "total_trades": 90, "win_rate": 31.1,
     "oos": { "start_date": "2026-04-01", "end_date": "2026-10-15",
-             "pnl_pct": 0.0, "max_drawdown": 0.0, "total_trades": 0, "win_rate": 0.0 }
+             "pnl_pct": 37.26, "max_drawdown": 12.46, "total_trades": 49, "win_rate": 32.7 }
   }
 }
 ```
