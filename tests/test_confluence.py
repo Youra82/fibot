@@ -71,14 +71,17 @@ def _mock_exchange(df_with_open, order_status='open'):
     ex.fetch_equity_usdt.return_value = 100.0
     ex.fetch_balance_usdt.return_value = 100.0
     ex.markets = {'BTC/USDT:USDT': {'limits': {'amount': {'min': 0.0001}}}}
-    ex.amount_to_precision.side_effect = lambda s, a: f'{a:.4f}'
+    ex.amount_to_precision.side_effect = lambda s, a: str(np.floor(a * 1e4) / 1e4)
+    ex.price_to_precision.side_effect = lambda s, p: str(p)
+    ex.fetch_open_positions.return_value = []
     ex.place_limit_order_with_tpsl.return_value = {'id': 'O1'}
-    ex.fetch_order.return_value = {'status': order_status}
+    ex.fetch_order.return_value = {'status': order_status, 'filled': 0}
     return ex
 
 
-def test_cycle_places_keeps_and_replaces(tmp_path):
+def test_cycle_places_keeps_and_replaces(tmp_path, monkeypatch):
     import fibot.utils.trade_manager as tm
+    monkeypatch.setattr(tm, 'TRACKER_DIR', str(tmp_path))
     df = _real_or_synthetic()
     lo, sh = plan_both(df, CFG)
     planned = [m for m in range(700, len(df) - 1) if np.isfinite(lo['limit'][m]) or np.isfinite(sh['limit'][m])]
@@ -107,15 +110,19 @@ def test_cycle_places_keeps_and_replaces(tmp_path):
         ex.cancel_order.assert_not_called()
         # neue Kerze, gleicher Impuls: Order wird nachgezogen -> kurze Textnachricht, kein neues Chart
         store[list(store)[0]]['candle_ts'] = 'alt'
+        ex.fetch_order.side_effect = [{'status': 'open', 'filled': 0}, {'status': 'canceled', 'filled': 0}]
         tm.confluence_cycle(ex, CFG, {}, MagicMock())
         assert ex.cancel_order.call_count == 1
         assert ex.place_limit_order_with_tpsl.call_count == 2
         assert photo.call_count == 1 and msg.call_count == 1   # Chart nur beim neuen Impuls, Nachziehen als Text
         assert "nachgezogen" in msg.call_args[0][2]
-        # gefuellt und schon wieder geschlossen -> aufraeumen, kein neuer Entry fuer denselben Impuls
-        ex.fetch_order.return_value = {'status': 'closed'}
+        # Fill ohne sofort sichtbare Position -> zeitversetzt abgleichen, Schutz nie sofort stornieren
+        ex.fetch_order.side_effect = None
+        ex.fetch_order.return_value = {'status': 'closed', 'filled': 1}
         tm.confluence_cycle(ex, CFG, {}, MagicMock())
-        ex.cancel_all_orders_for_symbol.assert_called()
+        ex.cancel_all_orders_for_symbol.assert_not_called()
+        assert list(store.values())[0]['status'] == 'fill_reconcile'
+        assert ex.place_limit_order_with_tpsl.call_count == 2
 
 
 def test_position_api_error_aborts_cycle():

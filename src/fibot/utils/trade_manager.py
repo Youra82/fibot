@@ -7,6 +7,7 @@ import time
 import json
 import os
 import sys
+import math
 from datetime import datetime
 from typing import Optional
 
@@ -20,9 +21,34 @@ from fibot.utils.exchange import Exchange
 from fibot.utils.telegram import send_message, send_photo
 from fibot.strategy.fibonacci_logic import generate_signal, signal_summary, FibSignal
 from fibot.strategy.confluence_logic import is_confluence
+from fibot.utils.execution_guard import (
+    consumed, consume, entry_client_oid, filled_quantity, symbol_cycle_lock, CycleBusy,
+)
 
 TRACKER_DIR = os.path.join(PROJECT_ROOT, 'artifacts', 'tracker')
 MIN_NOTIONAL_USDT = 5.0
+
+
+def _impulse_path(symbol, timeframe):
+    return get_tracker_path(symbol, timeframe).replace('.json', '_impulses.json')
+
+
+def _impulse_key(record):
+    if record.get('direction') not in ('long', 'short') or not record.get('b_ts'):
+        raise ValueError('Filled confluence impulse identity unavailable')
+    return record['direction'] + '|' + pd.Timestamp(record['b_ts']).isoformat()
+
+
+def _consume_impulse(symbol, timeframe, record, logger):
+    if not record.get('b_ts') and record.get('strategy') != 'confluence':
+        # A legacy position may survive a strategy migration; it has no channel impulse.
+        return True
+    try:
+        consume(_impulse_path(symbol, timeframe), _impulse_key(record))
+        return True
+    except (OSError, ValueError, TypeError) as error:
+        logger.error(f'Cannot persist filled impulse ({type(error).__name__}); no replacement entry.')
+        return False
 
 # ---------------------------------------------------------------------------
 # Tracker helpers
@@ -37,19 +63,38 @@ def get_tracker_path(symbol: str, timeframe: str) -> str:
 def read_tracker(path: str) -> dict:
     if os.path.exists(path):
         try:
-            with open(path, 'r') as f:
+            with open(path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except Exception:
-            pass
+        except Exception as error:
+            logging.getLogger(__name__).error(f"Tracker-Lesefehler: {error}")
+            raise RuntimeError(f"Tracker unlesbar: {path}") from error
     return {}
 
 
 def write_tracker(path: str, data: dict):
+    directory = os.path.dirname(os.path.abspath(path))
+    os.makedirs(directory, exist_ok=True)
+    temporary = f"{path}.{os.getpid()}.{time.time_ns()}.tmp"
     try:
-        with open(path, 'w') as f:
+        with open(temporary, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, default=str)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, path)
+        if os.name != 'nt' and hasattr(os, 'O_DIRECTORY'):
+            directory_fd = os.open(directory, os.O_DIRECTORY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
     except Exception as e:
         logging.getLogger(__name__).error(f"Tracker-Schreibfehler: {e}")
+        try:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        except OSError:
+            pass
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -128,11 +173,11 @@ def housekeeper_routine(exchange: Exchange, symbol: str, tracker_path: str, logg
     Wird aufgerufen wenn keine offene Position existiert (nach SL/TP oder Pending-Cancel)."""
     try:
         logger.info(f"Housekeeper: Starte Aufräumroutine für {symbol}...")
-        exchange.cancel_all_orders_for_symbol(symbol)
+        exchange.cancel_all_orders_for_symbol(symbol, strict=True)
         time.sleep(1)
 
         # Sicherheitsnetz: verwaiste Position schließen
-        positions = exchange.fetch_open_positions(symbol)
+        positions = exchange.fetch_open_positions(symbol, strict=True)
         if positions:
             pos        = positions[0]
             close_side = 'sell' if pos['side'] == 'long' else 'buy'
@@ -140,13 +185,13 @@ def housekeeper_routine(exchange: Exchange, symbol: str, tracker_path: str, logg
             logger.warning(f"Housekeeper: Verwaiste Position ({pos['side']} {contracts}) — schließe...")
             exchange.place_market_order(symbol, close_side, contracts, reduce=True)
             time.sleep(3)
-            if exchange.fetch_open_positions(symbol):
+            if exchange.fetch_open_positions(symbol, strict=True):
                 logger.error("Housekeeper: Position konnte nicht geschlossen werden!")
                 return False
 
         # Tracker leeren falls ein abgeschlossener Trade drin steht
         tracker_data = read_tracker(tracker_path)
-        if tracker_data.get('status') in ('open', 'pending_entry'):
+        if tracker_data.get('status') in ('open', 'pending_entry', 'placing_entry', 'placement_unknown'):
             write_tracker(tracker_path, {})
             logger.info(f"Housekeeper: Tracker für {symbol} geleert.")
 
@@ -163,25 +208,30 @@ def housekeeper_routine(exchange: Exchange, symbol: str, tracker_path: str, logg
 
 def calc_position_size(balance: float, risk_pct: float, entry: float,
                         sl: float, leverage: int, logger,
-                        min_contracts: float = 0.0) -> float:
+                        min_contracts: float = 0.0, free_balance: float = None) -> float:
     """
     Risikobased Sizing:
       risk_amount = balance * risk_pct/100
       contracts   = risk_amount / |entry - sl|
-    Wird auf Exchange-Minimum angehoben wenn nötig (wie vbot).
+    Ein Exchange-Minimum darf das konfigurierte Risiko niemals anheben.
     Capped by leverage, margin check, minimum notional.
     """
+    free = balance if free_balance is None else free_balance
+    if not all(math.isfinite(float(x)) and float(x) > 0
+               for x in (balance, free, risk_pct, entry, leverage)):
+        logger.error("Ungültige Kapital-, Risiko- oder Entry-Daten. Kein Trade.")
+        return 0.0
     risk_amount = balance * risk_pct / 100
     price_risk  = abs(entry - sl)
-    if price_risk <= 0:
+    if not math.isfinite(price_risk) or price_risk <= 0:
         logger.error("SL = Entry, Size-Berechnung unmöglich.")
         return 0.0
     contracts = risk_amount / price_risk
 
-    # Auf Exchange-Minimum anheben wenn nötig (statt Trade zu skippen)
     if min_contracts > 0 and contracts < min_contracts:
-        logger.info(f"Contracts {contracts:.6f} < Exchange-Minimum {min_contracts}, hebe auf Minimum an.")
-        contracts = min_contracts
+        logger.warning(f"Contracts {contracts:.6f} < Exchange-Minimum {min_contracts}: "
+                       "Minimum würde das Risikobudget überschreiten. Kein Trade.")
+        return 0.0
 
     # Cap: max notional = balance * leverage
     max_notional = balance * leverage
@@ -193,10 +243,10 @@ def calc_position_size(balance: float, risk_pct: float, entry: float,
         logger.warning(f"Notional {notional:.2f} USDT < Minimum {MIN_NOTIONAL_USDT} USDT. Kein Trade.")
         return 0.0
 
-    # Margin-Check: isolierte Margin darf Kapital nicht übersteigen
+    # Margin-Check: isolierte Margin darf das freie Guthaben nicht übersteigen
     margin = notional / leverage
-    if margin > balance:
-        logger.warning(f"Margin {margin:.2f} USDT > Kapital {balance:.2f} USDT. Kein Trade.")
+    if margin > free:
+        logger.warning(f"Margin {margin:.2f} USDT > freies Guthaben {free:.2f} USDT. Kein Trade.")
         return 0.0
 
     logger.info(f"Size: {contracts:.6f} Contracts | Notional: {notional:.2f} USDT | Risiko: {risk_amount:.2f} USDT")
@@ -431,6 +481,14 @@ def _send_fib_chart(df: pd.DataFrame, signal: FibSignal, symbol: str, timeframe:
 # ---------------------------------------------------------------------------
 
 def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, logger):
+    try:
+        with symbol_cycle_lock(TRACKER_DIR, params['market']['symbol']):
+            return _full_trade_cycle_locked(exchange, params, telegram_config, logger)
+    except CycleBusy:
+        logger.warning('Another cycle already manages this symbol; overlapping cron skipped.')
+
+
+def _full_trade_cycle_locked(exchange: Exchange, params: dict, telegram_config: dict, logger):
     """
     Called once per cron tick for one symbol/timeframe.
     1. Check existing position → manage it
@@ -468,7 +526,12 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     tf_seconds = exchange.exchange.parse_timeframe(timeframe)
     if positions:
         # Kerzen, die bei offener Position schliessen, wertet der Backtester nicht aus
-        mark_candle_consumed(symbol, timeframe, last_closed_candle_ts(tf_seconds))
+        try:
+            mark_candle_consumed(symbol, timeframe, last_closed_candle_ts(tf_seconds))
+        except Exception as error:
+            # Der Entry-Guard darf neue Entries sperren, aber nie die Verwaltung
+            # einer bereits offenen Position (SL/TP/Overshoot) abschalten.
+            logger.error(f"Candle-Guard unlesbar ({error}); Positionsmanagement laeuft weiter.")
         pos = positions[0]
         pos_side = pos.get('side', 'long')
         size_key = 'contracts' if 'contracts' in pos else 'contractSize'
@@ -478,14 +541,21 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         logger.info(f"Offene Position: {pos_side.upper()} {contracts_pos} @ {entry_price:.4f} | PnL {pnl:.2f} USDT")
 
         # --- Self-Repair: SL/TP prüfen und ggf. neu platzieren (wie vbot) ---
+        sl_price_val = None
+        tp_price_val = None
         try:
             tracker_data   = read_tracker(tracker_path)
-            trigger_orders = exchange.fetch_open_trigger_orders(symbol)
+            if is_confluence(params) and tracker_data.get('b_ts'):
+                _consume_impulse(symbol, timeframe, tracker_data, logger)
+            trigger_orders = exchange.fetch_open_trigger_orders(symbol, strict=True)
             if is_confluence(params):
                 # An die Entry gehaengte SL/TP liegen als Position-TP/SL (profit_loss) vor
-                trigger_orders = list(trigger_orders) + list(exchange.fetch_position_tpsl_orders(symbol))
-                if tracker_data.get('status') == 'pending_entry':
+                trigger_orders = list(trigger_orders) + list(exchange.fetch_position_tpsl_orders(symbol, strict=True))
+                if tracker_data.get('status') in (
+                        'pending_entry', 'placing_entry', 'placement_unknown',
+                        'fill_reconcile', 'position_reconcile'):
                     tracker_data['status'] = 'open'
+                    tracker_data.pop('reconcile_after', None)
                     write_tracker(tracker_path, tracker_data)
                     send_message(bot_token, chat_id,
                                  f"FiBot ENTRY gefuellt ({symbol} {timeframe}) @ {entry_price:.6g} | "
@@ -498,35 +568,27 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
             sl_price_val = tracker_data.get('sl_price')
             tp_price_val = tracker_data.get('tp1_price')
 
-            if saved_sl_id and saved_tp_id:
-                # ID-basierte Erkennung (zuverlässig)
-                sl_exists = saved_sl_id in open_order_ids
-                tp_exists = saved_tp_id in open_order_ids
-                logger.info(f"ID-Check — SL={sl_exists} (ID:{saved_sl_id}) TP={tp_exists} (ID:{saved_tp_id})")
-            else:
-                # Preis-Fallback: SL/TP anhand Entry-Preis-Relation erkennen
-                sl_exists = False
-                tp_exists = False
-                if entry_price > 0:
-                    for order in trigger_orders:
-                        trig_raw = (order.get('stopPrice') or order.get('triggerPrice')
-                                    or order.get('info', {}).get('triggerPrice')
-                                    or order.get('info', {}).get('planPrice'))
-                        try:
-                            trig = float(trig_raw)
-                        except (ValueError, TypeError):
-                            continue
-                        if pos_side == 'long':
-                            if trig < entry_price:
-                                sl_exists = True
-                            elif trig > entry_price:
-                                tp_exists = True
-                        else:
-                            if trig > entry_price:
-                                sl_exists = True
-                            elif trig < entry_price:
-                                tp_exists = True
-                    logger.info(f"Preis-Fallback — SL={sl_exists} TP={tp_exists} | {len(trigger_orders)} Trigger-Orders")
+            # IDs sind bevorzugt, aber ein erfolgreicher Broker-Aufruf kann einer
+            # fehlgeschlagenen Tracker-Aktualisierung vorausgehen. Deshalb immer
+            # zusätzlich die tatsächlich offenen Triggerpreise berücksichtigen.
+            sl_exists = bool(saved_sl_id and saved_sl_id in open_order_ids)
+            tp_exists = bool(saved_tp_id and saved_tp_id in open_order_ids)
+            if entry_price > 0:
+                for order in trigger_orders:
+                    trig_raw = (order.get('stopPrice') or order.get('triggerPrice')
+                                or order.get('info', {}).get('triggerPrice')
+                                or order.get('info', {}).get('planPrice'))
+                    try:
+                        trig = float(trig_raw)
+                    except (ValueError, TypeError):
+                        continue
+                    if pos_side == 'long':
+                        sl_exists = sl_exists or trig < entry_price
+                        tp_exists = tp_exists or trig > entry_price
+                    else:
+                        sl_exists = sl_exists or trig > entry_price
+                        tp_exists = tp_exists or trig < entry_price
+            logger.info(f"Schutzorder-Check — SL={sl_exists} TP={tp_exists} | {len(trigger_orders)} Orders")
 
             if not sl_exists or not tp_exists:
                 logger.warning(f"Self-Repair: SL={sl_exists} TP={tp_exists} — platziere fehlende Orders neu")
@@ -620,23 +682,20 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
                         f"Preis-Overshoot: {current_price:.6f} hat {reason} ({level:.6f}) überschritten — "
                         f"schließe Position {symbol} per Market."
                     )
-                    try:
-                        exchange.cancel_all_orders_for_symbol(symbol)
-                    except Exception as ce:
-                        logger.warning(f"Cancel-Orders fehlgeschlagen (ignoriert): {ce}")
                     exchange.place_market_order(symbol, close_side, contracts_pos, reduce=True)
                     time.sleep(2)
-                    remaining = exchange.fetch_open_positions(symbol)
+                    remaining = exchange.fetch_open_positions(symbol, strict=True)
                     if not remaining:
+                        exchange.cancel_all_orders_for_symbol(symbol, strict=True)
                         write_tracker(tracker_path, {})
                         logger.info(f"Position {symbol} geschlossen — Tracker geleert.")
+                        send_message(
+                            bot_token, chat_id,
+                            f"FiBot NOTSCHLIESSUNG ({symbol}): Preis {current_price:.6f} hat "
+                            f"{reason} ({level:.6f}) überschritten. Position geschlossen."
+                        )
                     else:
                         logger.error(f"Notschliessung {symbol}: Position noch offen nach Market-Order — Tracker bleibt!")
-                    send_message(
-                        bot_token, chat_id,
-                        f"FiBot NOTSCHLIESSUNG ({symbol}): Preis {current_price:.6f} hat "
-                        f"{reason} ({level:.6f}) überschritten. Position geschlossen."
-                    )
             except Exception as e:
                 logger.error(f"Fehler beim Preis-Overshoot-Check: {e}")
 
@@ -646,7 +705,9 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     if is_confluence(params):
         confluence_cycle(exchange, params, telegram_config, logger)
         return
-    housekeeper_routine(exchange, symbol, tracker_path, logger)
+    if not housekeeper_routine(exchange, symbol, tracker_path, logger):
+        logger.error("Housekeeper nicht sicher abgeschlossen; kein neuer Entry.")
+        return
     logger.info("Keine offene Position. Suche Fib-Signal...")
 
     df = exchange.fetch_recent_ohlcv(symbol, timeframe, limit=candle_limit)
@@ -688,20 +749,26 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
 
     # --- Get balance ---
     balance = exchange.fetch_balance_usdt()
-    if balance <= 0:
+    equity = exchange.fetch_equity_usdt()
+    if balance <= 0 or equity <= 0:
         logger.error("Kontostand 0 oder nicht abrufbar.")
         return
 
     # --- Calc size ---
     min_amount = exchange.markets.get(symbol, {}).get('limits', {}).get('amount', {}).get('min', 0.0)
     contracts = calc_position_size(
-        balance, risk_pct, signal.entry_price, signal.sl_price, leverage, logger,
-        min_contracts=min_amount)
+        equity, risk_pct, signal.entry_price, signal.sl_price, leverage, logger,
+        min_contracts=min_amount, free_balance=balance)
     if contracts <= 0:
         return
 
+    sized_contracts = contracts
     contracts_str = exchange.amount_to_precision(symbol, contracts)
     contracts = float(contracts_str)
+    if (not math.isfinite(contracts) or contracts <= 0
+            or contracts > sized_contracts * (1 + 1e-10)):
+        logger.warning("Precision-Rundung erhöht Menge/Risiko oder ist ungültig. Kein Trade.")
+        return
 
     # Notional-Check nach Precision-Rundung (Rundung kann unter 5 USDT fallen)
     notional_after_round = contracts * signal.entry_price
@@ -709,16 +776,10 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         logger.warning(f"Notional {notional_after_round:.2f} USDT < Minimum {MIN_NOTIONAL_USDT} USDT nach Precision-Rundung. Kein Trade.")
         return
 
-    # Sicherheitsnetz: amount_to_precision rundet ggf. unter Exchange-Minimum
+    # Precision darf nicht durch Anheben auf das Exchange-Minimum das Risiko erhöhen.
     if min_amount > 0 and contracts < min_amount:
-        logger.info(f"Nach Precision-Rundung {contracts:.6f} < Minimum {min_amount} — hebe erneut an.")
-        contracts = min_amount
-        contracts_str = exchange.amount_to_precision(symbol, contracts)
-        contracts = float(contracts_str)
-        notional = contracts * signal.entry_price
-        if notional < MIN_NOTIONAL_USDT:
-            logger.warning(f"Notional {notional:.2f} USDT < Minimum {MIN_NOTIONAL_USDT} USDT nach Korrektur. Kein Trade.")
-            return
+        logger.warning(f"Nach Precision-Rundung {contracts:.6f} < Minimum {min_amount}. Kein Trade.")
+        return
 
     # --- Place entry (Limit at signal price, consistent with backtester) ---
     entry_side = 'buy' if signal.direction == 'long' else 'sell'
@@ -727,8 +788,8 @@ def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     try:
         entry_order = exchange.place_limit_order(
             symbol, entry_side, contracts, signal.entry_price)
-    except ccxt.InsufficientFunds as e:
-        logger.warning(f"Nicht genug freie Margin für Entry (andere Position belegt Kapital). Kein Trade.")
+    except ccxt.InsufficientFunds:
+        logger.warning("Nicht genug freie Margin für Entry (andere Position belegt Kapital). Kein Trade.")
         return
     except Exception as e:
         logger.error(f"Entry-Order fehlgeschlagen: {e}")
@@ -783,7 +844,7 @@ def _confluence_size(exchange: Exchange, symbol: str, plan: dict, risk_pct: floa
     equity = exchange.fetch_equity_usdt()
     free = exchange.fetch_balance_usdt()
     risk = abs(plan['limit'] - plan['sl'])
-    if equity <= 0 or risk <= 0:
+    if not all(math.isfinite(x) and x > 0 for x in (equity, free, risk, risk_pct, leverage, plan['limit'])):
         return 0.0
     contracts = equity * risk_pct / 100 / risk
     max_by_margin = free * leverage * 0.95 / plan['limit']
@@ -791,7 +852,15 @@ def _confluence_size(exchange: Exchange, symbol: str, plan: dict, risk_pct: floa
         logger.warning(f"Margin-Kappung: {contracts:.6f} -> {max_by_margin:.6f} Contracts (frei {free:.2f} USDT)")
         contracts = max_by_margin
     min_amount = exchange.markets.get(symbol, {}).get('limits', {}).get('amount', {}).get('min', 0.0) or 0.0
-    contracts = float(exchange.amount_to_precision(symbol, max(contracts, min_amount)))
+    # An exchange minimum cannot override the intended loss or available margin.
+    if contracts < min_amount:
+        logger.warning('Exchange minimum exceeds risk or margin budget. No order.')
+        return 0.0
+    maximum = contracts
+    contracts = float(exchange.amount_to_precision(symbol, contracts))
+    if not math.isfinite(contracts) or contracts <= 0 or contracts > maximum + 1e-12 or contracts < min_amount:
+        logger.warning('Rounded quantity violates risk, margin or exchange minimum. No order.')
+        return 0.0
     if contracts * plan['limit'] < MIN_NOTIONAL_USDT:
         logger.warning(f"Notional {contracts * plan['limit']:.2f} USDT < {MIN_NOTIONAL_USDT} USDT. Keine Order.")
         return 0.0
@@ -843,6 +912,64 @@ def _trend_filter_reject(exchange: Exchange, symbol: str, timeframe: str, df: pd
     return f"{int(cfg['htf_mult'])}x{timeframe} {lab(h)}, Tag {lab(d)}"
 
 
+RECONCILE_DELAY_SECONDS = 60
+
+
+def _utc_now() -> pd.Timestamp:
+    return pd.Timestamp.now(tz='UTC')
+
+
+def _start_reconcile(tracker: dict, status: str) -> dict:
+    updated = dict(tracker)
+    updated['status'] = status
+    updated['reconcile_after'] = (_utc_now() + pd.Timedelta(seconds=RECONCILE_DELAY_SECONDS)).isoformat()
+    updated['no_position_confirmations'] = 0
+    return updated
+
+
+def _reconcile_due(tracker: dict) -> bool:
+    try:
+        deadline = pd.Timestamp(tracker['reconcile_after'])
+        deadline = deadline.tz_convert('UTC') if deadline.tzinfo else deadline.tz_localize('UTC')
+        return _utc_now() >= deadline
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def _intent_expired(tracker: dict, hours: int = 2) -> bool:
+    try:
+        created = pd.Timestamp(tracker['intent_created_at'])
+        created = created.tz_convert('UTC') if created.tzinfo else created.tz_localize('UTC')
+        return _utc_now() >= created + pd.Timedelta(hours=hours)
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def _tracked_order(exchange: Exchange, tracker: dict, symbol: str):
+    order_id = str(tracker.get('order_id') or '')
+    if order_id:
+        return exchange.fetch_order(order_id, symbol)
+    client_oid = str(tracker.get('client_oid') or '')
+    if client_oid:
+        return exchange.fetch_order_by_client_oid(client_oid, symbol)
+    raise ValueError('Tracked entry has neither order_id nor client_oid')
+
+
+def _entry_intent(symbol: str, timeframe: str, current_candle: str, plan: dict,
+                  contracts: float, notified_b_ts) -> dict:
+    oid = entry_client_oid(
+        'confluence', symbol, timeframe, plan['direction'], plan['b_ts'], current_candle,
+        plan['limit'], plan['sl'], plan['tp'], contracts,
+    )
+    return {
+        'status': 'placing_entry', 'strategy': 'confluence', 'order_id': '', 'client_oid': oid,
+        'candle_ts': current_candle, 'direction': plan['direction'], 'entry_price': plan['limit'],
+        'sl_price': plan['sl'], 'tp1_price': plan['tp'], 'contracts': contracts,
+        'a_ts': plan['a_ts'], 'b_ts': plan['b_ts'], 'notified_b_ts': notified_b_ts,
+        'intent_created_at': _utc_now().isoformat(), 'timestamp': _utc_now().isoformat(),
+    }
+
+
 def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, logger):
     """Ohne offene Position: Limit-Order fuer die laufende Kerze planen, nachziehen oder entfernen.
     Der Plan kommt aus plan_next_order() -- derselben Rechnung wie im Backtest."""
@@ -858,15 +985,142 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
     tracker = read_tracker(tracker_path)
     tf_seconds = exchange.exchange.parse_timeframe(timeframe)
     # Impuls, zu dem schon eine Telegram-Nachricht ging (bleibt beim Nachziehen erhalten)
-    keep = {'notified_b_ts': tracker.get('notified_b_ts')}
+    legacy_keep_only = bool(
+        tracker.get('notified_b_ts') and not tracker.get('status')
+        and tracker.get('execution_guard_version') != 1
+    )
+    keep = {'notified_b_ts': tracker.get('notified_b_ts'), 'execution_guard_version': 1}
+    if legacy_keep_only:
+        # Der alte Tracker speicherte keine Richtung. Sperre deshalb beide
+        # Richtungen fuer dieses historische B dauerhaft, auch wenn gerade
+        # kein Plan existiert. So kann es spaeter nicht erneut auftauchen.
+        for direction in ('long', 'short'):
+            if not _consume_impulse(
+                    symbol, timeframe,
+                    {'direction': direction, 'b_ts': tracker['notified_b_ts']}, logger):
+                return
+        write_tracker(tracker_path, keep)
+        logger.warning('Vor-Upgrade-Impuls konservativ in beiden Richtungen als verbraucht markiert.')
 
-    # 1) Position war offen und ist jetzt weg -> Reste aufraeumen
+    # Eine einzelne leere Positionsantwort darf nie frisch aktivierte Schutzorders entfernen.
     if tracker.get('status') == 'open':
-        logger.info("Position geschlossen (SL/TP). Raeume Rest-Orders auf.")
-        exchange.cancel_all_orders_for_symbol(symbol)
+        if not _consume_impulse(symbol, timeframe, tracker, logger):
+            return
+        tracker = _start_reconcile(tracker, 'position_reconcile')
+        write_tracker(tracker_path, tracker)
+        logger.warning('Position einmal nicht sichtbar; bestaetige das in spaeteren Laeufen.')
+        return
+
+    if tracker.get('status') in ('position_reconcile', 'fill_reconcile'):
+        if not _reconcile_due(tracker):
+            logger.info('Position/Fill wird zeitversetzt abgeglichen; keine neue Order.')
+            return
+        try:
+            if exchange.fetch_open_positions(symbol, strict=True):
+                tracker['status'] = 'open'
+                tracker.pop('reconcile_after', None)
+                tracker.pop('no_position_confirmations', None)
+                write_tracker(tracker_path, tracker)
+                return
+        except Exception as error:
+            logger.error(f'Positionsabgleich unklar ({error}); Schutz bleibt unveraendert.')
+            return
+
+        if tracker.get('status') == 'fill_reconcile':
+            try:
+                reconciled_order = _tracked_order(exchange, tracker, symbol)
+                reconciled_status = (reconciled_order or {}).get('status')
+                reconciled_filled = filled_quantity(reconciled_order)
+            except Exception as error:
+                logger.error(f'Fill-Abgleich unklar ({error}); Schutz bleibt unveraendert.')
+                return
+            if reconciled_status == 'open':
+                if reconciled_filled > 0:
+                    try:
+                        exchange.cancel_order(tracker.get('order_id'), symbol)
+                    except Exception as error:
+                        logger.warning(f'Restmengen-Storno unklar ({error}); keine neue Order.')
+                tracker['reconcile_after'] = (
+                    _utc_now() + pd.Timedelta(seconds=RECONCILE_DELAY_SECONDS)).isoformat()
+                write_tracker(tracker_path, tracker)
+                return
+            if reconciled_status not in ('closed', 'canceled', 'cancelled', 'expired', 'rejected') \
+                    or reconciled_filled <= 0:
+                logger.error('Fill-Order ist nicht sicher abgeschlossen; keine neue Order.')
+                return
+
+        confirmations = int(tracker.get('no_position_confirmations') or 0) + 1
+        if confirmations < 2:
+            tracker['no_position_confirmations'] = confirmations
+            tracker['reconcile_after'] = (
+                _utc_now() + pd.Timedelta(seconds=RECONCILE_DELAY_SECONDS)).isoformat()
+            write_tracker(tracker_path, tracker)
+            logger.info('Erste spaetere Nullpositions-Bestaetigung; ein weiterer Lauf folgt.')
+            return
+
+        if tracker.get('status') == 'position_reconcile':
+            exchange.cancel_all_orders_for_symbol(symbol, strict=True)
         write_tracker(tracker_path, keep)
         send_message(bot_token, chat_id, f"FiBot ({symbol} {timeframe}): Position geschlossen.")
         tracker = {}
+
+    # Write-ahead-Intent nach Absturz/Timeout nur ueber clientOid uebernehmen, nie blind neu senden.
+    if tracker.get('status') in ('placing_entry', 'placement_unknown'):
+        client_oid = str(tracker.get('client_oid') or '')
+        if not client_oid:
+            logger.error('Unklarer Entry ohne clientOid; keine neue Order.')
+            return
+        try:
+            order = exchange.fetch_order_by_client_oid(client_oid, symbol)
+            if order is None:
+                for candidate in exchange.fetch_open_orders(symbol, strict=True):
+                    candidate_oid = str(candidate.get('clientOrderId') or candidate.get('clientOid') or '')
+                    if candidate_oid == client_oid:
+                        order = candidate
+                        break
+        except Exception as error:
+            logger.error(f'Entry-Intent nicht abgleichbar ({error}); keine neue Order.')
+            return
+        if order is None:
+            tracker['not_found_checks'] = int(tracker.get('not_found_checks') or 0) + 1
+            write_tracker(tracker_path, tracker)
+            if tracker['not_found_checks'] >= 2 and _intent_expired(tracker):
+                if not _consume_impulse(symbol, timeframe, tracker, logger):
+                    return
+                write_tracker(tracker_path, keep)
+                logger.error('Unklarer Entry nach zwei Stunden nicht auffindbar; Impuls sicherheitshalber verworfen.')
+                send_message(bot_token, chat_id,
+                             f"FiBot ALARM ({symbol}): unklarer Entry nicht auffindbar; Impuls verworfen.")
+            return
+
+        status = order.get('status')
+        tracker['order_id'] = str(order.get('id') or tracker.get('order_id') or '')
+        try:
+            quantity_filled = filled_quantity(order)
+        except (TypeError, ValueError):
+            logger.error('Entry-Intent gefunden, Fillmenge aber unbekannt; keine neue Order.')
+            return
+        if status == 'closed' or quantity_filled > 0:
+            if not _consume_impulse(symbol, timeframe, tracker, logger):
+                return
+            try:
+                if exchange.fetch_open_positions(symbol, strict=True):
+                    tracker['status'] = 'open'
+                else:
+                    tracker = _start_reconcile(tracker, 'fill_reconcile')
+                write_tracker(tracker_path, tracker)
+            except Exception as error:
+                logger.error(f'Position nach Entry unklar ({error}); Intent bleibt erhalten.')
+            return
+        if status == 'open':
+            tracker['status'] = 'pending_entry'
+            write_tracker(tracker_path, tracker)
+        elif status in ('canceled', 'cancelled', 'expired', 'rejected'):
+            write_tracker(tracker_path, keep)
+            tracker = {}
+        else:
+            logger.error(f'Entry-Intent hat unbekannten Status {status!r}; keine neue Order.')
+            return
 
     # 2) Abgeschlossene Kerzen laden (laufende Kerze verwerfen)
     df = exchange.fetch_recent_ohlcv(symbol, timeframe, limit=int(params['strategy'].get('candle_limit', 600)))
@@ -886,6 +1140,14 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
         if filtered_reason:
             logger.info(f"Trendfilter: {plan['direction'].upper()} @ {plan['limit']:.6g} nicht erlaubt ({filtered_reason}).")
             plan = None
+        else:
+            try:
+                plan = dict(plan)
+                for key in ('limit', 'sl', 'tp'):
+                    plan[key] = float(exchange.price_to_precision(symbol, plan[key]))
+            except Exception as error:
+                logger.error(f'Planpreise nicht sicher rundbar ({error}); keine Order.')
+                return
 
     # 3) Bestehende wartende Order pruefen
     cancelled_prev = None   # stornierte wartende Order (fuer Telegram: nachgezogen / ungueltig)
@@ -895,31 +1157,104 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
             order = exchange.fetch_order(tracker.get('order_id'), symbol)
         except Exception as e:
             logger.warning(f"Pending-Order nicht abrufbar: {e}")
+            return
         status = (order or {}).get('status')
-        if status == 'closed':
-            # gefuellt und (ohne Position) bereits wieder geschlossen -> Impuls verbraucht
-            logger.info("Entry wurde gefuellt und Position ist schon wieder zu (SL/TP zwischen zwei Laeufen).")
-            send_message(bot_token, chat_id, f"FiBot ({symbol} {timeframe}): Entry gefuellt und Position bereits geschlossen.")
-            exchange.cancel_all_orders_for_symbol(symbol)
-            write_tracker(tracker_path, keep)
-            tracker = {}
+        cancelled_with_fill = False
+        if status in ('canceled', 'cancelled', 'expired', 'rejected'):
+            try:
+                cancelled_with_fill = filled_quantity(order) > 0
+            except (TypeError, ValueError):
+                return
+        if status == 'closed' or cancelled_with_fill:
+            if not _consume_impulse(symbol, timeframe, tracker, logger):
+                return
+            try:
+                if exchange.fetch_open_positions(symbol, strict=True):
+                    tracker['status'] = 'open'
+                else:
+                    tracker = _start_reconcile(tracker, 'fill_reconcile')
+                write_tracker(tracker_path, tracker)
+                return
+            except Exception:
+                logger.error('Position after fill is unknown; protective orders retained.')
+                return
         elif status == 'open':
+            try:
+                if filled_quantity(order) > 0:
+                    if not _consume_impulse(symbol, timeframe, tracker, logger):
+                        return
+                    try:
+                        exchange.cancel_order(tracker.get('order_id'), symbol)
+                    except Exception as error:
+                        logger.warning(f'Restmengen-Storno unklar ({error}); Fill wird weiter abgeglichen.')
+                    tracker = _start_reconcile(tracker, 'fill_reconcile')
+                    write_tracker(tracker_path, tracker)
+                    return
+            except (TypeError, ValueError):
+                logger.error('Pending fill quantity unknown; no replacement.')
+                return
             same = (plan is not None and tracker.get('candle_ts') == current_candle
                     and tracker.get('direction') == plan['direction']
-                    and abs(float(tracker.get('entry_price', 0)) - plan['limit']) <= 1e-9 * max(1.0, plan['limit']))
+                    and abs(float(tracker.get('entry_price', 0)) - plan['limit']) <= 1e-9 * max(1.0, plan['limit'])
+                    and abs(float(tracker.get('sl_price', 0)) - plan['sl']) <= 1e-9 * max(1.0, plan['sl'])
+                    and abs(float(tracker.get('tp1_price', 0)) - plan['tp']) <= 1e-9 * max(1.0, plan['tp']))
+            if same:
+                current_budget = _confluence_size(exchange, symbol, plan, risk_pct, leverage, logger)
+                same = (current_budget > 0
+                        and float(tracker.get('contracts') or 0) <= current_budget * (1 + 1e-10))
             if same:
                 logger.info(f"Limit-Order fuer {current_candle} liegt bereits @ {plan['limit']:.6f}.")
                 return
             logger.info("Neue Kerze bzw. neuer Plan: wartende Order wird storniert.")
             try:
-                exchange.cancel_order(tracker.get('order_id'), symbol)
+                cancellation = exchange.cancel_order(tracker.get('order_id'), symbol)
             except Exception as e:
                 logger.warning(f"Storno fehlgeschlagen: {e}")
+                return
+            try:
+                after = exchange.fetch_order(tracker.get('order_id'), symbol)
+                cancellation_filled = 0.0
+                if isinstance(cancellation, dict) and cancellation.get('filled') is not None:
+                    cancellation_filled = filled_quantity(cancellation)
+                after_filled = filled_quantity(after)
+                if cancellation_filled > 0 or after_filled > 0 or after.get('status') == 'closed':
+                    if not _consume_impulse(symbol, timeframe, tracker, logger):
+                        return
+                    if exchange.fetch_open_positions(symbol, strict=True):
+                        tracker['status'] = 'open'
+                    else:
+                        tracker = _start_reconcile(tracker, 'fill_reconcile')
+                    write_tracker(tracker_path, tracker)
+                    return
+                if after.get('status') not in ('canceled', 'cancelled', 'expired', 'rejected'):
+                    return
+                if exchange.fetch_open_positions(symbol, strict=True):
+                    return
+            except Exception:
+                logger.error('Cancellation/fill/position not confirmed; no replacement.')
+                return
             cancelled_prev = dict(tracker)
             write_tracker(tracker_path, keep)
-        else:
+        elif status in ('canceled', 'cancelled', 'expired', 'rejected'):
+            try:
+                if filled_quantity(order) > 0:
+                    _consume_impulse(symbol, timeframe, tracker, logger)
+                    return
+            except (TypeError, ValueError):
+                return
             write_tracker(tracker_path, keep)
+        else:
+            logger.error('Pending order state unknown; tracker retained, no new entry.')
+            return
 
+    if plan is not None:
+        try:
+            if consumed(_impulse_path(symbol, timeframe), _impulse_key(plan)):
+                logger.info('Confluence impulse already filled; no duplicate entry.')
+                plan = None
+        except (OSError, ValueError, TypeError):
+            logger.error('Impulse history unavailable; no new entry.')
+            return
     updates = _order_updates_enabled()
     if plan is None:
         if not filtered_reason:
@@ -932,26 +1267,42 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
                          f"@ {float(cancelled_prev.get('entry_price', 0)):.6g} storniert.")
         return
 
+    # Size against the exact rounded protection prices submitted to the venue.
     contracts = _confluence_size(exchange, symbol, plan, risk_pct, leverage, logger)
     if contracts <= 0:
         return
     side = 'buy' if plan['direction'] == 'long' else 'sell'
+    intent = _entry_intent(
+        symbol, timeframe, current_candle, plan, contracts,
+        plan['b_ts'],
+    )
+    # Write-ahead: if this fails, no request is allowed to reach the broker.
+    write_tracker(tracker_path, intent)
     try:
-        order = exchange.place_limit_order_with_tpsl(symbol, side, contracts, plan['limit'], plan['sl'], plan['tp'])
-    except ccxt.InsufficientFunds:
-        logger.warning("Nicht genug freie Margin fuer die Konfluenz-Order.")
+        order = exchange.place_limit_order_with_tpsl(
+            symbol, side, contracts, plan['limit'], plan['sl'], plan['tp'], intent['client_oid'])
+    except (ccxt.InsufficientFunds, ccxt.InvalidOrder, ccxt.BadRequest, ValueError) as error:
+        write_tracker(tracker_path, keep)
+        logger.warning(f"Konfluenz-Order sicher abgelehnt ({error}).")
         return
     except Exception as e:
+        intent['status'] = 'placement_unknown'
+        intent['placement_error'] = type(e).__name__
+        write_tracker(tracker_path, intent)
         logger.error(f"Konfluenz-Order fehlgeschlagen: {e}")
-        send_message(bot_token, chat_id, f"FiBot FEHLER ({symbol}): Konfluenz-Order fehlgeschlagen: {e}")
+        send_message(bot_token, chat_id,
+                     f"FiBot ALARM ({symbol}): Entry-Antwort unklar; clientOid-Abgleich folgt, keine Ersatzorder.")
         return
-    write_tracker(tracker_path, {
-        'status': 'pending_entry', 'strategy': 'confluence', 'order_id': str(order.get('id', '')),
-        'candle_ts': current_candle, 'direction': plan['direction'], 'entry_price': plan['limit'],
-        'sl_price': plan['sl'], 'tp1_price': plan['tp'], 'contracts': contracts,
-        'a_ts': plan['a_ts'], 'b_ts': plan['b_ts'], 'notified_b_ts': plan['b_ts'],
-        'timestamp': datetime.utcnow().isoformat(),
-    })
+    order_id = str((order or {}).get('id') or '')
+    if not order_id:
+        intent['status'] = 'placement_unknown'
+        write_tracker(tracker_path, intent)
+        logger.error('Brokerantwort ohne Order-ID; clientOid-Abgleich folgt, keine Ersatzorder.')
+        return
+    intent['status'] = 'pending_entry'
+    intent['order_id'] = order_id
+    intent['timestamp'] = _utc_now().isoformat()
+    write_tracker(tracker_path, intent)
     if keep['notified_b_ts'] == plan['b_ts']:
         # gleicher Impuls, Order nur auf die neue Kanalposition nachgezogen -> keine neue Nachricht
         logger.info(f"Limit nachgezogen: {plan['direction'].upper()} @ {plan['limit']:.6g} "
@@ -1076,6 +1427,6 @@ def _save_trade_state(path: str, signal: FibSignal, entry: float,
         'tp_order_id':  tp_order_id,
         'signal_score': signal.score,
         'reason':       signal.reason,
-        'timestamp':    datetime.utcnow().isoformat(),
+        'timestamp':    _utc_now().isoformat(),
     })
     write_tracker(path, data)

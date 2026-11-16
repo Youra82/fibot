@@ -243,34 +243,49 @@ class Exchange:
             logger.error(f"Fehler beim Abrufen von Order {id} für {symbol}: {e}")
             raise e
 
-    def fetch_open_orders(self, symbol: str):
-        if not self.markets: return []
+    def fetch_open_orders(self, symbol: str, strict: bool = False):
+        if not self.markets:
+            if strict:
+                raise RuntimeError("Markets nicht geladen -- offener Orderstatus unbekannt")
+            return []
         try:
             params = {'stop': False, 'productType': 'USDT-FUTURES'}
             return self.exchange.fetch_open_orders(symbol, params=params)
         except Exception as e:
             logger.error(f"Fehler beim Abrufen offener Orders für {symbol}: {e}")
+            if strict:
+                raise
             return []
 
-    def fetch_open_trigger_orders(self, symbol: str):
-        if not self.markets: return []
+    def fetch_open_trigger_orders(self, symbol: str, strict: bool = False):
+        if not self.markets:
+            if strict:
+                raise RuntimeError("Markets nicht geladen -- Trigger-Orderstatus unbekannt")
+            return []
         try:
             params = {'stop': True, 'productType': 'USDT-FUTURES'}
             return self.exchange.fetch_open_orders(symbol, params=params)
         except Exception as e:
             logger.error(f"Fehler beim Abrufen offener Trigger-Orders für {symbol}: {e}")
+            if strict:
+                raise
             return []
 
-    def fetch_position_tpsl_orders(self, symbol: str):
+    def fetch_position_tpsl_orders(self, symbol: str, strict: bool = False):
         """Position-TP/SL (planType 'profit_loss'), z.B. die an eine Limit-Entry
         gehaengten preset-SL/TP. Tauchen in fetch_open_trigger_orders() NICHT auf
         (das liefert nur 'normal_plan') -- Muster aus ltbbot."""
-        if not self.markets: return []
+        if not self.markets:
+            if strict:
+                raise RuntimeError("Markets nicht geladen -- Position-TP/SL-Status unbekannt")
+            return []
         try:
             params = {'stop': True, 'planType': 'profit_loss', 'productType': 'USDT-FUTURES'}
             return self.exchange.fetch_open_orders(symbol, params=params)
         except Exception as e:
             logger.error(f"Fehler beim Abrufen von Position-TP/SL-Orders für {symbol}: {e}")
+            if strict:
+                raise
             return []
 
     def fetch_closed_trigger_orders(self, symbol: str, limit: int = 20):
@@ -335,7 +350,7 @@ class Exchange:
             cancelled.append((sym, o['orderId']))
         return cancelled
 
-    def cancel_all_orders_for_symbol(self, symbol):
+    def cancel_all_orders_for_symbol(self, symbol, strict: bool = False):
         """Storniert alle offenen Orders (normal und trigger) für ein Symbol."""
         if not self.markets: return 0
         cancelled_count = 0
@@ -351,8 +366,12 @@ class Exchange:
                 logger.info("Keine normalen Orders zum Stornieren gefunden.")
             else:
                 logger.error(f"Fehler beim Stornieren normaler Orders: {e}")
+                if strict:
+                    raise
         except Exception as e:
             logger.error(f"Unerwarteter Fehler beim Stornieren normaler Orders: {e}")
+            if strict:
+                raise
 
         # 2. Trigger Orders stornieren (stop: True)
         try:
@@ -365,8 +384,12 @@ class Exchange:
                 logger.info("Keine Trigger-Orders zum Stornieren gefunden.")
             else:
                 logger.error(f"Fehler beim Stornieren von Trigger-Orders: {e}")
+                if strict:
+                    raise
         except Exception as e:
             logger.error(f"Unerwarteter Fehler beim Stornieren von Trigger-Orders: {e}")
+            if strict:
+                raise
 
         return cancelled_count
 
@@ -391,8 +414,12 @@ class Exchange:
                          if contracts_str is None or abs(float(contracts_str)) <= 1e-9 :
                               logger.warning(f"Position für {symbol} hat Margin > 0 aber Size ≈ 0. Betrachte sie als offen. Details: {p}")
                          open_positions.append(p)
+                     elif contracts_str is None and strict:
+                          raise RuntimeError(f"Positionsgroesse fuer {symbol} fehlt")
                  except (ValueError, TypeError, KeyError) as e:
                      logger.warning(f"Konnte Positionsgröße nicht prüfen: {e}. Positionsdaten: {p}")
+                     if strict:
+                         raise RuntimeError(f"Positionsdaten fuer {symbol} nicht interpretierbar: {e}") from e
                      continue
             return open_positions
         except Exception as e:
@@ -504,20 +531,42 @@ class Exchange:
     # WIR KOPIEREN DIE LOGIK VON JAEGERBOT/TITANBOT
     # =========================================================================
     def place_limit_order_with_tpsl(self, symbol: str, side: str, amount: float, price: float,
-                                    sl_price: float, tp_price: float):
+                                    sl_price: float, tp_price: float, client_oid: str = None):
         """Limit-Entry mit angehaengtem SL/TP (Bitget presetStopLossPrice/presetStopSurplusPrice).
         Bitget legt beide erst beim Fill als Position-TP/SL an -- die Position ist damit
         ab der ersten Sekunde geschuetzt, auch wenn der Fill zwischen zwei Cron-Laeufen passiert."""
         if not self.markets: return None
         amount_str = self.amount_to_precision(symbol, amount)
         price_str = self.price_to_precision(symbol, price)
+        from fibot.utils.execution_guard import validate_bracket
+        rounded_sl = float(self.price_to_precision(symbol, sl_price))
+        rounded_tp = float(self.price_to_precision(symbol, tp_price))
+        validate_bracket(side, float(price_str), rounded_sl, rounded_tp, self.fetch_ticker(symbol))
         order_params = {
             'hedged': True, 'marginMode': 'isolated', 'productType': 'USDT-FUTURES',
-            'stopLoss':   {'triggerPrice': float(self.price_to_precision(symbol, sl_price)), 'type': 'market'},
-            'takeProfit': {'triggerPrice': float(self.price_to_precision(symbol, tp_price)), 'type': 'market'},
+            'stopLoss':   {'triggerPrice': rounded_sl, 'type': 'market'},
+            'takeProfit': {'triggerPrice': rounded_tp, 'type': 'market'},
         }
+        if client_oid:
+            order_params['clientOid'] = client_oid
         logger.info(f"Platziere Limit+TP/SL: {side.upper()} {amount_str} {symbol} @ {price_str} | SL {sl_price} | TP {tp_price}")
         return self.exchange.create_order(symbol, 'limit', side, float(amount_str), float(price_str), params=order_params)
+
+    def fetch_order_by_client_oid(self, client_oid: str, symbol: str):
+        """Resolve an uncertain placement without ever submitting a second order."""
+        if not self.markets:
+            raise RuntimeError("Markets nicht geladen -- Orderstatus unbekannt")
+        if not client_oid:
+            raise ValueError("clientOid fehlt")
+        try:
+            params = {'productType': 'USDT-FUTURES', 'clientOid': client_oid}
+            return self.exchange.fetch_order(None, symbol, params=params)
+        except ccxt.OrderNotFound:
+            logger.warning(f"Order mit clientOid {client_oid} fuer {symbol} nicht gefunden.")
+            return None
+        except Exception as e:
+            logger.error(f"Fehler beim Abrufen von clientOid {client_oid} fuer {symbol}: {e}")
+            raise
 
     def fetch_equity_usdt(self) -> float:
         """Gesamtkapital (USDT total inkl. gebundener Margin) -- Basis fuer risikobasiertes Sizing."""
