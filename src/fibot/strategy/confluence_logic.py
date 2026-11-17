@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from fibot.strategy import trend_filter
+from fibot.strategy.risk_policy import stop_below_entry
 
 DEFAULTS = {
     'pivot_k':          5,      # Extrem ueber +-k Kerzen, bestaetigt k Kerzen spaeter
@@ -216,7 +217,8 @@ def simulate_long(o, h, l, c, p=None, direction='long'):
             continue
         if c[j] <= limit:
             continue
-        sl = min(f786, limit) - p['sl_buf_atr'] * a
+        raw_sl = min(f786, limit) - p['sl_buf_atr'] * a
+        sl = stop_below_entry(limit, raw_sl, a)
         tp = chan.upper(i)
         if limit - sl <= 0 or (tp - limit) / (limit - sl) < p['min_rr']:
             continue
@@ -356,7 +358,8 @@ def _plan_one_direction(h, l, c, p, cache_key=None):
         tol = p['zone_tol_atr'] * a
         if not (f618 - tol <= limit <= f50 + tol) or c[j] <= limit:
             continue
-        sl = min(f786, limit) - p['sl_buf_atr'] * a
+        raw_sl = min(f786, limit) - p['sl_buf_atr'] * a
+        sl = stop_below_entry(limit, raw_sl, a)
         tp = icpt + slope * i + width if p.get('tp_mode', 'upper') == 'upper' else hi
         if limit - sl <= 0 or (tp - limit) / (limit - sl) < p['min_rr']:
             continue

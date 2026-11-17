@@ -9,39 +9,49 @@
     "window": 150,
     "min_upper_touches": 1,
     "max_break_frac": 0.0,
-    "min_width_atr": 3.0,
+    "min_width_atr": 2.0,
     "touch_atr": 0.3,
-    "fib_lo": 0.382,
-    "fib_hi": 0.705,
-    "fib_sl": 1.0,
-    "zone_tol_atr": 0.25,
-    "sl_buf_atr": 0.05,
-    "min_rr": 1.1,
+    "fib_lo": 0.5,
+    "fib_hi": 0.786,
+    "fib_sl": 0.886,
+    "zone_tol_atr": 0.6,
+    "sl_buf_atr": 0.45000000000000007,
+    "min_rr": 1.0,
     "max_age_mult": 2.0,
-    "b_near_upper_atr": 1.0,
-    "tp_mode": "upper",
-    "candle_limit": 600
+    "b_near_upper_atr": 0.5,
+    "tp_mode": "b",
+    "candle_limit": 600,
+    "risk_policy_version": 2
   },
   "risk": {
-    "leverage": 10,
-    "risk_per_entry_pct": 2.75,
+    "leverage": 6,
+    "risk_per_entry_pct": 0.75,
     "margin_mode": "isolated"
   },
   "_backtest": {
-    "pnl_pct": 26.8,
-    "win_rate": 38.9,
-    "total_trades": 72,
-    "max_drawdown": 23.47,
+    "pnl_pct": 6.29,
+    "win_rate": 34.0,
+    "total_trades": 47,
+    "max_drawdown": 6.74,
     "start_date": "2023-04-08",
-    "end_date": "2026-04-01",
+    "end_date": "2026-05-01",
     "capital": 100.0,
-    "oos": {
-      "start_date": "2026-04-01",
-      "end_date": "2026-10-15",
-      "pnl_pct": 28.3,
-      "max_drawdown": 5.56,
+    "risk_policy_version": 2,
+    "selection_score": 21.7261,
+    "validation": {
+      "start_date": "2025-11-02",
+      "pnl_pct": 5.12,
+      "max_drawdown": 3.01,
       "total_trades": 11,
-      "win_rate": 63.6
+      "win_rate": 45.5
+    },
+    "oos": {
+      "start_date": "2026-05-01",
+      "end_date": "2026-11-17",
+      "pnl_pct": 0.79,
+      "max_drawdown": 2.23,
+      "total_trades": 7,
+      "win_rate": 42.9
     }
   }
 }

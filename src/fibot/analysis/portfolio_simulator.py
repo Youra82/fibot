@@ -15,6 +15,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
 from fibot.analysis.backtester import _get_fine_slice
+from fibot.strategy.risk_policy import ROUND_TRIP_COST_PCT
 
 FEE_PCT     = 0.06 / 100   # Bitget Taker-Gebühr (je Seite)
 MIN_NOTIONAL = 5.0          # Bitget Minimum
@@ -192,7 +193,7 @@ def run_portfolio_simulation(start_capital: float,
                 else:
                     raw_pnl = pos['notional'] * (pos['entry'] - exit_price) / pos['entry']
 
-                fees    = pos['notional'] * FEE_PCT * 2
+                fees    = pos['notional'] * pos.get('execution_cost_pct', FEE_PCT * 2)
                 net_pnl = raw_pnl - fees
                 equity += net_pnl
 
@@ -248,7 +249,9 @@ def run_portfolio_simulation(start_capital: float,
                 risk_pct = risk.get('risk_per_entry_pct', 0.5) / 100
 
                 # Notional aus aktuellem equity × risk_pct / sl_pct (dynamisch, wie Einzel-Backtester)
-                notional = (equity * risk_pct) / sl_pct
+                execution_cost_pct = (ROUND_TRIP_COST_PCT
+                                      if strat.get('confluence') else FEE_PCT * 2)
+                notional = (equity * risk_pct) / (sl_pct + execution_cost_pct)
 
                 # Margin-Cap: auf verfügbare Margin kappen (wie live bot)
                 used_margin      = sum(p['margin'] for p in open_positions.values())
@@ -271,11 +274,12 @@ def run_portfolio_simulation(start_capital: float,
                     'margin':    margin,
                     'leverage':  leverage,
                     'entry_ts':  ts,
+                    'execution_cost_pct': execution_cost_pct,
                 }
 
                 # Konfluenz: Fuellkerze erreicht auch den SL -> sofort Verlust
                 if bool(strat['si'][i]):
-                    fees = notional * FEE_PCT * 2
+                    fees = notional * execution_cost_pct
                     net_pnl = -notional * sl_pct - fees
                     equity += net_pnl
                     trade_history.append({

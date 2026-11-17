@@ -21,6 +21,7 @@ from fibot.utils.exchange import Exchange
 from fibot.utils.telegram import send_message, send_photo
 from fibot.strategy.fibonacci_logic import generate_signal, signal_summary, FibSignal
 from fibot.strategy.confluence_logic import is_confluence
+from fibot.strategy.risk_policy import effective_risk_per_contract, validate_stop_distance
 from fibot.utils.execution_guard import (
     consumed, consume, entry_client_oid, filled_quantity, symbol_cycle_lock, CycleBusy,
 )
@@ -843,7 +844,11 @@ def _confluence_size(exchange: Exchange, symbol: str, plan: dict, risk_pct: floa
     """Risiko auf das Gesamtkapital (wie im Backtest), Margin auf das freie Guthaben gekappt."""
     equity = exchange.fetch_equity_usdt()
     free = exchange.fetch_balance_usdt()
-    risk = abs(plan['limit'] - plan['sl'])
+    try:
+        risk = effective_risk_per_contract(plan['limit'], plan['sl'])
+    except ValueError as error:
+        logger.error(f'Ungueltiges Konfluenz-Risiko ({error}). Keine Order.')
+        return 0.0
     if not all(math.isfinite(x) and x > 0 for x in (equity, free, risk, risk_pct, leverage, plan['limit'])):
         return 0.0
     contracts = equity * risk_pct / 100 / risk
@@ -884,7 +889,7 @@ def _round_confluence_plan(exchange: Exchange, symbol: str, plan: dict) -> dict:
         valid_geometry = False
     if not valid_geometry:
         raise ValueError('Gerundete Entry/SL/TP-Geometrie ist ungueltig')
-    risk = abs(rounded['limit'] - rounded['sl'])
+    risk = validate_stop_distance(rounded['limit'], rounded['sl'])
     reward = abs(rounded['tp'] - rounded['limit'])
     rounded['rr'] = reward / risk
     if not math.isfinite(rounded['rr']):
@@ -906,7 +911,7 @@ def _pending_entry_within_risk(exchange: Exchange, plan: dict, contracts: float,
         equity = float(exchange.fetch_equity_usdt())
         contracts = float(contracts)
         risk_pct = float(risk_pct)
-        risk_per_contract = abs(float(plan['limit']) - float(plan['sl']))
+        risk_per_contract = effective_risk_per_contract(plan['limit'], plan['sl'])
         values = (equity, contracts, risk_pct, risk_per_contract)
         if any(not math.isfinite(value) or value <= 0 for value in values):
             raise ValueError('ungueltige Risikowerte')

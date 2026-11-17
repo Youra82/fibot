@@ -14,6 +14,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, os.path.join(ROOT, 'src'))
 
 from fibot.strategy.confluence_logic import plan_both, plan_next_order, V2
+from fibot.strategy.risk_policy import minimum_stop_distance
 
 CFG = {'market': {'symbol': 'BTC/USDT:USDT', 'timeframe': '4h'},
        'strategy': {'type': 'confluence', **V2, 'max_age_mult': None, 'candle_limit': 600},
@@ -62,6 +63,22 @@ def test_live_plan_equals_backtest_plan():
     assert planned > 0
     # ATR (EWM) haengt minimal von der Historienlaenge ab -> Toleranz 1 % der geplanten Kerzen
     assert mism <= max(1, planned // 100), f'{mism}/{planned} Plan-Abweichungen bei {checked} Kerzen'
+
+
+def test_zero_buffer_config_still_obeys_non_configurable_stop_floor():
+    cfg={**CFG,'strategy':{**CFG['strategy'],'sl_buf_atr':0.0}}
+    df=_real_or_synthetic().tail(1200)
+    lo,sh=plan_both(df,cfg)
+    checked=0
+    for pl in (lo,sh):
+        for i in np.where(np.isfinite(pl['limit']))[0]:
+            j=min(max(i-1,0),len(df)-1)
+            entry=float(pl['limit'][i]);stop=float(pl['sl'][i])
+            required=minimum_stop_distance(entry,float(pl['ch']['atr'][j]))
+            tolerance=max(abs(entry),required,1.)*1e-12
+            assert abs(entry-stop)+tolerance>=required
+            checked+=1
+    assert checked>0
 
 
 def _mock_exchange(df_with_open, order_status='open'):

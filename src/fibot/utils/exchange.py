@@ -541,7 +541,15 @@ class Exchange:
         from fibot.utils.execution_guard import validate_bracket
         rounded_sl = float(self.price_to_precision(symbol, sl_price))
         rounded_tp = float(self.price_to_precision(symbol, tp_price))
-        validate_bracket(side, float(price_str), rounded_sl, rounded_tp, self.fetch_ticker(symbol))
+        tick_size = (self.markets.get(symbol, {}).get('precision', {}) or {}).get('price')
+        try:
+            tick_size = float(tick_size)
+            if not (0 < tick_size < float(price_str)):
+                tick_size = None
+        except (TypeError, ValueError):
+            tick_size = None
+        validate_bracket(side, float(price_str), rounded_sl, rounded_tp,
+                         self.fetch_ticker(symbol), tick_size=tick_size)
         order_params = {
             'hedged': True, 'marginMode': 'isolated', 'productType': 'USDT-FUTURES',
             'stopLoss':   {'triggerPrice': rounded_sl, 'type': 'market'},

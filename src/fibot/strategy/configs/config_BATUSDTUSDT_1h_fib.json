@@ -5,43 +5,53 @@
   },
   "strategy": {
     "type": "confluence",
-    "pivot_k": 3,
+    "pivot_k": 5,
     "window": 150,
-    "min_upper_touches": 2,
+    "min_upper_touches": 1,
     "max_break_frac": 0.0,
-    "min_width_atr": 2.0,
+    "min_width_atr": 3.0,
     "touch_atr": 0.3,
-    "fib_lo": 0.382,
+    "fib_lo": 0.5,
     "fib_hi": 0.786,
     "fib_sl": 0.886,
-    "zone_tol_atr": 0.45000000000000007,
-    "sl_buf_atr": 0.2,
-    "min_rr": 1.7000000000000002,
-    "max_age_mult": 3.0,
+    "zone_tol_atr": 0.6,
+    "sl_buf_atr": 0.75,
+    "min_rr": 2.5,
+    "max_age_mult": null,
     "b_near_upper_atr": 1.0,
-    "tp_mode": "b",
-    "candle_limit": 600
+    "tp_mode": "upper",
+    "candle_limit": 600,
+    "risk_policy_version": 2
   },
   "risk": {
-    "leverage": 8,
-    "risk_per_entry_pct": 1.5,
+    "leverage": 3,
+    "risk_per_entry_pct": 2.0,
     "margin_mode": "isolated"
   },
   "_backtest": {
-    "pnl_pct": 40.49,
-    "win_rate": 28.2,
-    "total_trades": 85,
-    "max_drawdown": 14.85,
+    "pnl_pct": 3.56,
+    "win_rate": 24.2,
+    "total_trades": 62,
+    "max_drawdown": 26.49,
     "start_date": "2023-04-08",
-    "end_date": "2026-04-01",
+    "end_date": "2026-05-01",
     "capital": 100.0,
+    "risk_policy_version": 2,
+    "selection_score": 17.9203,
+    "validation": {
+      "start_date": "2025-11-02",
+      "pnl_pct": 2.97,
+      "max_drawdown": 11.42,
+      "total_trades": 8,
+      "win_rate": 25.0
+    },
     "oos": {
-      "start_date": "2026-04-01",
-      "end_date": "2026-10-15",
-      "pnl_pct": 21.24,
-      "max_drawdown": 5.79,
-      "total_trades": 13,
-      "win_rate": 53.8
+      "start_date": "2026-05-01",
+      "end_date": "2026-11-17",
+      "pnl_pct": 7.53,
+      "max_drawdown": 3.96,
+      "total_trades": 7,
+      "win_rate": 42.9
     }
   }
 }

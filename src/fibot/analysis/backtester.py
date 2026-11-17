@@ -21,11 +21,14 @@ from fibot.strategy.fibonacci_logic import (
 )
 from fibot.strategy.signals import precompute_signals
 from fibot.strategy.confluence_logic import is_confluence
+from fibot.strategy.risk_policy import (
+    TAKER_FEE_PCT, ROUND_TRIP_COST_PCT, effective_risk_per_contract,
+)
 
 logger = logging.getLogger(__name__)
 
 MIN_NOTIONAL_USDT = 5.0
-FEE_PCT           = 0.06 / 100   # Bitget Taker-Gebühr (je Seite)
+FEE_PCT           = TAKER_FEE_PCT
 
 # Feinere Timeframe je Strategie-Timeframe fuer die SL/TP-Intrabar-Reihenfolgen-
 # Aufloesung (oraclebot-Muster).
@@ -279,6 +282,7 @@ def run_backtest(df: pd.DataFrame, config: dict,
     # Schritt 1: Indikatoren (RSI, ATR, Vol-Ratio) — einmal, vektorisiert
     # Schritt 2: Alle Signale vorberechnen (Verteiler waehlt Fibo- oder Konfluenz-Logik)
     confluence = is_confluence(config)
+    execution_cost_pct = ROUND_TRIP_COST_PCT if confluence else FEE_PCT * 2
     if not (confluence and '_sig_instant' in df.columns):   # Modus 3 rechnet die Signale schon vor
         df = precompute_signals(df, config, cache_key)
     instant_arr = df['_sig_instant'].values if '_sig_instant' in df.columns else None
@@ -334,7 +338,7 @@ def run_backtest(df: pd.DataFrame, config: dict,
                     price_diff = -price_diff
 
                 notional = open_trade.contracts * open_trade.entry
-                fees_usdt = notional * FEE_PCT * 2      # Entry + Exit Gebühr
+                fees_usdt = notional * execution_cost_pct
                 pnl_usdt = price_diff * open_trade.contracts - fees_usdt
                 pnl_pct  = pnl_usdt / capital * 100
 
@@ -377,7 +381,9 @@ def run_backtest(df: pd.DataFrame, config: dict,
 
         # Position sizing: risiko-basiert, dann auf verfügbare Margin kappen (wie live bot)
         risk_amount   = capital * risk_pct / 100
-        contracts     = risk_amount / price_risk
+        unit_risk     = (effective_risk_per_contract(entry, sl)
+                         if confluence else price_risk)
+        contracts     = risk_amount / unit_risk
         if min_contracts > 0 and contracts < min_contracts:
             contracts = min_contracts
         max_contracts = (capital * leverage) / entry   # Margin-Cap: notional ≤ capital × leverage
@@ -404,7 +410,7 @@ def run_backtest(df: pd.DataFrame, config: dict,
 
         # Konfluenz: Fuellkerze erreicht auch den SL -> sofort Verlust (konservativ)
         if instant_arr is not None and instant_arr[i]:
-            fees_usdt = notional * FEE_PCT * 2
+            fees_usdt = notional * execution_cost_pct
             pnl_usdt  = -price_risk * contracts - fees_usdt
             open_trade.exit_price = sl
             open_trade.exit_bar   = i
@@ -422,7 +428,7 @@ def run_backtest(df: pd.DataFrame, config: dict,
         if open_trade.direction == 'short':
             price_diff = -price_diff
         notional_last = open_trade.contracts * open_trade.entry
-        fees_last     = notional_last * FEE_PCT * 2
+        fees_last     = notional_last * execution_cost_pct
         pnl_usdt = price_diff * open_trade.contracts - fees_last
         open_trade.exit_price = last_price
         open_trade.exit_bar   = len(df) - 1

@@ -1,142 +1,30 @@
 {
   "live_trading_settings": {
-    "max_open_positions": 9,
+    "max_open_positions": 3,
     "use_auto_optimizer_results": false,
     "active_strategies": [
       {
-        "symbol": "SHIB/USDT:USDT",
-        "timeframe": "1h",
+        "symbol": "DOT/USDT:USDT",
+        "timeframe": "2h",
+        "leverage": 6,
+        "margin_mode": "isolated",
+        "risk_per_entry_pct": 0.75,
+        "active": true
+      },
+      {
+        "symbol": "APT/USDT:USDT",
+        "timeframe": "30m",
         "leverage": 10,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 2.5,
-        "active": true
-      },
-      {
-        "symbol": "SAND/USDT:USDT",
-        "timeframe": "1h",
-        "leverage": 4,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 2.75,
-        "active": true
-      },
-      {
-        "symbol": "UNI/USDT:USDT",
-        "timeframe": "1h",
-        "leverage": 5,
         "margin_mode": "isolated",
         "risk_per_entry_pct": 3.0,
         "active": true
       },
       {
-        "symbol": "TRUMP/USDT:USDT",
-        "timeframe": "15m",
-        "leverage": 4,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 1.75,
-        "active": true
-      },
-      {
-        "symbol": "TAO/USDT:USDT",
-        "timeframe": "30m",
-        "leverage": 10,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 2.75,
-        "active": true
-      },
-      {
-        "symbol": "XLM/USDT:USDT",
-        "timeframe": "30m",
-        "leverage": 3,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 1.75,
-        "active": true
-      },
-      {
-        "symbol": "FIL/USDT:USDT",
-        "timeframe": "15m",
-        "leverage": 9,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 1.5,
-        "active": true
-      },
-      {
-        "symbol": "SIREN/USDT:USDT",
-        "timeframe": "30m",
-        "leverage": 8,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 1.5,
-        "active": true
-      },
-      {
-        "symbol": "DOT/USDT:USDT",
-        "timeframe": "2h",
-        "leverage": 10,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 2.75,
-        "active": true
-      },
-      {
-        "symbol": "APT/USDT:USDT",
-        "timeframe": "1h",
-        "leverage": 10,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 2.25,
-        "active": true
-      },
-      {
-        "symbol": "MAGIC/USDT:USDT",
-        "timeframe": "15m",
-        "leverage": 6,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 2.0,
-        "active": true
-      },
-      {
-        "symbol": "JUP/USDT:USDT",
-        "timeframe": "1h",
-        "leverage": 10,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 1.5,
-        "active": true
-      },
-      {
-        "symbol": "WAL/USDT:USDT",
-        "timeframe": "1h",
-        "leverage": 9,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 1.5,
-        "active": true
-      },
-      {
-        "symbol": "PYTH/USDT:USDT",
-        "timeframe": "4h",
-        "leverage": 10,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 1.5,
-        "active": true
-      },
-      {
         "symbol": "BAT/USDT:USDT",
         "timeframe": "1h",
-        "leverage": 8,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 1.5,
-        "active": true
-      },
-      {
-        "symbol": "OP/USDT:USDT",
-        "timeframe": "1h",
-        "leverage": 9,
-        "margin_mode": "isolated",
-        "risk_per_entry_pct": 1.5,
-        "active": true
-      },
-      {
-        "symbol": "PENGU/USDT:USDT",
-        "timeframe": "15m",
         "leverage": 3,
         "margin_mode": "isolated",
-        "risk_per_entry_pct": 2.75,
+        "risk_per_entry_pct": 2.0,
         "active": true
       }
     ],

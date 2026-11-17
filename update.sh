@@ -46,15 +46,31 @@ if [ -d configs.bak ]; then
 import json, os, shutil
 cfg_dir = os.environ['CONFIGS_DIR']
 bak, alt = 'configs.bak', os.path.join(os.path.dirname(cfg_dir), 'configs_alt_fibo')
-def is_conf(path):
+def load_config(path):
     try:
-        return json.load(open(path)).get('strategy', {}).get('type') == 'confluence'
+        with open(path, encoding='utf-8') as fh:
+            return json.load(fh)
     except Exception:
-        return False
+        return {}
+def is_conf(path):
+    return load_config(path).get('strategy', {}).get('type') == 'confluence'
+def policy_version(path):
+    strategy = load_config(path).get('strategy', {})
+    try:
+        return int(strategy.get('risk_policy_version', 0))
+    except (TypeError, ValueError):
+        return 0
 git_has_conf = any(is_conf(os.path.join(cfg_dir, f)) for f in os.listdir(cfg_dir) if f.endswith('.json'))
+policy_upgraded = 0
 for f in os.listdir(bak):
     src, dst = os.path.join(bak, f), os.path.join(cfg_dir, f)
     if git_has_conf and os.path.exists(dst) and is_conf(dst) and not is_conf(src):
+        continue
+    # A repository config with a newer mandatory risk policy must not be
+    # overwritten by an older VPS optimizer result.  VPS-only configs remain
+    # available, while the runtime policy still protects them fail-closed.
+    if os.path.exists(dst) and policy_version(dst) > policy_version(src):
+        policy_upgraded = 1
         continue
     shutil.copy2(src, dst)
 moved = 0
@@ -65,14 +81,15 @@ if git_has_conf:
         if f.endswith('.json') and not is_conf(path):
             shutil.move(path, os.path.join(alt, f))
             moved += 1
-print(1 if moved else 0)
+print(2 if policy_upgraded else (1 if moved else 0))
 PYEOF2
 )
     rm -rf configs.bak
     echo "    Configs (VPS-eigene Optimizer-Ergebnisse) wiederhergestellt."
     [ "$MIGRATED" == "1" ] && echo "    Alte Fibo-Configs nach configs_alt_fibo/ verschoben (Strategie-Wechsel)."
+    [ "$MIGRATED" == "2" ] && echo "    Neuere Risk-Policy-Configs aus dem Repo beibehalten."
 fi
-if [ "$MIGRATED" != "1" ] && [ -n "$SAVED_STRATEGIES" ] && [ "$SAVED_STRATEGIES" != "[]" ]; then
+if [ "$MIGRATED" == "0" ] && [ -n "$SAVED_STRATEGIES" ] && [ "$SAVED_STRATEGIES" != "[]" ]; then
     SAVED_STRATEGIES="$SAVED_STRATEGIES" SAVED_MAX_POS="$SAVED_MAX_POS" python3 -c "
 import json, os
 s = json.load(open('settings.json'))

@@ -6,6 +6,8 @@ from pathlib import Path
 from contextlib import contextmanager
 import hashlib
 
+from fibot.strategy.risk_policy import validate_stop_distance
+
 
 class CycleBusy(Exception):
     pass
@@ -81,7 +83,7 @@ def consume(path, key):
             temporary.unlink()
 
 
-def validate_bracket(side, entry, stop, target, ticker):
+def validate_bracket(side, entry, stop, target, ticker, tick_size=None):
     """Reject invalid rounded protection or a market already beyond protection."""
     values = [float(x) for x in (entry, stop, target)]
     if side not in ('buy', 'sell') or any(not math.isfinite(x) or x <= 0 for x in values):
@@ -89,6 +91,7 @@ def validate_bracket(side, entry, stop, target, ticker):
     entry, stop, target = values
     if not (stop < entry < target if side == 'buy' else target < entry < stop):
         raise ValueError('Rounded stop/entry/target have invalid geometry')
+    validate_stop_distance(entry, stop, tick_size=tick_size)
     if not isinstance(ticker, dict):
         raise ValueError('Current market quote unavailable')
     quote_key = 'ask' if side == 'buy' else 'bid'

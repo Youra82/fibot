@@ -25,6 +25,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
 from fibot.analysis.backtester import run_backtest, load_ohlcv, auto_days_for_timeframe, FINE_TF_MAP, LazyFineData
+from fibot.strategy.risk_policy import POLICY_VERSION
 
 logging.basicConfig(level=logging.WARNING, format='%(levelname)s %(message)s')
 logging.getLogger('optuna').setLevel(logging.WARNING)
@@ -392,7 +393,8 @@ def segment_stats(trades, start_ts=None, end_ts=None) -> dict:
 def _confluence_config(symbol, timeframe, sp: dict, risk_pct, leverage) -> dict:
     return {
         "market": {"symbol": symbol, "timeframe": timeframe},
-        "strategy": {"type": "confluence", **sp, "candle_limit": 600},
+        "strategy": {"type": "confluence", **sp, "candle_limit": 600,
+                     "risk_policy_version": POLICY_VERSION},
         "risk": {"leverage": int(leverage), "risk_per_entry_pct": float(risk_pct), "margin_mode": "isolated"},
     }
 
@@ -416,7 +418,7 @@ def _suggest_confluence(trial) -> dict:
         "fib_hi":            fib_hi,
         "fib_sl":            fib_sl,
         "zone_tol_atr":      trial.suggest_float("zone_tol_atr", 0.1, 0.8, step=0.05),
-        "sl_buf_atr":        trial.suggest_float("sl_buf_atr", 0.0, 0.6, step=0.05),
+        "sl_buf_atr":        trial.suggest_float("sl_buf_atr", 0.1, 0.8, step=0.05),
         "min_rr":            trial.suggest_float("min_rr", 1.0, 3.0, step=0.1),
         "max_age_mult":      None if age == 0.0 else age,
         "b_near_upper_atr":  trial.suggest_categorical("b_near_upper_atr", [0.5, 1.0]),
@@ -440,6 +442,10 @@ def optimize_confluence(symbol: str, timeframe: str, start_date: str, oos_start:
     oos_ts = pd.Timestamp(oos_start, tz='UTC')
     df_is = df_all[df_all.index < oos_ts]
     min_trades = _CONF_MIN_TRADES.get(timeframe, 20)
+    validation_ts = oos_ts - pd.Timedelta(days=180)
+    if validation_ts <= df_is.index[0]:
+        validation_ts = df_is.index[int(len(df_is) * 0.7)]
+    min_validation_trades = max(3, min_trades // 10)
     key_is = (symbol, timeframe, 'IS', len(df_is))
 
     def objective(trial):
@@ -453,7 +459,16 @@ def optimize_confluence(symbol: str, timeframe: str, start_date: str, oos_start:
             return -999.0
         if r.total_trades < min_trades or r.max_drawdown_pct > max_dd or r.win_rate < min_wr:
             return -999.0
-        return r.pnl_pct + math.log1p(r.total_trades) * 10.0
+        train_s = segment_stats(r.trades, end_ts=validation_ts)
+        validation_s = segment_stats(r.trades, start_ts=validation_ts)
+        if (validation_s['trades'] < min_validation_trades
+                or train_s['pnl_pct'] <= 0 or validation_s['pnl_pct'] <= 0
+                or validation_s['max_dd'] > max_dd):
+            return -999.0
+        # Prefer repeatable pre-OOS performance, not one lucky full-period spike.
+        return (0.35 * train_s['pnl_pct'] + 0.65 * validation_s['pnl_pct']
+                + math.log1p(r.total_trades) * 5.0
+                - 0.2 * max(train_s['max_dd'], validation_s['max_dd']))
 
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=seed))
     study.optimize(objective, n_trials=n_trials, show_progress_bar=verbose)
@@ -468,11 +483,23 @@ def optimize_confluence(symbol: str, timeframe: str, start_date: str, oos_start:
     cfg = _confluence_config(symbol, timeframe, sp, bp["risk_per_entry_pct"], bp["leverage"])
     r = run_backtest(df_all, cfg, capital, symbol, timeframe)
     is_s = segment_stats(r.trades, end_ts=oos_ts)
+    train_s = segment_stats(r.trades, end_ts=validation_ts)
+    validation_s = segment_stats(r.trades, start_ts=validation_ts, end_ts=oos_ts)
     oos_s = segment_stats(r.trades, start_ts=oos_ts)
+    selection_score = (0.35 * train_s['pnl_pct'] + 0.65 * validation_s['pnl_pct']
+                       + math.log1p(is_s['trades']) * 5.0
+                       - 0.2 * max(train_s['max_dd'], validation_s['max_dd']))
     cfg["_backtest"] = {
         "pnl_pct": round(is_s['pnl_pct'], 2), "win_rate": round(is_s['win_rate'], 1),
         "total_trades": is_s['trades'], "max_drawdown": round(is_s['max_dd'], 2),
         "start_date": start_date, "end_date": oos_start, "capital": capital,
+        "risk_policy_version": POLICY_VERSION,
+        "selection_score": round(selection_score, 4),
+        "validation": {"start_date": validation_ts.strftime('%Y-%m-%d'),
+                       "pnl_pct": round(validation_s['pnl_pct'], 2),
+                       "max_drawdown": round(validation_s['max_dd'], 2),
+                       "total_trades": validation_s['trades'],
+                       "win_rate": round(validation_s['win_rate'], 1)},
         "oos": {"start_date": oos_start, "end_date": end_date,
                 "pnl_pct": round(oos_s['pnl_pct'], 2), "max_drawdown": round(oos_s['max_dd'], 2),
                 "total_trades": oos_s['trades'], "win_rate": round(oos_s['win_rate'], 1)},
@@ -489,16 +516,26 @@ def save_config(config: dict, symbol: str, timeframe: str) -> str | None:
     safe = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
     path = os.path.join(CONFIGS_DIR, f"config_{safe}_fib.json")
 
-    new_pnl = config.get('_backtest', {}).get('pnl_pct')
+    new_bt = config.get('_backtest', {})
+    new_pnl = new_bt.get('pnl_pct')
+    new_policy = new_bt.get('risk_policy_version')
+    new_score = new_bt.get('selection_score')
 
     if os.path.exists(path) and new_pnl is not None:
         try:
             with open(path) as f:
                 existing = json.load(f)
-            existing_pnl = existing.get('_backtest', {}).get('pnl_pct')
+            existing_bt = existing.get('_backtest', {})
+            existing_pnl = existing_bt.get('pnl_pct')
+            existing_policy = existing_bt.get('risk_policy_version')
+            existing_score = existing_bt.get('selection_score')
             same_type = (existing.get('strategy', {}).get('type') == config.get('strategy', {}).get('type'))
-            if same_type and existing_pnl is not None and new_pnl <= existing_pnl:
-                print(f"  Bestehende Config besser ({existing_pnl:.2f}% vs {new_pnl:.2f}%) "
+            old_value = existing_score if existing_score is not None else existing_pnl
+            new_value = new_score if new_score is not None else new_pnl
+            if (same_type and existing_policy == new_policy
+                    and old_value is not None and new_value is not None
+                    and new_value <= old_value):
+                print(f"  Bestehende Config derselben Policy besser ({old_value:.2f} vs {new_value:.2f}) "
                       f"— wird nicht ueberschrieben.")
                 return None
         except Exception:
@@ -533,7 +570,14 @@ if __name__ == "__main__":
                         help="Konfluenz: Beginn Out-of-Sample (Standard: 180 Tage vor Enddatum)")
     parser.add_argument('--jobs',     type=int,   default=1,
                         help="CPU-Kerne für Parallelisierung (Standard: 1, Python GIL limitiert Threading)")
+    parser.add_argument('--cuda', action='store_true',
+                        help="Exakte CUDA-Kanalsuche verwenden")
     args = parser.parse_args()
+
+    if args.cuda:
+        from fibot.analysis.cuda_channels import install_cuda_channels
+        device = install_cuda_channels()
+        print(f"CUDA aktiv: {device['device']} (Runtime {device['cuda_runtime']})")
 
     today = date.today().isoformat()
 

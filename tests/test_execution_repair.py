@@ -15,6 +15,10 @@ from fibot.strategy import confluence_logic as logic
 from fibot.utils.execution_guard import (
     validate_bracket, consume, consumed, entry_client_oid, symbol_cycle_lock,
 )
+from fibot.strategy.risk_policy import (
+    MIN_STOP_PCT, MIN_STOP_ATR, MIN_STOP_TICKS, ROUND_TRIP_COST_PCT,
+    stop_below_entry, validate_stop_distance, effective_risk_per_contract,
+)
 from fibot.utils.exchange import Exchange
 
 SYMBOL='BTC/USDT:USDT'
@@ -105,10 +109,10 @@ def test_exchange_minimum_and_rounding_cannot_exceed_risk_or_margin(cycle,minimu
 
 def test_valid_risk_size_remains_available(cycle):
     ex,_,_=cycle
-    assert tm._confluence_size(ex,SYMBOL,PLAN,1,5,logging.getLogger('test'))==.5
+    assert tm._confluence_size(ex,SYMBOL,PLAN,1,5,logging.getLogger('test'))==pytest.approx(1/2.17)
 
 
-def _make_same_pending_entry(path, tracker, contracts=.5):
+def _make_same_pending_entry(path, tracker, contracts=1/2.17):
     tracker.update(
         status='pending_entry', order_id='old', candle_ts='2025-04-01T10:00:00+00:00',
         direction='long', entry_price=100., sl_price=98., tp1_price=110.,
@@ -151,10 +155,40 @@ def test_unknown_equity_retains_same_pending_order(cycle):
 def test_venue_rounding_recomputes_the_rr_shown_and_traded():
     ex=MagicMock()
     ex.price_to_precision.side_effect=lambda symbol,value:f'{value:.4f}'
-    raw=dict(direction='short',limit=.257224,sl=.2573001,tp=.2447,rr=164.47)
+    raw=dict(direction='short',limit=.257224,sl=.2582001,tp=.2447,rr=16.47)
     rounded=tm._round_confluence_plan(ex,SYMBOL,raw)
-    assert rounded['limit']==.2572 and rounded['sl']==.2573 and rounded['tp']==.2447
-    assert rounded['rr']==pytest.approx(125.)
+    assert rounded['limit']==.2572 and rounded['sl']==.2582 and rounded['tp']==.2447
+    assert rounded['rr']==pytest.approx(12.5)
+
+
+def test_micro_stop_is_rejected_after_venue_rounding():
+    ex=MagicMock()
+    ex.price_to_precision.side_effect=lambda symbol,value:f'{value:.4f}'
+    raw=dict(direction='short',limit=.257224,sl=.2573001,tp=.2447,rr=164.47)
+    with pytest.raises(ValueError,match='hard minimum'):
+        tm._round_confluence_plan(ex,SYMBOL,raw)
+
+
+def test_hard_stop_floor_cannot_be_disabled_by_a_config_value():
+    assert MIN_STOP_PCT==pytest.approx(.003)
+    assert MIN_STOP_ATR==pytest.approx(.30)
+    assert stop_below_entry(100.,99.99,1.)==pytest.approx(99.7)
+    # Mirrored confluence short: -100.3 maps back to a 100.3 short stop.
+    assert -stop_below_entry(-100.,-100.01,1.)==pytest.approx(100.3)
+
+
+def test_venue_guard_requires_percent_and_tick_floors():
+    with pytest.raises(ValueError,match='hard minimum'):
+        validate_stop_distance(1.,.999)
+    assert validate_stop_distance(1.,.997)==pytest.approx(.003)
+    with pytest.raises(ValueError,match='hard minimum'):
+        validate_stop_distance(1.,.996,tick_size=.002)
+    assert MIN_STOP_TICKS==3
+
+
+def test_confluence_risk_budget_includes_fees_and_slippage():
+    assert ROUND_TRIP_COST_PCT==pytest.approx(.0017)
+    assert effective_risk_per_contract(100.,99.7)==pytest.approx(.47)
 
 
 def test_legacy_exchange_minimum_cannot_raise_risk():
