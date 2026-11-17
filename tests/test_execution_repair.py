@@ -108,6 +108,55 @@ def test_valid_risk_size_remains_available(cycle):
     assert tm._confluence_size(ex,SYMBOL,PLAN,1,5,logging.getLogger('test'))==.5
 
 
+def _make_same_pending_entry(path, tracker, contracts=.5):
+    tracker.update(
+        status='pending_entry', order_id='old', candle_ts='2025-04-01T10:00:00+00:00',
+        direction='long', entry_price=100., sl_price=98., tp1_price=110.,
+        contracts=contracts,
+    )
+    tm.write_tracker(path, tracker)
+
+
+def test_pending_order_does_not_cancel_itself_when_its_margin_is_reserved(cycle):
+    ex,path,tracker=cycle
+    _make_same_pending_entry(path,tracker)
+    ex.fetch_order.return_value={'status':'open','filled':0}
+    ex.fetch_balance_usdt.return_value=.01
+    run(ex)
+    ex.cancel_order.assert_not_called()
+    ex.place_limit_order_with_tpsl.assert_not_called()
+    ex.fetch_balance_usdt.assert_not_called()
+
+
+def test_small_equity_move_does_not_churn_same_pending_order(cycle):
+    ex,path,tracker=cycle
+    _make_same_pending_entry(path,tracker)
+    ex.fetch_order.return_value={'status':'open','filled':0}
+    ex.fetch_equity_usdt.return_value=99.
+    run(ex)
+    ex.cancel_order.assert_not_called()
+    ex.place_limit_order_with_tpsl.assert_not_called()
+
+
+def test_unknown_equity_retains_same_pending_order(cycle):
+    ex,path,tracker=cycle
+    _make_same_pending_entry(path,tracker)
+    ex.fetch_order.return_value={'status':'open','filled':0}
+    ex.fetch_equity_usdt.return_value=0
+    run(ex)
+    ex.cancel_order.assert_not_called()
+    ex.place_limit_order_with_tpsl.assert_not_called()
+
+
+def test_venue_rounding_recomputes_the_rr_shown_and_traded():
+    ex=MagicMock()
+    ex.price_to_precision.side_effect=lambda symbol,value:f'{value:.4f}'
+    raw=dict(direction='short',limit=.257224,sl=.2573001,tp=.2447,rr=164.47)
+    rounded=tm._round_confluence_plan(ex,SYMBOL,raw)
+    assert rounded['limit']==.2572 and rounded['sl']==.2573 and rounded['tp']==.2447
+    assert rounded['rr']==pytest.approx(125.)
+
+
 def test_legacy_exchange_minimum_cannot_raise_risk():
     assert tm.calc_position_size(100.,1.,100.,99.,5,logging.getLogger('test'),min_contracts=2.)==0
 

@@ -868,6 +868,61 @@ def _confluence_size(exchange: Exchange, symbol: str, plan: dict, risk_pct: floa
     return contracts
 
 
+def _round_confluence_plan(exchange: Exchange, symbol: str, plan: dict) -> dict:
+    """Round the complete bracket to venue precision and recompute its real R:R."""
+    rounded = dict(plan)
+    for key in ('limit', 'sl', 'tp'):
+        rounded[key] = float(exchange.price_to_precision(symbol, rounded[key]))
+    values = (rounded['limit'], rounded['sl'], rounded['tp'])
+    if any(not math.isfinite(value) or value <= 0 for value in values):
+        raise ValueError('Gerundete Planpreise sind ungueltig')
+    if rounded.get('direction') == 'long':
+        valid_geometry = rounded['sl'] < rounded['limit'] < rounded['tp']
+    elif rounded.get('direction') == 'short':
+        valid_geometry = rounded['tp'] < rounded['limit'] < rounded['sl']
+    else:
+        valid_geometry = False
+    if not valid_geometry:
+        raise ValueError('Gerundete Entry/SL/TP-Geometrie ist ungueltig')
+    risk = abs(rounded['limit'] - rounded['sl'])
+    reward = abs(rounded['tp'] - rounded['limit'])
+    rounded['rr'] = reward / risk
+    if not math.isfinite(rounded['rr']):
+        raise ValueError('Gerundetes R:R ist ungueltig')
+    return rounded
+
+
+PENDING_RISK_HYSTERESIS = 0.05
+
+
+def _pending_entry_within_risk(exchange: Exchange, plan: dict, contracts: float,
+                               risk_pct: float, logger):
+    """Recheck only stop-loss risk; an open order has already reserved its margin.
+
+    ``None`` means account risk cannot be verified. In that case the known broker
+    order is retained rather than mutated on incomplete information.
+    """
+    try:
+        equity = float(exchange.fetch_equity_usdt())
+        contracts = float(contracts)
+        risk_pct = float(risk_pct)
+        risk_per_contract = abs(float(plan['limit']) - float(plan['sl']))
+        values = (equity, contracts, risk_pct, risk_per_contract)
+        if any(not math.isfinite(value) or value <= 0 for value in values):
+            raise ValueError('ungueltige Risikowerte')
+    except (KeyError, TypeError, ValueError, ArithmeticError, OSError) as error:
+        logger.error(f'Risiko der wartenden Order nicht sicher pruefbar ({error}); '
+                     'bestehende Order bleibt liegen.')
+        return None
+    planned_loss = contracts * risk_per_contract
+    allowed_loss = equity * risk_pct / 100
+    if planned_loss > allowed_loss * (1 + PENDING_RISK_HYSTERESIS):
+        logger.warning(f"Wartende Order ueber aktuellem Risikobudget: "
+                       f"{planned_loss:.4f} > {allowed_loss:.4f} USDT; sie wird neu dimensioniert.")
+        return False
+    return True
+
+
 def _order_updates_enabled() -> bool:
     """settings.json live_trading_settings.telegram_order_updates (Standard: an):
     Telegram auch beim Nachziehen und beim Storno ungueltiger Setups."""
@@ -1142,9 +1197,7 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
             plan = None
         else:
             try:
-                plan = dict(plan)
-                for key in ('limit', 'sl', 'tp'):
-                    plan[key] = float(exchange.price_to_precision(symbol, plan[key]))
+                plan = _round_confluence_plan(exchange, symbol, plan)
             except Exception as error:
                 logger.error(f'Planpreise nicht sicher rundbar ({error}); keine Order.')
                 return
@@ -1199,9 +1252,11 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
                     and abs(float(tracker.get('sl_price', 0)) - plan['sl']) <= 1e-9 * max(1.0, plan['sl'])
                     and abs(float(tracker.get('tp1_price', 0)) - plan['tp']) <= 1e-9 * max(1.0, plan['tp']))
             if same:
-                current_budget = _confluence_size(exchange, symbol, plan, risk_pct, leverage, logger)
-                same = (current_budget > 0
-                        and float(tracker.get('contracts') or 0) <= current_budget * (1 + 1e-10))
+                risk_state = _pending_entry_within_risk(
+                    exchange, plan, tracker.get('contracts'), risk_pct, logger)
+                if risk_state is None:
+                    return
+                same = risk_state
             if same:
                 logger.info(f"Limit-Order fuer {current_candle} liegt bereits @ {plan['limit']:.6f}.")
                 return
@@ -1320,7 +1375,7 @@ def confluence_cycle(exchange: Exchange, params: dict, telegram_config: dict, lo
                f"Die Order wird jede Kerze mit der Kanallinie nachgezogen.")
     try:
         from fibot.utils.confluence_chart import confluence_chart
-        path, _ = confluence_chart(df, params, symbol, timeframe)
+        path, _ = confluence_chart(df, params, symbol, timeframe, plan_override=plan)
         send_photo(bot_token, chat_id, path, caption)
         os.remove(path)
     except Exception as e:

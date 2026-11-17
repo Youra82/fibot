@@ -9,7 +9,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 TMP_DIR = os.path.join(PROJECT_ROOT, 'artifacts', 'tmp')
 
 
-def confluence_chart(df, config: dict, symbol: str, timeframe: str):
+def confluence_chart(df, config: dict, symbol: str, timeframe: str, plan_override: dict = None):
     """Chart der Konfluenz-Strategie: aktueller Kanal (Stand letzte geschlossene Kerze)
     und -- falls ein Setup besteht -- die Limit-Order fuer die laufende Kerze mit SL/TP."""
     import matplotlib
@@ -19,7 +19,7 @@ def confluence_chart(df, config: dict, symbol: str, timeframe: str):
 
     from fibot.strategy.confluence_logic import strategy_params
 
-    plan = plan_next_order(df, config)
+    plan = dict(plan_override) if plan_override is not None else plan_next_order(df, config)
     lo, sh = plan_both(df, config)
     n = len(df)
     imp = None   # Impuls A->B des aktuellen Setups (Indizes + Preise)
