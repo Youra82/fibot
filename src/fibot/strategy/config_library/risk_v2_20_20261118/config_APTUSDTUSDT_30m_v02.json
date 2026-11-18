@@ -1,0 +1,58 @@
+{
+  "market": {
+    "symbol": "APT/USDT:USDT",
+    "timeframe": "30m"
+  },
+  "strategy": {
+    "type": "confluence",
+    "pivot_k": 3,
+    "window": 100,
+    "min_upper_touches": 1,
+    "max_break_frac": 0.0,
+    "min_width_atr": 2.0,
+    "touch_atr": 0.3,
+    "fib_lo": 0.5,
+    "fib_hi": 0.705,
+    "fib_sl": 1.0,
+    "zone_tol_atr": 0.45000000000000007,
+    "sl_buf_atr": 0.1,
+    "min_rr": 1.0,
+    "max_age_mult": 1.5,
+    "b_near_upper_atr": 0.5,
+    "tp_mode": "upper",
+    "candle_limit": 600,
+    "risk_policy_version": 2
+  },
+  "risk": {
+    "leverage": 4,
+    "risk_per_entry_pct": 3.0,
+    "margin_mode": "isolated"
+  },
+  "_backtest": {
+    "pnl_pct": 216.15,
+    "win_rate": 46.8,
+    "total_trades": 111,
+    "max_drawdown": 16.72,
+    "start_date": "2023-04-08",
+    "end_date": "2026-05-01",
+    "capital": 100.0,
+    "risk_policy_version": 2,
+    "selection_score": 93.3036,
+    "validation": {
+      "start_date": "2025-11-02",
+      "pnl_pct": 59.52,
+      "max_drawdown": 9.47,
+      "total_trades": 23,
+      "win_rate": 56.5
+    },
+    "oos": {
+      "start_date": "2026-05-01",
+      "end_date": "2026-11-17",
+      "pnl_pct": 9.96,
+      "max_drawdown": 16.7,
+      "total_trades": 27,
+      "win_rate": 40.7
+    },
+    "variant_trial": 289
+  }
+}

@@ -1,0 +1,2661 @@
+{
+  "created_at": "2026-11-18T07:53:28.338590",
+  "target": 20,
+  "found": 31,
+  "target_reached": true,
+  "selection_rule": "balanced round-robin by pre-OOS selection_score",
+  "markets": [
+    {
+      "symbol": "APT/USDT:USDT",
+      "timeframe": "30m",
+      "device": {
+        "device": "NVIDIA GeForce RTX 3060 Ti",
+        "cuda_runtime": 12090
+      },
+      "target_trials": 600,
+      "completed_trials": 600,
+      "eligible_pre_oos_trials": 468,
+      "evaluated_full": 174,
+      "variants": [
+        {
+          "file": "config_APTUSDTUSDT_30m_v01.json",
+          "params": {
+            "fib_hi": 0.705,
+            "fib_sl": 1.0,
+            "max_age_mult": 1.5,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.5,
+            "zone_tol_atr": 0.30000000000000004,
+            "sl_buf_atr": 0.1,
+            "min_rr": 1.1,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 5,
+            "risk_per_entry_pct": 3.0
+          },
+          "selection_score": 101.9575,
+          "is": {
+            "pnl_pct": 242.6,
+            "win_rate": 50.5,
+            "total_trades": 99,
+            "max_drawdown": 15.1,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 101.9575,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 73.75,
+              "max_drawdown": 5.91,
+              "total_trades": 20,
+              "win_rate": 65.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 20.48,
+              "max_drawdown": 11.47,
+              "total_trades": 24,
+              "win_rate": 45.8
+            },
+            "variant_trial": 292
+          },
+          "fingerprint_size": 24
+        },
+        {
+          "file": "config_APTUSDTUSDT_30m_v02.json",
+          "params": {
+            "fib_hi": 0.705,
+            "fib_sl": 1.0,
+            "max_age_mult": 1.5,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.5,
+            "zone_tol_atr": 0.45000000000000007,
+            "sl_buf_atr": 0.1,
+            "min_rr": 1.0,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 4,
+            "risk_per_entry_pct": 3.0
+          },
+          "selection_score": 93.3036,
+          "is": {
+            "pnl_pct": 216.15,
+            "win_rate": 46.8,
+            "total_trades": 111,
+            "max_drawdown": 16.72,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 93.3036,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 59.52,
+              "max_drawdown": 9.47,
+              "total_trades": 23,
+              "win_rate": 56.5
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 9.96,
+              "max_drawdown": 16.7,
+              "total_trades": 27,
+              "win_rate": 40.7
+            },
+            "variant_trial": 289
+          },
+          "fingerprint_size": 27
+        },
+        {
+          "file": "config_APTUSDTUSDT_30m_v03.json",
+          "params": {
+            "fib_hi": 0.705,
+            "fib_sl": 1.0,
+            "max_age_mult": 1.5,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.5,
+            "zone_tol_atr": 0.35,
+            "sl_buf_atr": 0.1,
+            "min_rr": 1.2,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 6,
+            "risk_per_entry_pct": 2.75
+          },
+          "selection_score": 90.0491,
+          "is": {
+            "pnl_pct": 194.92,
+            "win_rate": 49.5,
+            "total_trades": 101,
+            "max_drawdown": 16.17,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 90.0491,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 66.28,
+              "max_drawdown": 5.42,
+              "total_trades": 20,
+              "win_rate": 65.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 15.56,
+              "max_drawdown": 13.01,
+              "total_trades": 25,
+              "win_rate": 44.0
+            },
+            "variant_trial": 351
+          },
+          "fingerprint_size": 25
+        },
+        {
+          "file": "config_APTUSDTUSDT_30m_v04.json",
+          "params": {
+            "fib_hi": 0.705,
+            "fib_sl": 1.0,
+            "max_age_mult": 1.5,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.5,
+            "zone_tol_atr": 0.30000000000000004,
+            "sl_buf_atr": 0.15000000000000002,
+            "min_rr": 1.1,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 3,
+            "risk_per_entry_pct": 2.75
+          },
+          "selection_score": 89.1188,
+          "is": {
+            "pnl_pct": 194.79,
+            "win_rate": 50.5,
+            "total_trades": 99,
+            "max_drawdown": 13.38,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 89.1188,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 61.14,
+              "max_drawdown": 5.42,
+              "total_trades": 20,
+              "win_rate": 65.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 17.36,
+              "max_drawdown": 10.55,
+              "total_trades": 24,
+              "win_rate": 45.8
+            },
+            "variant_trial": 564
+          },
+          "fingerprint_size": 24
+        },
+        {
+          "file": "config_APTUSDTUSDT_30m_v05.json",
+          "params": {
+            "fib_hi": 0.705,
+            "fib_sl": 1.0,
+            "max_age_mult": 1.5,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.5,
+            "zone_tol_atr": 0.25,
+            "sl_buf_atr": 0.1,
+            "min_rr": 1.2,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 5,
+            "risk_per_entry_pct": 2.75
+          },
+          "selection_score": 86.8907,
+          "is": {
+            "pnl_pct": 193.83,
+            "win_rate": 50.5,
+            "total_trades": 93,
+            "max_drawdown": 14.43,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 86.8907,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 54.82,
+              "max_drawdown": 5.96,
+              "total_trades": 17,
+              "win_rate": 64.7
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 18.92,
+              "max_drawdown": 10.55,
+              "total_trades": 22,
+              "win_rate": 45.5
+            },
+            "variant_trial": 589
+          },
+          "fingerprint_size": 22
+        },
+        {
+          "file": "config_APTUSDTUSDT_30m_v06.json",
+          "params": {
+            "fib_hi": 0.705,
+            "fib_sl": 1.0,
+            "max_age_mult": 1.5,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.5,
+            "zone_tol_atr": 0.15000000000000002,
+            "sl_buf_atr": 0.1,
+            "min_rr": 1.1,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 6,
+            "risk_per_entry_pct": 3.0
+          },
+          "selection_score": 85.2097,
+          "is": {
+            "pnl_pct": 193.62,
+            "win_rate": 53.2,
+            "total_trades": 79,
+            "max_drawdown": 19.77,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 85.2097,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 55.9,
+              "max_drawdown": 3.0,
+              "total_trades": 12,
+              "win_rate": 75.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 22.71,
+              "max_drawdown": 8.73,
+              "total_trades": 18,
+              "win_rate": 50.0
+            },
+            "variant_trial": 293
+          },
+          "fingerprint_size": 18
+        },
+        {
+          "file": "config_APTUSDTUSDT_30m_v07.json",
+          "params": {
+            "fib_hi": 0.705,
+            "fib_sl": 1.0,
+            "max_age_mult": 1.5,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.5,
+            "zone_tol_atr": 0.65,
+            "sl_buf_atr": 0.1,
+            "min_rr": 1.1,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 8,
+            "risk_per_entry_pct": 2.75
+          },
+          "selection_score": 84.6983,
+          "is": {
+            "pnl_pct": 192.52,
+            "win_rate": 42.9,
+            "total_trades": 133,
+            "max_drawdown": 20.56,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 84.6983,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 41.44,
+              "max_drawdown": 16.01,
+              "total_trades": 26,
+              "win_rate": 50.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 20.76,
+              "max_drawdown": 17.73,
+              "total_trades": 32,
+              "win_rate": 40.6
+            },
+            "variant_trial": 573
+          },
+          "fingerprint_size": 32
+        },
+        {
+          "file": "config_APTUSDTUSDT_30m_v08.json",
+          "params": {
+            "fib_hi": 0.705,
+            "fib_sl": 1.0,
+            "max_age_mult": 1.5,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.5,
+            "zone_tol_atr": 0.35,
+            "sl_buf_atr": 0.15000000000000002,
+            "min_rr": 1.0,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 6,
+            "risk_per_entry_pct": 2.75
+          },
+          "selection_score": 83.1993,
+          "is": {
+            "pnl_pct": 167.66,
+            "win_rate": 49.0,
+            "total_trades": 102,
+            "max_drawdown": 16.57,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 83.1993,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 62.72,
+              "max_drawdown": 5.42,
+              "total_trades": 20,
+              "win_rate": 65.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 14.13,
+              "max_drawdown": 13.01,
+              "total_trades": 25,
+              "win_rate": 44.0
+            },
+            "variant_trial": 508
+          },
+          "fingerprint_size": 25
+        },
+        {
+          "file": "config_APTUSDTUSDT_30m_v09.json",
+          "params": {
+            "fib_hi": 0.705,
+            "fib_sl": 0.886,
+            "max_age_mult": 1.5,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.03,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.30000000000000004,
+            "sl_buf_atr": 0.35,
+            "min_rr": 1.5,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 10,
+            "risk_per_entry_pct": 3.0
+          },
+          "selection_score": 82.1724,
+          "is": {
+            "pnl_pct": 183.49,
+            "win_rate": 47.5,
+            "total_trades": 80,
+            "max_drawdown": 11.47,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 82.1724,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 43.94,
+              "max_drawdown": 5.91,
+              "total_trades": 14,
+              "win_rate": 57.1
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 27.43,
+              "max_drawdown": 11.47,
+              "total_trades": 19,
+              "win_rate": 42.1
+            },
+            "variant_trial": 0
+          },
+          "fingerprint_size": 19
+        },
+        {
+          "file": "config_APTUSDTUSDT_30m_v10.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.886,
+            "max_age_mult": 1.5,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.5,
+            "zone_tol_atr": 0.25,
+            "sl_buf_atr": 0.1,
+            "min_rr": 1.0,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 6,
+            "risk_per_entry_pct": 2.75
+          },
+          "selection_score": 81.9601,
+          "is": {
+            "pnl_pct": 190.85,
+            "win_rate": 32.5,
+            "total_trades": 120,
+            "max_drawdown": 25.23,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 81.9601,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 33.48,
+              "max_drawdown": 14.18,
+              "total_trades": 23,
+              "win_rate": 34.8
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 22.6,
+              "max_drawdown": 15.41,
+              "total_trades": 28,
+              "win_rate": 32.1
+            },
+            "variant_trial": 526
+          },
+          "fingerprint_size": 28
+        }
+      ],
+      "updated_at": "2026-11-18T07:52:29.790590"
+    },
+    {
+      "symbol": "APT/USDT:USDT",
+      "timeframe": "1h",
+      "device": {
+        "device": "NVIDIA GeForce RTX 3060 Ti",
+        "cuda_runtime": 12090
+      },
+      "target_trials": 600,
+      "completed_trials": 600,
+      "eligible_pre_oos_trials": 347,
+      "evaluated_full": 143,
+      "variants": [
+        {
+          "file": "config_APTUSDTUSDT_1h_v01.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.886,
+            "max_age_mult": 2.0,
+            "pivot_k": 3,
+            "window": 150,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.55,
+            "sl_buf_atr": 0.75,
+            "min_rr": 1.3,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 7,
+            "risk_per_entry_pct": 3.0
+          },
+          "selection_score": 63.4159,
+          "is": {
+            "pnl_pct": 131.65,
+            "win_rate": 40.8,
+            "total_trades": 71,
+            "max_drawdown": 16.81,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 63.4159,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 5.9,
+              "max_drawdown": 11.47,
+              "total_trades": 9,
+              "win_rate": 33.3
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 22.69,
+              "max_drawdown": 14.13,
+              "total_trades": 17,
+              "win_rate": 41.2
+            },
+            "variant_trial": 365
+          },
+          "fingerprint_size": 17
+        },
+        {
+          "file": "config_APTUSDTUSDT_1h_v02.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.886,
+            "max_age_mult": 2.0,
+            "pivot_k": 3,
+            "window": 150,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.6,
+            "sl_buf_atr": 0.75,
+            "min_rr": 1.3,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 8,
+            "risk_per_entry_pct": 3.0
+          },
+          "selection_score": 61.188,
+          "is": {
+            "pnl_pct": 124.7,
+            "win_rate": 40.3,
+            "total_trades": 72,
+            "max_drawdown": 16.81,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 61.188,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 5.9,
+              "max_drawdown": 11.47,
+              "total_trades": 9,
+              "win_rate": 33.3
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 19.01,
+              "max_drawdown": 14.13,
+              "total_trades": 18,
+              "win_rate": 38.9
+            },
+            "variant_trial": 382
+          },
+          "fingerprint_size": 18
+        },
+        {
+          "file": "config_APTUSDTUSDT_1h_v03.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.886,
+            "max_age_mult": 2.0,
+            "pivot_k": 3,
+            "window": 150,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.55,
+            "sl_buf_atr": 0.8,
+            "min_rr": 1.3,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 10,
+            "risk_per_entry_pct": 3.0
+          },
+          "selection_score": 57.934,
+          "is": {
+            "pnl_pct": 115.35,
+            "win_rate": 40.8,
+            "total_trades": 71,
+            "max_drawdown": 17.4,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 57.934,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 5.04,
+              "max_drawdown": 11.47,
+              "total_trades": 9,
+              "win_rate": 33.3
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 20.63,
+              "max_drawdown": 14.13,
+              "total_trades": 17,
+              "win_rate": 41.2
+            },
+            "variant_trial": 557
+          },
+          "fingerprint_size": 17
+        },
+        {
+          "file": "config_APTUSDTUSDT_1h_v04.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.886,
+            "max_age_mult": 0.0,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.5,
+            "zone_tol_atr": 0.55,
+            "sl_buf_atr": 0.75,
+            "min_rr": 2.0,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "b",
+            "leverage": 5,
+            "risk_per_entry_pct": 3.0
+          },
+          "selection_score": 57.7088,
+          "is": {
+            "pnl_pct": 119.97,
+            "win_rate": 37.5,
+            "total_trades": 72,
+            "max_drawdown": 27.75,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 57.7088,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 16.45,
+              "max_drawdown": 8.73,
+              "total_trades": 9,
+              "win_rate": 44.4
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 8.99,
+              "max_drawdown": 14.08,
+              "total_trades": 14,
+              "win_rate": 35.7
+            },
+            "variant_trial": 0
+          },
+          "fingerprint_size": 14
+        },
+        {
+          "file": "config_APTUSDTUSDT_1h_v05.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.886,
+            "max_age_mult": 2.0,
+            "pivot_k": 3,
+            "window": 150,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.5,
+            "sl_buf_atr": 0.75,
+            "min_rr": 1.4,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 10,
+            "risk_per_entry_pct": 3.0
+          },
+          "selection_score": 57.545,
+          "is": {
+            "pnl_pct": 116.15,
+            "win_rate": 39.1,
+            "total_trades": 69,
+            "max_drawdown": 19.85,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 57.545,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 5.9,
+              "max_drawdown": 11.47,
+              "total_trades": 9,
+              "win_rate": 33.3
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 13.67,
+              "max_drawdown": 14.13,
+              "total_trades": 15,
+              "win_rate": 40.0
+            },
+            "variant_trial": 568
+          },
+          "fingerprint_size": 15
+        },
+        {
+          "file": "config_APTUSDTUSDT_1h_v06.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.886,
+            "max_age_mult": 2.0,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.55,
+            "sl_buf_atr": 0.75,
+            "min_rr": 1.2,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 7,
+            "risk_per_entry_pct": 3.0
+          },
+          "selection_score": 56.5311,
+          "is": {
+            "pnl_pct": 111.42,
+            "win_rate": 39.2,
+            "total_trades": 74,
+            "max_drawdown": 19.31,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 56.5311,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 2.72,
+              "max_drawdown": 14.13,
+              "total_trades": 10,
+              "win_rate": 30.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 19.01,
+              "max_drawdown": 14.13,
+              "total_trades": 18,
+              "win_rate": 38.9
+            },
+            "variant_trial": 363
+          },
+          "fingerprint_size": 18
+        },
+        {
+          "file": "config_APTUSDTUSDT_1h_v07.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.886,
+            "max_age_mult": 3.0,
+            "pivot_k": 3,
+            "window": 150,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.55,
+            "sl_buf_atr": 0.75,
+            "min_rr": 1.3,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 10,
+            "risk_per_entry_pct": 3.0
+          },
+          "selection_score": 55.3875,
+          "is": {
+            "pnl_pct": 109.07,
+            "win_rate": 37.6,
+            "total_trades": 85,
+            "max_drawdown": 24.08,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 55.3875,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 6.2,
+              "max_drawdown": 11.47,
+              "total_trades": 13,
+              "win_rate": 30.8
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 15.44,
+              "max_drawdown": 16.7,
+              "total_trades": 19,
+              "win_rate": 36.8
+            },
+            "variant_trial": 553
+          },
+          "fingerprint_size": 19
+        },
+        {
+          "file": "config_APTUSDTUSDT_1h_v08.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.886,
+            "max_age_mult": 2.0,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.5,
+            "sl_buf_atr": 0.8,
+            "min_rr": 1.3,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 7,
+            "risk_per_entry_pct": 3.0
+          },
+          "selection_score": 55.3547,
+          "is": {
+            "pnl_pct": 108.89,
+            "win_rate": 40.3,
+            "total_trades": 72,
+            "max_drawdown": 19.88,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 55.3547,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 5.04,
+              "max_drawdown": 11.47,
+              "total_trades": 9,
+              "win_rate": 33.3
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 8.98,
+              "max_drawdown": 14.13,
+              "total_trades": 16,
+              "win_rate": 37.5
+            },
+            "variant_trial": 325
+          },
+          "fingerprint_size": 16
+        },
+        {
+          "file": "config_APTUSDTUSDT_1h_v09.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.886,
+            "max_age_mult": 2.0,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.5,
+            "sl_buf_atr": 0.75,
+            "min_rr": 1.1,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 7,
+            "risk_per_entry_pct": 3.0
+          },
+          "selection_score": 54.4363,
+          "is": {
+            "pnl_pct": 105.08,
+            "win_rate": 38.7,
+            "total_trades": 75,
+            "max_drawdown": 19.31,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 54.4363,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 2.72,
+              "max_drawdown": 14.13,
+              "total_trades": 10,
+              "win_rate": 30.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 10.26,
+              "max_drawdown": 14.13,
+              "total_trades": 16,
+              "win_rate": 37.5
+            },
+            "variant_trial": 348
+          },
+          "fingerprint_size": 16
+        },
+        {
+          "file": "config_APTUSDTUSDT_1h_v10.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 1.0,
+            "max_age_mult": 2.0,
+            "pivot_k": 3,
+            "window": 150,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.55,
+            "sl_buf_atr": 0.75,
+            "min_rr": 1.3,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "upper",
+            "leverage": 9,
+            "risk_per_entry_pct": 3.0
+          },
+          "selection_score": 50.4809,
+          "is": {
+            "pnl_pct": 91.27,
+            "win_rate": 44.8,
+            "total_trades": 67,
+            "max_drawdown": 13.87,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 50.4809,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 7.61,
+              "max_drawdown": 11.47,
+              "total_trades": 10,
+              "win_rate": 40.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 5.18,
+              "max_drawdown": 14.22,
+              "total_trades": 16,
+              "win_rate": 37.5
+            },
+            "variant_trial": 478
+          },
+          "fingerprint_size": 16
+        }
+      ],
+      "updated_at": "2026-11-18T07:33:17.217394"
+    },
+    {
+      "symbol": "BAT/USDT:USDT",
+      "timeframe": "1h",
+      "device": {
+        "device": "NVIDIA GeForce RTX 3060 Ti",
+        "cuda_runtime": 12090
+      },
+      "target_trials": 600,
+      "completed_trials": 600,
+      "eligible_pre_oos_trials": 118,
+      "evaluated_full": 118,
+      "variants": [
+        {
+          "file": "config_BATUSDTUSDT_1h_v01.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 1.0,
+            "max_age_mult": 3.0,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 3.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.35,
+            "sl_buf_atr": 0.45000000000000007,
+            "min_rr": 1.1,
+            "b_near_upper_atr": 1.0,
+            "tp_mode": "b",
+            "leverage": 5,
+            "risk_per_entry_pct": 2.5
+          },
+          "selection_score": 26.5636,
+          "is": {
+            "pnl_pct": 19.99,
+            "win_rate": 40.2,
+            "total_trades": 87,
+            "max_drawdown": 18.33,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 26.5636,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 3.47,
+              "max_drawdown": 7.41,
+              "total_trades": 15,
+              "win_rate": 40.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 1.56,
+              "max_drawdown": 7.31,
+              "total_trades": 12,
+              "win_rate": 41.7
+            },
+            "variant_trial": 591
+          },
+          "fingerprint_size": 12
+        },
+        {
+          "file": "config_BATUSDTUSDT_1h_v02.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 1.0,
+            "max_age_mult": 3.0,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 3.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.4,
+            "sl_buf_atr": 0.5,
+            "min_rr": 1.1,
+            "b_near_upper_atr": 1.0,
+            "tp_mode": "b",
+            "leverage": 5,
+            "risk_per_entry_pct": 2.5
+          },
+          "selection_score": 23.9606,
+          "is": {
+            "pnl_pct": 12.7,
+            "win_rate": 39.8,
+            "total_trades": 88,
+            "max_drawdown": 18.33,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 23.9606,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 2.78,
+              "max_drawdown": 7.44,
+              "total_trades": 15,
+              "win_rate": 40.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 1.14,
+              "max_drawdown": 7.31,
+              "total_trades": 12,
+              "win_rate": 41.7
+            },
+            "variant_trial": 571
+          },
+          "fingerprint_size": 12
+        },
+        {
+          "file": "config_BATUSDTUSDT_1h_v03.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 1.0,
+            "max_age_mult": 3.0,
+            "pivot_k": 3,
+            "window": 100,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 3.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.4,
+            "sl_buf_atr": 0.45000000000000007,
+            "min_rr": 1.0,
+            "b_near_upper_atr": 1.0,
+            "tp_mode": "b",
+            "leverage": 5,
+            "risk_per_entry_pct": 2.5
+          },
+          "selection_score": 22.0711,
+          "is": {
+            "pnl_pct": 7.79,
+            "win_rate": 38.5,
+            "total_trades": 91,
+            "max_drawdown": 20.38,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 22.0711,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 2.86,
+              "max_drawdown": 7.41,
+              "total_trades": 15,
+              "win_rate": 40.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 4.12,
+              "max_drawdown": 7.31,
+              "total_trades": 13,
+              "win_rate": 46.2
+            },
+            "variant_trial": 598
+          },
+          "fingerprint_size": 13
+        },
+        {
+          "file": "config_BATUSDTUSDT_1h_v04.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.886,
+            "max_age_mult": 0.0,
+            "pivot_k": 5,
+            "window": 150,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 3.0,
+            "fib_lo": 0.5,
+            "zone_tol_atr": 0.6,
+            "sl_buf_atr": 0.75,
+            "min_rr": 2.5,
+            "b_near_upper_atr": 1.0,
+            "tp_mode": "upper",
+            "leverage": 3,
+            "risk_per_entry_pct": 2.0
+          },
+          "selection_score": 17.9203,
+          "is": {
+            "pnl_pct": 3.56,
+            "win_rate": 24.2,
+            "total_trades": 62,
+            "max_drawdown": 26.49,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 17.9203,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 2.97,
+              "max_drawdown": 11.42,
+              "total_trades": 8,
+              "win_rate": 25.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 7.53,
+              "max_drawdown": 3.96,
+              "total_trades": 7,
+              "win_rate": 42.9
+            },
+            "variant_trial": 0
+          },
+          "fingerprint_size": 7
+        }
+      ],
+      "updated_at": "2026-11-18T07:31:13.903422"
+    },
+    {
+      "symbol": "DOT/USDT:USDT",
+      "timeframe": "2h",
+      "device": {
+        "device": "NVIDIA GeForce RTX 3060 Ti",
+        "cuda_runtime": 12090
+      },
+      "target_trials": 600,
+      "completed_trials": 800,
+      "eligible_pre_oos_trials": 218,
+      "evaluated_full": 218,
+      "variants": [
+        {
+          "file": "config_DOTUSDTUSDT_2h_v01.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.786,
+            "max_age_mult": 0.0,
+            "pivot_k": 3,
+            "window": 150,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.15000000000000002,
+            "sl_buf_atr": 0.55,
+            "min_rr": 1.5,
+            "b_near_upper_atr": 1.0,
+            "tp_mode": "upper",
+            "leverage": 3,
+            "risk_per_entry_pct": 2.25
+          },
+          "selection_score": 23.13,
+          "is": {
+            "pnl_pct": 13.85,
+            "win_rate": 34.4,
+            "total_trades": 64,
+            "max_drawdown": 19.98,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 23.13,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 5.18,
+              "max_drawdown": 9.49,
+              "total_trades": 15,
+              "win_rate": 40.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 5.37,
+              "max_drawdown": 8.7,
+              "total_trades": 10,
+              "win_rate": 40.0
+            },
+            "variant_trial": 738
+          },
+          "fingerprint_size": 10
+        },
+        {
+          "file": "config_DOTUSDTUSDT_2h_v02.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.786,
+            "max_age_mult": 0.0,
+            "pivot_k": 3,
+            "window": 150,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.15000000000000002,
+            "sl_buf_atr": 0.6,
+            "min_rr": 1.6,
+            "b_near_upper_atr": 1.0,
+            "tp_mode": "upper",
+            "leverage": 3,
+            "risk_per_entry_pct": 2.0
+          },
+          "selection_score": 23.0621,
+          "is": {
+            "pnl_pct": 16.51,
+            "win_rate": 34.4,
+            "total_trades": 61,
+            "max_drawdown": 18.26,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 23.0621,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 1.21,
+              "max_drawdown": 8.52,
+              "total_trades": 14,
+              "win_rate": 35.7
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 4.39,
+              "max_drawdown": 7.76,
+              "total_trades": 10,
+              "win_rate": 40.0
+            },
+            "variant_trial": 637
+          },
+          "fingerprint_size": 10
+        },
+        {
+          "file": "config_DOTUSDTUSDT_2h_v03.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.886,
+            "max_age_mult": 2.0,
+            "pivot_k": 3,
+            "window": 150,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.5,
+            "zone_tol_atr": 0.6,
+            "sl_buf_atr": 0.45000000000000007,
+            "min_rr": 1.0,
+            "b_near_upper_atr": 0.5,
+            "tp_mode": "b",
+            "leverage": 6,
+            "risk_per_entry_pct": 0.75
+          },
+          "selection_score": 21.7261,
+          "is": {
+            "pnl_pct": 6.29,
+            "win_rate": 34.0,
+            "total_trades": 47,
+            "max_drawdown": 6.74,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 21.7261,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 5.12,
+              "max_drawdown": 3.01,
+              "total_trades": 11,
+              "win_rate": 45.5
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 0.79,
+              "max_drawdown": 2.23,
+              "total_trades": 7,
+              "win_rate": 42.9
+            },
+            "variant_trial": 0
+          },
+          "fingerprint_size": 7
+        },
+        {
+          "file": "config_DOTUSDTUSDT_2h_v04.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.786,
+            "max_age_mult": 0.0,
+            "pivot_k": 3,
+            "window": 150,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.15000000000000002,
+            "sl_buf_atr": 0.65,
+            "min_rr": 1.6,
+            "b_near_upper_atr": 1.0,
+            "tp_mode": "upper",
+            "leverage": 3,
+            "risk_per_entry_pct": 1.75
+          },
+          "selection_score": 21.6998,
+          "is": {
+            "pnl_pct": 11.86,
+            "win_rate": 34.4,
+            "total_trades": 61,
+            "max_drawdown": 16.41,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 21.6998,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 0.75,
+              "max_drawdown": 7.53,
+              "total_trades": 14,
+              "win_rate": 35.7
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 3.52,
+              "max_drawdown": 6.82,
+              "total_trades": 10,
+              "win_rate": 40.0
+            },
+            "variant_trial": 600
+          },
+          "fingerprint_size": 10
+        },
+        {
+          "file": "config_DOTUSDTUSDT_2h_v05.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.786,
+            "max_age_mult": 0.0,
+            "pivot_k": 3,
+            "window": 150,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.1,
+            "sl_buf_atr": 0.65,
+            "min_rr": 1.4,
+            "b_near_upper_atr": 1.0,
+            "tp_mode": "upper",
+            "leverage": 3,
+            "risk_per_entry_pct": 1.5
+          },
+          "selection_score": 19.7448,
+          "is": {
+            "pnl_pct": 3.42,
+            "win_rate": 33.3,
+            "total_trades": 63,
+            "max_drawdown": 16.74,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 19.7448,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 2.84,
+              "max_drawdown": 6.48,
+              "total_trades": 15,
+              "win_rate": 40.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 1.71,
+              "max_drawdown": 5.87,
+              "total_trades": 10,
+              "win_rate": 40.0
+            },
+            "variant_trial": 523
+          },
+          "fingerprint_size": 10
+        },
+        {
+          "file": "config_DOTUSDTUSDT_2h_v06.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.786,
+            "max_age_mult": 0.0,
+            "pivot_k": 3,
+            "window": 150,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.1,
+            "sl_buf_atr": 0.6,
+            "min_rr": 1.4,
+            "b_near_upper_atr": 1.0,
+            "tp_mode": "upper",
+            "leverage": 3,
+            "risk_per_entry_pct": 1.75
+          },
+          "selection_score": 19.6384,
+          "is": {
+            "pnl_pct": 4.2,
+            "win_rate": 32.8,
+            "total_trades": 64,
+            "max_drawdown": 20.44,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 19.6384,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 3.69,
+              "max_drawdown": 7.48,
+              "total_trades": 15,
+              "win_rate": 40.0
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 2.27,
+              "max_drawdown": 6.82,
+              "total_trades": 10,
+              "win_rate": 40.0
+            },
+            "variant_trial": 525
+          },
+          "fingerprint_size": 10
+        },
+        {
+          "file": "config_DOTUSDTUSDT_2h_v07.json",
+          "params": {
+            "fib_hi": 0.786,
+            "fib_sl": 0.786,
+            "max_age_mult": 0.0,
+            "pivot_k": 3,
+            "window": 150,
+            "min_upper_touches": 1,
+            "max_break_frac": 0.0,
+            "min_width_atr": 2.0,
+            "fib_lo": 0.382,
+            "zone_tol_atr": 0.15000000000000002,
+            "sl_buf_atr": 0.7000000000000001,
+            "min_rr": 1.5,
+            "b_near_upper_atr": 1.0,
+            "tp_mode": "upper",
+            "leverage": 3,
+            "risk_per_entry_pct": 1.75
+          },
+          "selection_score": 18.2252,
+          "is": {
+            "pnl_pct": 1.87,
+            "win_rate": 33.3,
+            "total_trades": 63,
+            "max_drawdown": 16.7,
+            "start_date": "2023-04-08",
+            "end_date": "2026-05-01",
+            "capital": 100.0,
+            "risk_policy_version": 2,
+            "selection_score": 18.2252,
+            "validation": {
+              "start_date": "2025-11-02",
+              "pnl_pct": 0.39,
+              "max_drawdown": 7.58,
+              "total_trades": 14,
+              "win_rate": 35.7
+            },
+            "oos": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-11-17",
+              "pnl_pct": 3.18,
+              "max_drawdown": 6.82,
+              "total_trades": 10,
+              "win_rate": 40.0
+            },
+            "variant_trial": 596
+          },
+          "fingerprint_size": 10
+        }
+      ],
+      "updated_at": "2026-11-18T07:28:34.938332"
+    }
+  ],
+  "selected": [
+    {
+      "symbol": "APT/USDT:USDT",
+      "timeframe": "30m",
+      "file": "config_APTUSDTUSDT_30m_v01.json",
+      "params": {
+        "fib_hi": 0.705,
+        "fib_sl": 1.0,
+        "max_age_mult": 1.5,
+        "pivot_k": 3,
+        "window": 100,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.5,
+        "zone_tol_atr": 0.30000000000000004,
+        "sl_buf_atr": 0.1,
+        "min_rr": 1.1,
+        "b_near_upper_atr": 0.5,
+        "tp_mode": "upper",
+        "leverage": 5,
+        "risk_per_entry_pct": 3.0
+      },
+      "selection_score": 101.9575,
+      "is": {
+        "pnl_pct": 242.6,
+        "win_rate": 50.5,
+        "total_trades": 99,
+        "max_drawdown": 15.1,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 101.9575,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 73.75,
+          "max_drawdown": 5.91,
+          "total_trades": 20,
+          "win_rate": 65.0
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 20.48,
+          "max_drawdown": 11.47,
+          "total_trades": 24,
+          "win_rate": 45.8
+        },
+        "variant_trial": 292
+      },
+      "fingerprint_size": 24
+    },
+    {
+      "symbol": "APT/USDT:USDT",
+      "timeframe": "1h",
+      "file": "config_APTUSDTUSDT_1h_v01.json",
+      "params": {
+        "fib_hi": 0.786,
+        "fib_sl": 0.886,
+        "max_age_mult": 2.0,
+        "pivot_k": 3,
+        "window": 150,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.382,
+        "zone_tol_atr": 0.55,
+        "sl_buf_atr": 0.75,
+        "min_rr": 1.3,
+        "b_near_upper_atr": 0.5,
+        "tp_mode": "upper",
+        "leverage": 7,
+        "risk_per_entry_pct": 3.0
+      },
+      "selection_score": 63.4159,
+      "is": {
+        "pnl_pct": 131.65,
+        "win_rate": 40.8,
+        "total_trades": 71,
+        "max_drawdown": 16.81,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 63.4159,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 5.9,
+          "max_drawdown": 11.47,
+          "total_trades": 9,
+          "win_rate": 33.3
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 22.69,
+          "max_drawdown": 14.13,
+          "total_trades": 17,
+          "win_rate": 41.2
+        },
+        "variant_trial": 365
+      },
+      "fingerprint_size": 17
+    },
+    {
+      "symbol": "BAT/USDT:USDT",
+      "timeframe": "1h",
+      "file": "config_BATUSDTUSDT_1h_v01.json",
+      "params": {
+        "fib_hi": 0.786,
+        "fib_sl": 1.0,
+        "max_age_mult": 3.0,
+        "pivot_k": 3,
+        "window": 100,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 3.0,
+        "fib_lo": 0.382,
+        "zone_tol_atr": 0.35,
+        "sl_buf_atr": 0.45000000000000007,
+        "min_rr": 1.1,
+        "b_near_upper_atr": 1.0,
+        "tp_mode": "b",
+        "leverage": 5,
+        "risk_per_entry_pct": 2.5
+      },
+      "selection_score": 26.5636,
+      "is": {
+        "pnl_pct": 19.99,
+        "win_rate": 40.2,
+        "total_trades": 87,
+        "max_drawdown": 18.33,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 26.5636,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 3.47,
+          "max_drawdown": 7.41,
+          "total_trades": 15,
+          "win_rate": 40.0
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 1.56,
+          "max_drawdown": 7.31,
+          "total_trades": 12,
+          "win_rate": 41.7
+        },
+        "variant_trial": 591
+      },
+      "fingerprint_size": 12
+    },
+    {
+      "symbol": "DOT/USDT:USDT",
+      "timeframe": "2h",
+      "file": "config_DOTUSDTUSDT_2h_v01.json",
+      "params": {
+        "fib_hi": 0.786,
+        "fib_sl": 0.786,
+        "max_age_mult": 0.0,
+        "pivot_k": 3,
+        "window": 150,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.382,
+        "zone_tol_atr": 0.15000000000000002,
+        "sl_buf_atr": 0.55,
+        "min_rr": 1.5,
+        "b_near_upper_atr": 1.0,
+        "tp_mode": "upper",
+        "leverage": 3,
+        "risk_per_entry_pct": 2.25
+      },
+      "selection_score": 23.13,
+      "is": {
+        "pnl_pct": 13.85,
+        "win_rate": 34.4,
+        "total_trades": 64,
+        "max_drawdown": 19.98,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 23.13,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 5.18,
+          "max_drawdown": 9.49,
+          "total_trades": 15,
+          "win_rate": 40.0
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 5.37,
+          "max_drawdown": 8.7,
+          "total_trades": 10,
+          "win_rate": 40.0
+        },
+        "variant_trial": 738
+      },
+      "fingerprint_size": 10
+    },
+    {
+      "symbol": "APT/USDT:USDT",
+      "timeframe": "30m",
+      "file": "config_APTUSDTUSDT_30m_v02.json",
+      "params": {
+        "fib_hi": 0.705,
+        "fib_sl": 1.0,
+        "max_age_mult": 1.5,
+        "pivot_k": 3,
+        "window": 100,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.5,
+        "zone_tol_atr": 0.45000000000000007,
+        "sl_buf_atr": 0.1,
+        "min_rr": 1.0,
+        "b_near_upper_atr": 0.5,
+        "tp_mode": "upper",
+        "leverage": 4,
+        "risk_per_entry_pct": 3.0
+      },
+      "selection_score": 93.3036,
+      "is": {
+        "pnl_pct": 216.15,
+        "win_rate": 46.8,
+        "total_trades": 111,
+        "max_drawdown": 16.72,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 93.3036,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 59.52,
+          "max_drawdown": 9.47,
+          "total_trades": 23,
+          "win_rate": 56.5
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 9.96,
+          "max_drawdown": 16.7,
+          "total_trades": 27,
+          "win_rate": 40.7
+        },
+        "variant_trial": 289
+      },
+      "fingerprint_size": 27
+    },
+    {
+      "symbol": "APT/USDT:USDT",
+      "timeframe": "1h",
+      "file": "config_APTUSDTUSDT_1h_v02.json",
+      "params": {
+        "fib_hi": 0.786,
+        "fib_sl": 0.886,
+        "max_age_mult": 2.0,
+        "pivot_k": 3,
+        "window": 150,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.382,
+        "zone_tol_atr": 0.6,
+        "sl_buf_atr": 0.75,
+        "min_rr": 1.3,
+        "b_near_upper_atr": 0.5,
+        "tp_mode": "upper",
+        "leverage": 8,
+        "risk_per_entry_pct": 3.0
+      },
+      "selection_score": 61.188,
+      "is": {
+        "pnl_pct": 124.7,
+        "win_rate": 40.3,
+        "total_trades": 72,
+        "max_drawdown": 16.81,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 61.188,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 5.9,
+          "max_drawdown": 11.47,
+          "total_trades": 9,
+          "win_rate": 33.3
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 19.01,
+          "max_drawdown": 14.13,
+          "total_trades": 18,
+          "win_rate": 38.9
+        },
+        "variant_trial": 382
+      },
+      "fingerprint_size": 18
+    },
+    {
+      "symbol": "BAT/USDT:USDT",
+      "timeframe": "1h",
+      "file": "config_BATUSDTUSDT_1h_v02.json",
+      "params": {
+        "fib_hi": 0.786,
+        "fib_sl": 1.0,
+        "max_age_mult": 3.0,
+        "pivot_k": 3,
+        "window": 100,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 3.0,
+        "fib_lo": 0.382,
+        "zone_tol_atr": 0.4,
+        "sl_buf_atr": 0.5,
+        "min_rr": 1.1,
+        "b_near_upper_atr": 1.0,
+        "tp_mode": "b",
+        "leverage": 5,
+        "risk_per_entry_pct": 2.5
+      },
+      "selection_score": 23.9606,
+      "is": {
+        "pnl_pct": 12.7,
+        "win_rate": 39.8,
+        "total_trades": 88,
+        "max_drawdown": 18.33,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 23.9606,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 2.78,
+          "max_drawdown": 7.44,
+          "total_trades": 15,
+          "win_rate": 40.0
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 1.14,
+          "max_drawdown": 7.31,
+          "total_trades": 12,
+          "win_rate": 41.7
+        },
+        "variant_trial": 571
+      },
+      "fingerprint_size": 12
+    },
+    {
+      "symbol": "DOT/USDT:USDT",
+      "timeframe": "2h",
+      "file": "config_DOTUSDTUSDT_2h_v02.json",
+      "params": {
+        "fib_hi": 0.786,
+        "fib_sl": 0.786,
+        "max_age_mult": 0.0,
+        "pivot_k": 3,
+        "window": 150,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.382,
+        "zone_tol_atr": 0.15000000000000002,
+        "sl_buf_atr": 0.6,
+        "min_rr": 1.6,
+        "b_near_upper_atr": 1.0,
+        "tp_mode": "upper",
+        "leverage": 3,
+        "risk_per_entry_pct": 2.0
+      },
+      "selection_score": 23.0621,
+      "is": {
+        "pnl_pct": 16.51,
+        "win_rate": 34.4,
+        "total_trades": 61,
+        "max_drawdown": 18.26,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 23.0621,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 1.21,
+          "max_drawdown": 8.52,
+          "total_trades": 14,
+          "win_rate": 35.7
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 4.39,
+          "max_drawdown": 7.76,
+          "total_trades": 10,
+          "win_rate": 40.0
+        },
+        "variant_trial": 637
+      },
+      "fingerprint_size": 10
+    },
+    {
+      "symbol": "APT/USDT:USDT",
+      "timeframe": "30m",
+      "file": "config_APTUSDTUSDT_30m_v03.json",
+      "params": {
+        "fib_hi": 0.705,
+        "fib_sl": 1.0,
+        "max_age_mult": 1.5,
+        "pivot_k": 3,
+        "window": 100,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.5,
+        "zone_tol_atr": 0.35,
+        "sl_buf_atr": 0.1,
+        "min_rr": 1.2,
+        "b_near_upper_atr": 0.5,
+        "tp_mode": "upper",
+        "leverage": 6,
+        "risk_per_entry_pct": 2.75
+      },
+      "selection_score": 90.0491,
+      "is": {
+        "pnl_pct": 194.92,
+        "win_rate": 49.5,
+        "total_trades": 101,
+        "max_drawdown": 16.17,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 90.0491,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 66.28,
+          "max_drawdown": 5.42,
+          "total_trades": 20,
+          "win_rate": 65.0
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 15.56,
+          "max_drawdown": 13.01,
+          "total_trades": 25,
+          "win_rate": 44.0
+        },
+        "variant_trial": 351
+      },
+      "fingerprint_size": 25
+    },
+    {
+      "symbol": "APT/USDT:USDT",
+      "timeframe": "1h",
+      "file": "config_APTUSDTUSDT_1h_v03.json",
+      "params": {
+        "fib_hi": 0.786,
+        "fib_sl": 0.886,
+        "max_age_mult": 2.0,
+        "pivot_k": 3,
+        "window": 150,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.382,
+        "zone_tol_atr": 0.55,
+        "sl_buf_atr": 0.8,
+        "min_rr": 1.3,
+        "b_near_upper_atr": 0.5,
+        "tp_mode": "upper",
+        "leverage": 10,
+        "risk_per_entry_pct": 3.0
+      },
+      "selection_score": 57.934,
+      "is": {
+        "pnl_pct": 115.35,
+        "win_rate": 40.8,
+        "total_trades": 71,
+        "max_drawdown": 17.4,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 57.934,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 5.04,
+          "max_drawdown": 11.47,
+          "total_trades": 9,
+          "win_rate": 33.3
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 20.63,
+          "max_drawdown": 14.13,
+          "total_trades": 17,
+          "win_rate": 41.2
+        },
+        "variant_trial": 557
+      },
+      "fingerprint_size": 17
+    },
+    {
+      "symbol": "BAT/USDT:USDT",
+      "timeframe": "1h",
+      "file": "config_BATUSDTUSDT_1h_v03.json",
+      "params": {
+        "fib_hi": 0.786,
+        "fib_sl": 1.0,
+        "max_age_mult": 3.0,
+        "pivot_k": 3,
+        "window": 100,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 3.0,
+        "fib_lo": 0.382,
+        "zone_tol_atr": 0.4,
+        "sl_buf_atr": 0.45000000000000007,
+        "min_rr": 1.0,
+        "b_near_upper_atr": 1.0,
+        "tp_mode": "b",
+        "leverage": 5,
+        "risk_per_entry_pct": 2.5
+      },
+      "selection_score": 22.0711,
+      "is": {
+        "pnl_pct": 7.79,
+        "win_rate": 38.5,
+        "total_trades": 91,
+        "max_drawdown": 20.38,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 22.0711,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 2.86,
+          "max_drawdown": 7.41,
+          "total_trades": 15,
+          "win_rate": 40.0
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 4.12,
+          "max_drawdown": 7.31,
+          "total_trades": 13,
+          "win_rate": 46.2
+        },
+        "variant_trial": 598
+      },
+      "fingerprint_size": 13
+    },
+    {
+      "symbol": "DOT/USDT:USDT",
+      "timeframe": "2h",
+      "file": "config_DOTUSDTUSDT_2h_v03.json",
+      "params": {
+        "fib_hi": 0.786,
+        "fib_sl": 0.886,
+        "max_age_mult": 2.0,
+        "pivot_k": 3,
+        "window": 150,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.5,
+        "zone_tol_atr": 0.6,
+        "sl_buf_atr": 0.45000000000000007,
+        "min_rr": 1.0,
+        "b_near_upper_atr": 0.5,
+        "tp_mode": "b",
+        "leverage": 6,
+        "risk_per_entry_pct": 0.75
+      },
+      "selection_score": 21.7261,
+      "is": {
+        "pnl_pct": 6.29,
+        "win_rate": 34.0,
+        "total_trades": 47,
+        "max_drawdown": 6.74,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 21.7261,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 5.12,
+          "max_drawdown": 3.01,
+          "total_trades": 11,
+          "win_rate": 45.5
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 0.79,
+          "max_drawdown": 2.23,
+          "total_trades": 7,
+          "win_rate": 42.9
+        },
+        "variant_trial": 0
+      },
+      "fingerprint_size": 7
+    },
+    {
+      "symbol": "APT/USDT:USDT",
+      "timeframe": "30m",
+      "file": "config_APTUSDTUSDT_30m_v04.json",
+      "params": {
+        "fib_hi": 0.705,
+        "fib_sl": 1.0,
+        "max_age_mult": 1.5,
+        "pivot_k": 3,
+        "window": 100,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.5,
+        "zone_tol_atr": 0.30000000000000004,
+        "sl_buf_atr": 0.15000000000000002,
+        "min_rr": 1.1,
+        "b_near_upper_atr": 0.5,
+        "tp_mode": "upper",
+        "leverage": 3,
+        "risk_per_entry_pct": 2.75
+      },
+      "selection_score": 89.1188,
+      "is": {
+        "pnl_pct": 194.79,
+        "win_rate": 50.5,
+        "total_trades": 99,
+        "max_drawdown": 13.38,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 89.1188,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 61.14,
+          "max_drawdown": 5.42,
+          "total_trades": 20,
+          "win_rate": 65.0
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 17.36,
+          "max_drawdown": 10.55,
+          "total_trades": 24,
+          "win_rate": 45.8
+        },
+        "variant_trial": 564
+      },
+      "fingerprint_size": 24
+    },
+    {
+      "symbol": "APT/USDT:USDT",
+      "timeframe": "1h",
+      "file": "config_APTUSDTUSDT_1h_v04.json",
+      "params": {
+        "fib_hi": 0.786,
+        "fib_sl": 0.886,
+        "max_age_mult": 0.0,
+        "pivot_k": 3,
+        "window": 100,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.5,
+        "zone_tol_atr": 0.55,
+        "sl_buf_atr": 0.75,
+        "min_rr": 2.0,
+        "b_near_upper_atr": 0.5,
+        "tp_mode": "b",
+        "leverage": 5,
+        "risk_per_entry_pct": 3.0
+      },
+      "selection_score": 57.7088,
+      "is": {
+        "pnl_pct": 119.97,
+        "win_rate": 37.5,
+        "total_trades": 72,
+        "max_drawdown": 27.75,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 57.7088,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 16.45,
+          "max_drawdown": 8.73,
+          "total_trades": 9,
+          "win_rate": 44.4
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 8.99,
+          "max_drawdown": 14.08,
+          "total_trades": 14,
+          "win_rate": 35.7
+        },
+        "variant_trial": 0
+      },
+      "fingerprint_size": 14
+    },
+    {
+      "symbol": "BAT/USDT:USDT",
+      "timeframe": "1h",
+      "file": "config_BATUSDTUSDT_1h_v04.json",
+      "params": {
+        "fib_hi": 0.786,
+        "fib_sl": 0.886,
+        "max_age_mult": 0.0,
+        "pivot_k": 5,
+        "window": 150,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 3.0,
+        "fib_lo": 0.5,
+        "zone_tol_atr": 0.6,
+        "sl_buf_atr": 0.75,
+        "min_rr": 2.5,
+        "b_near_upper_atr": 1.0,
+        "tp_mode": "upper",
+        "leverage": 3,
+        "risk_per_entry_pct": 2.0
+      },
+      "selection_score": 17.9203,
+      "is": {
+        "pnl_pct": 3.56,
+        "win_rate": 24.2,
+        "total_trades": 62,
+        "max_drawdown": 26.49,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 17.9203,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 2.97,
+          "max_drawdown": 11.42,
+          "total_trades": 8,
+          "win_rate": 25.0
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 7.53,
+          "max_drawdown": 3.96,
+          "total_trades": 7,
+          "win_rate": 42.9
+        },
+        "variant_trial": 0
+      },
+      "fingerprint_size": 7
+    },
+    {
+      "symbol": "DOT/USDT:USDT",
+      "timeframe": "2h",
+      "file": "config_DOTUSDTUSDT_2h_v04.json",
+      "params": {
+        "fib_hi": 0.786,
+        "fib_sl": 0.786,
+        "max_age_mult": 0.0,
+        "pivot_k": 3,
+        "window": 150,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.382,
+        "zone_tol_atr": 0.15000000000000002,
+        "sl_buf_atr": 0.65,
+        "min_rr": 1.6,
+        "b_near_upper_atr": 1.0,
+        "tp_mode": "upper",
+        "leverage": 3,
+        "risk_per_entry_pct": 1.75
+      },
+      "selection_score": 21.6998,
+      "is": {
+        "pnl_pct": 11.86,
+        "win_rate": 34.4,
+        "total_trades": 61,
+        "max_drawdown": 16.41,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 21.6998,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 0.75,
+          "max_drawdown": 7.53,
+          "total_trades": 14,
+          "win_rate": 35.7
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 3.52,
+          "max_drawdown": 6.82,
+          "total_trades": 10,
+          "win_rate": 40.0
+        },
+        "variant_trial": 600
+      },
+      "fingerprint_size": 10
+    },
+    {
+      "symbol": "APT/USDT:USDT",
+      "timeframe": "30m",
+      "file": "config_APTUSDTUSDT_30m_v05.json",
+      "params": {
+        "fib_hi": 0.705,
+        "fib_sl": 1.0,
+        "max_age_mult": 1.5,
+        "pivot_k": 3,
+        "window": 100,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.5,
+        "zone_tol_atr": 0.25,
+        "sl_buf_atr": 0.1,
+        "min_rr": 1.2,
+        "b_near_upper_atr": 0.5,
+        "tp_mode": "upper",
+        "leverage": 5,
+        "risk_per_entry_pct": 2.75
+      },
+      "selection_score": 86.8907,
+      "is": {
+        "pnl_pct": 193.83,
+        "win_rate": 50.5,
+        "total_trades": 93,
+        "max_drawdown": 14.43,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 86.8907,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 54.82,
+          "max_drawdown": 5.96,
+          "total_trades": 17,
+          "win_rate": 64.7
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 18.92,
+          "max_drawdown": 10.55,
+          "total_trades": 22,
+          "win_rate": 45.5
+        },
+        "variant_trial": 589
+      },
+      "fingerprint_size": 22
+    },
+    {
+      "symbol": "APT/USDT:USDT",
+      "timeframe": "1h",
+      "file": "config_APTUSDTUSDT_1h_v05.json",
+      "params": {
+        "fib_hi": 0.786,
+        "fib_sl": 0.886,
+        "max_age_mult": 2.0,
+        "pivot_k": 3,
+        "window": 150,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.382,
+        "zone_tol_atr": 0.5,
+        "sl_buf_atr": 0.75,
+        "min_rr": 1.4,
+        "b_near_upper_atr": 0.5,
+        "tp_mode": "upper",
+        "leverage": 10,
+        "risk_per_entry_pct": 3.0
+      },
+      "selection_score": 57.545,
+      "is": {
+        "pnl_pct": 116.15,
+        "win_rate": 39.1,
+        "total_trades": 69,
+        "max_drawdown": 19.85,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 57.545,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 5.9,
+          "max_drawdown": 11.47,
+          "total_trades": 9,
+          "win_rate": 33.3
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 13.67,
+          "max_drawdown": 14.13,
+          "total_trades": 15,
+          "win_rate": 40.0
+        },
+        "variant_trial": 568
+      },
+      "fingerprint_size": 15
+    },
+    {
+      "symbol": "DOT/USDT:USDT",
+      "timeframe": "2h",
+      "file": "config_DOTUSDTUSDT_2h_v05.json",
+      "params": {
+        "fib_hi": 0.786,
+        "fib_sl": 0.786,
+        "max_age_mult": 0.0,
+        "pivot_k": 3,
+        "window": 150,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.382,
+        "zone_tol_atr": 0.1,
+        "sl_buf_atr": 0.65,
+        "min_rr": 1.4,
+        "b_near_upper_atr": 1.0,
+        "tp_mode": "upper",
+        "leverage": 3,
+        "risk_per_entry_pct": 1.5
+      },
+      "selection_score": 19.7448,
+      "is": {
+        "pnl_pct": 3.42,
+        "win_rate": 33.3,
+        "total_trades": 63,
+        "max_drawdown": 16.74,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 19.7448,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 2.84,
+          "max_drawdown": 6.48,
+          "total_trades": 15,
+          "win_rate": 40.0
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 1.71,
+          "max_drawdown": 5.87,
+          "total_trades": 10,
+          "win_rate": 40.0
+        },
+        "variant_trial": 523
+      },
+      "fingerprint_size": 10
+    },
+    {
+      "symbol": "APT/USDT:USDT",
+      "timeframe": "30m",
+      "file": "config_APTUSDTUSDT_30m_v06.json",
+      "params": {
+        "fib_hi": 0.705,
+        "fib_sl": 1.0,
+        "max_age_mult": 1.5,
+        "pivot_k": 3,
+        "window": 100,
+        "min_upper_touches": 1,
+        "max_break_frac": 0.0,
+        "min_width_atr": 2.0,
+        "fib_lo": 0.5,
+        "zone_tol_atr": 0.15000000000000002,
+        "sl_buf_atr": 0.1,
+        "min_rr": 1.1,
+        "b_near_upper_atr": 0.5,
+        "tp_mode": "upper",
+        "leverage": 6,
+        "risk_per_entry_pct": 3.0
+      },
+      "selection_score": 85.2097,
+      "is": {
+        "pnl_pct": 193.62,
+        "win_rate": 53.2,
+        "total_trades": 79,
+        "max_drawdown": 19.77,
+        "start_date": "2023-04-08",
+        "end_date": "2026-05-01",
+        "capital": 100.0,
+        "risk_policy_version": 2,
+        "selection_score": 85.2097,
+        "validation": {
+          "start_date": "2025-11-02",
+          "pnl_pct": 55.9,
+          "max_drawdown": 3.0,
+          "total_trades": 12,
+          "win_rate": 75.0
+        },
+        "oos": {
+          "start_date": "2026-05-01",
+          "end_date": "2026-11-17",
+          "pnl_pct": 22.71,
+          "max_drawdown": 8.73,
+          "total_trades": 18,
+          "win_rate": 50.0
+        },
+        "variant_trial": 293
+      },
+      "fingerprint_size": 18
+    }
+  ]
+}
