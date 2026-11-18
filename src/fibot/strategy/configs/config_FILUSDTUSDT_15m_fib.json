@@ -11,10 +11,10 @@
     "max_break_frac": 0.0,
     "min_width_atr": 3.0,
     "touch_atr": 0.3,
-    "fib_lo": 0.5,
+    "fib_lo": 0.382,
     "fib_hi": 0.618,
     "fib_sl": 1.0,
-    "zone_tol_atr": 0.45000000000000007,
+    "zone_tol_atr": 0.1,
     "sl_buf_atr": 0.15000000000000002,
     "min_rr": 1.4,
     "max_age_mult": null,
@@ -43,5 +43,33 @@
       "total_trades": 95,
       "win_rate": 43.2
     }
+  },
+  "_zone_adapt": {
+    "version": 1,
+    "updated": "2026-11-18T21:28:25Z",
+    "valid_for_month": "2026-11",
+    "window": [
+      "2025-11",
+      "2026-10"
+    ],
+    "months_with_data": 12,
+    "rule": "max Netto-R/Trade, >= 20 Trades in 12 Monaten, sonst Basis",
+    "base_zone": {
+      "fib_lo": 0.5,
+      "fib_hi": 0.618,
+      "zone_tol_atr": 0.45000000000000007
+    },
+    "chosen_zone": {
+      "fib_lo": 0.382,
+      "fib_hi": 0.618,
+      "zone_tol_atr": 0.1
+    },
+    "fallback_to_base": false,
+    "window_trades": 47,
+    "window_net_r": 22.22,
+    "window_r_per_trade": 0.473,
+    "base_window_trades": 59,
+    "base_window_net_r": 20.14,
+    "research": "forschung/variable_konfig_apt30m_2026_11_18/README.md (Teil 7)"
   }
 }

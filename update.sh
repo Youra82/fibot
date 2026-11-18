@@ -60,11 +60,26 @@ def policy_version(path):
         return int(strategy.get('risk_policy_version', 0))
     except (TypeError, ValueError):
         return 0
+def adapt_stamp(path):
+    # Zonen-Anpassung (zone_adapt.py, Desktop/CUDA, monatlich): Zeitstempel der Neuwahl.
+    return str(load_config(path).get('_zone_adapt', {}).get('updated', ''))
 git_has_conf = any(is_conf(os.path.join(cfg_dir, f)) for f in os.listdir(cfg_dir) if f.endswith('.json'))
+git_has_adapt = any(adapt_stamp(os.path.join(cfg_dir, f)) for f in os.listdir(cfg_dir) if f.endswith('.json'))
 policy_upgraded = 0
 for f in os.listdir(bak):
     src, dst = os.path.join(bak, f), os.path.join(cfg_dir, f)
     if git_has_conf and os.path.exists(dst) and is_conf(dst) and not is_conf(src):
+        continue
+    # Eine neuer angepasste Repo-Config gewinnt immer ueber den VPS-Stand.
+    if os.path.exists(dst) and adapt_stamp(dst) > adapt_stamp(src):
+        policy_upgraded = 1
+        continue
+    # Seit der Zonen-Anpassung bestimmt das Repo den Config-Satz: alte, nur auf dem VPS
+    # vorhandene Configs werden nicht zurueckkopiert, sondern nach configs_alt_fibo/ gelegt.
+    if git_has_adapt and not os.path.exists(dst) and not adapt_stamp(src):
+        alt_dir = os.path.join(os.path.dirname(cfg_dir), 'configs_alt_fibo')
+        os.makedirs(alt_dir, exist_ok=True)
+        shutil.copy2(src, os.path.join(alt_dir, f))
         continue
     # A repository config with a newer mandatory risk policy must not be
     # overwritten by an older VPS optimizer result.  VPS-only configs remain
@@ -87,9 +102,9 @@ PYEOF2
     rm -rf configs.bak
     echo "    Configs (VPS-eigene Optimizer-Ergebnisse) wiederhergestellt."
     [ "$MIGRATED" == "1" ] && echo "    Alte Fibo-Configs nach configs_alt_fibo/ verschoben (Strategie-Wechsel)."
-    [ "$MIGRATED" == "2" ] && echo "    Neuere Risk-Policy-Configs aus dem Repo beibehalten."
+    [ "$MIGRATED" == "2" ] && echo "    Neuere Repo-Configs (Risk-Policy bzw. Zonen-Anpassung) beibehalten."
 fi
-if [ "$MIGRATED" == "0" ] && [ -n "$SAVED_STRATEGIES" ] && [ "$SAVED_STRATEGIES" != "[]" ]; then
+if [ "$MIGRATED" != "1" ] && [ -n "$SAVED_STRATEGIES" ] && [ "$SAVED_STRATEGIES" != "[]" ]; then
     SAVED_STRATEGIES="$SAVED_STRATEGIES" SAVED_MAX_POS="$SAVED_MAX_POS" python3 -c "
 import json, os
 s = json.load(open('settings.json'))

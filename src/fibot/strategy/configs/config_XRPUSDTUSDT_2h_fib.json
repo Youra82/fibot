@@ -43,5 +43,33 @@
       "total_trades": 21,
       "win_rate": 23.8
     }
+  },
+  "_zone_adapt": {
+    "version": 1,
+    "updated": "2026-11-18T21:28:25Z",
+    "valid_for_month": "2026-11",
+    "window": [
+      "2025-11",
+      "2026-10"
+    ],
+    "months_with_data": 12,
+    "rule": "max Netto-R/Trade, >= 20 Trades in 12 Monaten, sonst Basis",
+    "base_zone": {
+      "fib_lo": 0.382,
+      "fib_hi": 0.786,
+      "zone_tol_atr": 0.8
+    },
+    "chosen_zone": {
+      "fib_lo": 0.382,
+      "fib_hi": 0.786,
+      "zone_tol_atr": 0.8
+    },
+    "fallback_to_base": false,
+    "window_trades": 21,
+    "window_net_r": 22.25,
+    "window_r_per_trade": 1.059,
+    "base_window_trades": 21,
+    "base_window_net_r": 22.25,
+    "research": "forschung/variable_konfig_apt30m_2026_11_18/README.md (Teil 7)"
   }
 }

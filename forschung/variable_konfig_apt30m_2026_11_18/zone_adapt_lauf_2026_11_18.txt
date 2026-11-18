@@ -1,0 +1,38 @@
+config_APTUSDTUSDT_1h_fib.json         gleich fib_lo=0.382 fib_hi=0.705 zone_tol_atr=0.3 | 12M: 10 Tr -2.5 R (Basis 10 Tr -2.5 R) | Fallback Basis
+config_APTUSDTUSDT_30m_fib.json        gleich fib_lo=0.5 fib_hi=0.705 zone_tol_atr=0.15 | 12M: 24 Tr +24.1 R (Basis 33 Tr +26.2 R)
+config_AVAXUSDTUSDT_1h_fib.json        gleich fib_lo=0.382 fib_hi=0.786 zone_tol_atr=0.55 | 12M: 17 Tr -11.0 R (Basis 17 Tr -11.0 R) | Fallback Basis
+config_BATUSDTUSDT_1h_fib.json         gleich fib_lo=0.5 fib_hi=0.786 zone_tol_atr=0.6 | 12M: 15 Tr +5.5 R (Basis 15 Tr +5.5 R) | Fallback Basis
+config_BATUSDTUSDT_30m_fib.json        NEU  fib_lo=0.382 fib_hi=0.786 zone_tol_atr=0.15 | 12M: 20 Tr +18.9 R (Basis 19 Tr +20.3 R)
+config_BRUSDTUSDT_15m_fib.json         NEU  fib_lo=0.382 fib_hi=0.618 zone_tol_atr=0.6 | 12M: 32 Tr +12.3 R (Basis 45 Tr +4.3 R)
+config_DOGEUSDTUSDT_1h_fib.json        gleich fib_lo=0.382 fib_hi=0.705 zone_tol_atr=0.65 | 12M: 15 Tr +1.4 R (Basis 15 Tr +1.4 R) | Fallback Basis
+config_DOTUSDTUSDT_2h_fib.json         gleich fib_lo=0.5 fib_hi=0.786 zone_tol_atr=0.6 | 12M: 17 Tr +6.5 R (Basis 17 Tr +6.5 R) | Fallback Basis
+config_FILUSDTUSDT_15m_fib.json        NEU  fib_lo=0.382 fib_hi=0.618 zone_tol_atr=0.1 | 12M: 47 Tr +22.2 R (Basis 59 Tr +20.1 R)
+config_HBARUSDTUSDT_15m_fib.json       NEU  fib_lo=0.382 fib_hi=0.705 zone_tol_atr=0.15 | 12M: 23 Tr +4.7 R (Basis 46 Tr +5.5 R)
+config_HYPEUSDTUSDT_15m_fib.json       NEU  fib_lo=0.5 fib_hi=0.618 zone_tol_atr=0.15 | 12M: 49 Tr +25.8 R (Basis 74 Tr +1.0 R)
+config_INJUSDTUSDT_15m_fib.json        NEU  fib_lo=0.382 fib_hi=0.705 zone_tol_atr=0.25 | 12M: 25 Tr +2.0 R (Basis 35 Tr -4.8 R)
+config_JTOUSDTUSDT_15m_fib.json        NEU  fib_lo=0.5 fib_hi=0.705 zone_tol_atr=0.25 | 12M: 71 Tr +46.8 R (Basis 46 Tr +23.6 R)
+config_JUPUSDTUSDT_15m_fib.json        NEU  fib_lo=0.382 fib_hi=0.705 zone_tol_atr=0.1 | 12M: 42 Tr +12.3 R (Basis 70 Tr +19.4 R)
+config_JUPUSDTUSDT_1h_fib.json         NEU  fib_lo=0.382 fib_hi=0.705 zone_tol_atr=0.75 | 12M: 25 Tr +31.2 R (Basis 25 Tr +31.2 R)
+config_MAGICUSDTUSDT_15m_fib.json      NEU  fib_lo=0.5 fib_hi=0.618 zone_tol_atr=0.1 | 12M: 31 Tr +8.8 R (Basis 49 Tr +11.5 R)
+config_MAGICUSDTUSDT_1h_fib.json       NEU  fib_lo=0.382 fib_hi=0.786 zone_tol_atr=0.2 | 12M: 20 Tr +10.6 R (Basis 19 Tr +11.7 R)
+config_MAGICUSDTUSDT_2h_fib.json       gleich fib_lo=0.382 fib_hi=0.705 zone_tol_atr=0.55 | 12M: 16 Tr +29.6 R (Basis 16 Tr +29.6 R) | Fallback Basis
+config_NILUSDTUSDT_15m_fib.json        NEU  fib_lo=0.382 fib_hi=0.705 zone_tol_atr=0.65 | 12M: 67 Tr +36.0 R (Basis 67 Tr +36.0 R)
+config_OPUSDTUSDT_1h_fib.json          NEU  fib_lo=0.382 fib_hi=0.786 zone_tol_atr=0.7 | 12M: 22 Tr +23.0 R (Basis 22 Tr +23.0 R)
+config_PENGUUSDTUSDT_15m_fib.json      NEU  fib_lo=0.382 fib_hi=0.618 zone_tol_atr=0.8 | 12M: 38 Tr +11.3 R (Basis 51 Tr -0.4 R)
+config_PENGUUSDTUSDT_30m_fib.json      gleich fib_lo=0.382 fib_hi=0.705 zone_tol_atr=0.7 | 12M: 39 Tr +28.4 R (Basis 39 Tr +28.4 R)
+config_PEPEUSDTUSDT_6h_fib.json        gleich fib_lo=0.382 fib_hi=0.786 zone_tol_atr=0.8 | 12M: 12 Tr +16.3 R (Basis 12 Tr +16.3 R) | Fallback Basis
+config_PYTHUSDTUSDT_2h_fib.json        gleich fib_lo=0.382 fib_hi=0.786 zone_tol_atr=0.8 | 12M: 12 Tr +11.1 R (Basis 12 Tr +11.1 R) | Fallback Basis
+config_PYTHUSDTUSDT_4h_fib.json        gleich fib_lo=0.382 fib_hi=0.786 zone_tol_atr=0.5 | 12M: 18 Tr +11.5 R (Basis 18 Tr +11.5 R) | Fallback Basis
+config_SANDUSDTUSDT_1h_fib.json        gleich fib_lo=0.5 fib_hi=0.705 zone_tol_atr=0.3 | 12M: 11 Tr +7.9 R (Basis 11 Tr +7.9 R) | Fallback Basis
+config_SHIBUSDTUSDT_1h_fib.json        gleich fib_lo=0.382 fib_hi=0.786 zone_tol_atr=0.75 | 12M: 28 Tr +30.7 R (Basis 28 Tr +30.7 R)
+config_SHIBUSDTUSDT_30m_fib.json       gleich fib_lo=0.382 fib_hi=0.705 zone_tol_atr=0.3 | 12M: 24 Tr +21.3 R (Basis 16 Tr +2.4 R)
+config_SIRENUSDTUSDT_30m_fib.json      NEU  fib_lo=0.382 fib_hi=0.618 zone_tol_atr=0.35 | 12M: 45 Tr +17.9 R (Basis 71 Tr +10.3 R)
+config_TAOUSDTUSDT_30m_fib.json        NEU  fib_lo=0.382 fib_hi=0.618 zone_tol_atr=0.3 | 12M: 21 Tr -2.0 R (Basis 34 Tr -12.3 R)
+config_TRUMPUSDTUSDT_15m_fib.json      NEU  fib_lo=0.382 fib_hi=0.618 zone_tol_atr=0.45 | 12M: 24 Tr +12.9 R (Basis 48 Tr +19.2 R)
+config_UNIUSDTUSDT_1h_fib.json         NEU  fib_lo=0.382 fib_hi=0.705 zone_tol_atr=0.3 | 12M: 20 Tr +0.6 R (Basis 19 Tr +1.9 R)
+config_WALUSDTUSDT_1h_fib.json         NEU  fib_lo=0.382 fib_hi=0.705 zone_tol_atr=0.15 | 12M: 21 Tr +18.6 R (Basis 41 Tr +7.8 R)
+config_WLDUSDTUSDT_30m_fib.json        NEU  fib_lo=0.382 fib_hi=0.618 zone_tol_atr=0.3 | 12M: 21 Tr -7.3 R (Basis 25 Tr -12.3 R)
+config_XLMUSDTUSDT_1h_fib.json         gleich fib_lo=0.5 fib_hi=0.786 zone_tol_atr=0.6 | 12M: 17 Tr +6.3 R (Basis 17 Tr +6.3 R) | Fallback Basis
+config_XLMUSDTUSDT_2h_fib.json         gleich fib_lo=0.5 fib_hi=0.786 zone_tol_atr=0.6 | 12M: 14 Tr -3.9 R (Basis 14 Tr -3.9 R) | Fallback Basis
+config_XLMUSDTUSDT_30m_fib.json        gleich fib_lo=0.5 fib_hi=0.786 zone_tol_atr=0.7 | 12M: 14 Tr +11.9 R (Basis 14 Tr +11.9 R) | Fallback Basis
+config_XRPUSDTUSDT_2h_fib.json         gleich fib_lo=0.382 fib_hi=0.786 zone_tol_atr=0.8 | 12M: 21 Tr +22.2 R (Basis 21 Tr +22.2 R)
