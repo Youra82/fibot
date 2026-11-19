@@ -843,15 +843,17 @@ class PapierExchange(Exchange):
             stop = (max(p['sl'] or 0.0, p['liq']) if lng else min(p['sl'] or float('inf'), p['liq']))
             if (l <= stop) if lng else (h >= stop):
                 if p['sl'] is None or (lng and p['liq'] >= p['sl']) or (not lng and p['liq'] <= p['sl']):
-                    self.konto.schliessen(p, p['liq'], 'Liquidation', t + step, liquidiert=True)
+                    self.konto.schliessen(p, p['liq'], 'Liquidation', t + step, liquidiert=True, kerzen=kerzen)
                 else:
-                    self.konto.schliessen(p, min(o, p['sl']) if lng else max(o, p['sl']), 'SL', t + step)
+                    self.konto.schliessen(p, min(o, p['sl']) if lng else max(o, p['sl']), 'SL', t + step,
+                                          kerzen=kerzen)
                 return
             if p['tp'] is not None and ((h >= p['tp']) if lng else (l <= p['tp'])):
                 self.konto.schliessen(p, max(o, p['tp']) if lng else min(o, p['tp']), 'TP', t + step,
-                                      mit_spread=False)
+                                      mit_spread=False, kerzen=kerzen)
                 return
             p['checked_ms'] = int(t + step)
+        self.konto.funding_buchen(p, p['checked_ms'], kerzen)   # Funding bis zur zuletzt geprüften Kerze
 
     def _fill(self, o, px, t):
         side = 'long' if o['side'] == 'buy' else 'short'
