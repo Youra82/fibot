@@ -5,6 +5,13 @@ import os # Added for file path check
 
 logger = logging.getLogger(__name__)
 
+
+def _praefix(text):
+    """Papiermodus (FIBOT_PAPIER=1): jede Nachricht sichtbar als Papier markieren."""
+    if os.environ.get('FIBOT_PAPIER') == '1' and not str(text or '').startswith('📝 PAPIER'):
+        return f"📝 PAPIER | {text or ''}"
+    return text
+
 def send_message(bot_token, chat_id, message):
     """Sends a plain text message to a Telegram chat."""
     if not bot_token or not chat_id:
@@ -12,7 +19,7 @@ def send_message(bot_token, chat_id, message):
         return
 
     api_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    payload = {'chat_id': chat_id, 'text': message}
+    payload = {'chat_id': chat_id, 'text': _praefix(message)}
 
     try:
         response = requests.post(api_url, data=payload, timeout=10) # 10 second timeout
@@ -36,7 +43,7 @@ def send_document(bot_token, chat_id, file_path, caption=""):
     api_url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
     payload = {
         'chat_id': chat_id,
-        'caption': caption
+        'caption': _praefix(caption)
     }
 
     try:
@@ -67,7 +74,7 @@ def send_photo(bot_token, chat_id, photo_path, caption=""):
     api_url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
     payload = {
         'chat_id': chat_id,
-        'caption': caption
+        'caption': _praefix(caption)
     }
 
     try:

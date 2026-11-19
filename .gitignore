@@ -12,6 +12,9 @@ __pycache__/
 # Artifacts
 logs/
 artifacts/tracker/
+artifacts/tracker_papier/
+artifacts/papier/
+artifacts/modus.json
 artifacts/results/
 artifacts/db/
 data/cache/
@@ -27,3 +30,7 @@ artifacts/tmp/
 forschung/konfluenz/*.log
 forschung/konfluenz/search/
 forschung/konfluenz/trades*.json
+
+# Marktdaten-Rekorder (Mini-PC)
+data/marktdaten/
+data/binance_hist/

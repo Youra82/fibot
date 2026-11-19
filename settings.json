@@ -1,4 +1,9 @@
 {
+  "echtgeld": {
+    "aktiv": true,
+    "papier_startkapital": 100,
+    "_info": "aktiv=false -> Papierhandel mit echten Bitget-Kursen (artifacts/papier/konto.json), keine echten Orders; true -> Echtgeld. Das Cockpit erkennt den Modus automatisch."
+  },
   "live_trading_settings": {
     "max_open_positions": 3,
     "use_auto_optimizer_results": false,

@@ -13,6 +13,7 @@ SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = SCRIPT_DIR
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 from fibot.utils.team_history import record_team, strategy_key
+from fibot.utils.papier import echtgeld_aktiv
 
 log_dir  = os.path.join(PROJECT_ROOT, 'logs')
 os.makedirs(log_dir, exist_ok=True)
@@ -57,6 +58,35 @@ def _run_daily_check():
         logging.warning(f"[Live-vs-Backtest] Konnte Tagescheck nicht starten: {e}")
 
 
+def melde_umschaltung(papier, secrets):
+    """Modus merken; bei einem Wechsel einmal per Telegram melden (wie jaegerbot/zockerbot)."""
+    pfad = os.path.join(PROJECT_ROOT, 'artifacts', 'modus.json')
+    neu = 'papier' if papier else 'echtgeld'
+    try:
+        with open(pfad, encoding='utf-8') as f:
+            alt = json.load(f).get('modus')
+    except (OSError, ValueError):
+        alt = None
+    if alt == neu:
+        return
+    os.makedirs(os.path.dirname(pfad), exist_ok=True)
+    with open(pfad, 'w', encoding='utf-8') as f:
+        json.dump({'modus': neu}, f)
+    if alt is None and not papier:
+        return                       # Erstlauf im bisherigen Echtgeld-Betrieb: nichts zu melden
+    text = ("FiBot umgeschaltet auf ECHTGELD: ab jetzt echte Orders auf Bitget." if not papier else
+            "FiBot umgeschaltet auf PAPIER: keine echten Orders mehr (Konto artifacts/papier/konto.json). "
+            "Wartende echte Entry-Limits werden storniert; laufende Echtgeld-Positionen behalten SL/TP auf Bitget.")
+    logging.info(text)
+    try:
+        from fibot.utils.telegram import send_message
+        tg = secrets.get('telegram', {})
+        if tg.get('bot_token') and tg.get('chat_id'):
+            send_message(tg['bot_token'], tg['chat_id'], text)
+    except Exception:
+        pass
+
+
 def main():
     settings_file = os.path.join(SCRIPT_DIR, 'settings.json')
     secret_file   = os.path.join(SCRIPT_DIR, 'secret.json')
@@ -73,13 +103,16 @@ def main():
 
     # Auto-Optimizer im Hintergrund starten (non-blocking)
     _run_auto_optimizer()
-    _run_daily_check()
 
     try:
         with open(settings_file, 'r') as f:
             settings = json.load(f)
-        with open(secret_file, 'r') as f:
-            secrets = json.load(f)
+        papier = not echtgeld_aktiv(settings)
+        if papier and not os.path.exists(secret_file):
+            secrets = {}             # Papier laeuft ohne Schluessel (dann ohne Telegram)
+        else:
+            with open(secret_file, 'r') as f:
+                secrets = json.load(f)
     except FileNotFoundError as e:
         logging.critical(f"Datei nicht gefunden: {e}")
         return
@@ -87,7 +120,9 @@ def main():
         logging.critical(f"JSON-Fehler: {e}")
         return
 
-    if not secrets.get('fibot'):
+    melde_umschaltung(papier, secrets)
+    logging.info(f"Modus: {'PAPIER (keine echten Orders, artifacts/papier/konto.json)' if papier else 'ECHTGELD'}")
+    if not papier and not secrets.get('fibot'):
         logging.critical("Kein 'fibot'-Account in secret.json gefunden.")
         return
 
@@ -98,14 +133,31 @@ def main():
         logging.warning("Keine aktiven Strategien in settings.json.")
         return
 
+    # Taeglicher Live-vs-Backtest-Abgleich liest das echte Bitget-Konto -> nur im Echtgeld-Betrieb
+    if not papier:
+        _run_daily_check()
+
     # Housekeeper: Entry-Orders von Symbolen ausserhalb active_strategies (nach Portfolio-Wechsel
     # liegengeblieben) stornieren -- sonst werden sie spaeter ungesteuert gefuellt.
+    # Papiermodus: auf Bitget kuemmert sich kein Prozess mehr um echte Entry-Limits -> alle stornieren
+    # (tradeSide 'open'; SL/TP laufender Echtgeld-Positionen bleiben). Papier-Orders wie gewohnt.
+    active_symbols = {s['symbol'] for s in active_strategies if s.get('active', False)}
+    if papier:
+        try:
+            from fibot.utils.exchange import PapierExchange
+            from fibot.utils.papier import startkapital
+            konto = os.path.join(PROJECT_ROOT, 'artifacts', 'papier', 'konto.json')
+            for sym, oid in PapierExchange(konto, startkapital(settings, 100.0)).cancel_stale_entry_orders(active_symbols):
+                logging.warning(f"Housekeeper (Papier): Order {oid} auf {sym} ausserhalb des Portfolios storniert.")
+        except Exception as e:
+            logging.error(f"Housekeeper (Papier) fehlgeschlagen: {e}")
     try:
         from fibot.utils.exchange import Exchange
         from fibot.utils.telegram import send_message
+        if papier and not secrets.get('fibot'):
+            raise LookupError('kein Bitget-Konto in secret.json -- echte Entry-Limits nicht geprueft')
         acc = secrets['fibot'][0] if isinstance(secrets['fibot'], list) else secrets['fibot']
-        active_symbols = {s['symbol'] for s in active_strategies if s.get('active', False)}
-        cancelled = Exchange(acc).cancel_stale_entry_orders(active_symbols)
+        cancelled = Exchange(acc).cancel_stale_entry_orders(set() if papier else active_symbols)
         for sym, oid in cancelled:
             logging.warning(f"Housekeeper: liegengebliebene Entry-Order {oid} auf {sym} "
                             f"(nicht in active_strategies) storniert.")
@@ -128,13 +180,14 @@ def main():
         started_keys.append(strategy_key(symbol, timeframe))
 
         cmd = [python_exe, run_script, '--symbol', symbol, '--timeframe', timeframe]
-        proc = subprocess.Popen(cmd, cwd=SCRIPT_DIR)
+        env = {**os.environ, 'FIBOT_PAPIER': '1' if papier else '0'}
+        proc = subprocess.Popen(cmd, cwd=SCRIPT_DIR, env=env)
         processes.append((symbol, timeframe, proc))
         time.sleep(3.0)
 
     # Teamhistorie: welches Portfolio ab wann live lief (fuer Live-vs-Backtest-Abgleich)
     try:
-        if record_team(started_keys, source='master_runner'):
+        if not papier and record_team(started_keys, source='master_runner'):
             logging.info(f"Teamhistorie: neues Team aufgezeichnet ({len(started_keys)} Strategien).")
     except Exception as e:
         logging.warning(f"Teamhistorie nicht geschrieben: {e}")

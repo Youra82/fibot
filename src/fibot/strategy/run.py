@@ -14,7 +14,26 @@ import ccxt
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from fibot.utils.exchange import Exchange
+from fibot.utils.papier import echtgeld_aktiv, startkapital
+
+
+def _lade_settings() -> dict:
+    try:
+        with open(os.path.join(PROJECT_ROOT, 'settings.json'), 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+# Papiermodus vor dem Import des trade_managers festlegen (dessen Tracker-Ordner haengt davon ab).
+# master_runner setzt FIBOT_PAPIER; beim Handstart entscheidet settings.json "echtgeld".
+SETTINGS = _lade_settings()
+if os.environ.get('FIBOT_PAPIER') not in ('0', '1'):
+    os.environ['FIBOT_PAPIER'] = '0' if echtgeld_aktiv(SETTINGS) else '1'
+PAPIER = os.environ['FIBOT_PAPIER'] == '1'
+PAPIER_KONTO = os.path.join(PROJECT_ROOT, 'artifacts', 'papier', 'konto.json')
+
+from fibot.utils.exchange import Exchange, PapierExchange
 from fibot.utils.telegram import send_message
 from fibot.utils.trade_manager import full_trade_cycle
 from fibot.utils.guardian import guardian_decorator
@@ -84,13 +103,18 @@ def main():
     try:
         params  = load_config(symbol, timeframe)
         secrets_path = os.path.join(PROJECT_ROOT, 'secret.json')
-        with open(secrets_path, 'r') as f:
-            secrets = json.load(f)
+        if PAPIER and not os.path.exists(secrets_path):
+            secrets = {}                      # Papier braucht keine Schluessel (Telegram dann aus)
+        else:
+            with open(secrets_path, 'r') as f:
+                secrets = json.load(f)
 
         accounts      = secrets.get('fibot', [])
         if isinstance(accounts, dict):
             accounts = [accounts]
         telegram_cfg  = secrets.get('telegram', {})
+        if PAPIER:
+            accounts = [{'name': 'PAPIER'}]   # ein gemeinsames Papierkonto, nie eine echte Order
 
         if not accounts:
             logger.critical("Kein 'fibot'-Account in secret.json gefunden.")
@@ -112,7 +136,10 @@ def main():
         account_name = account.get('name', 'Standard')
         logger.info(f"Starte FiBot für {symbol} ({timeframe}) | Account: {account_name}")
         try:
-            exchange = Exchange(account)
+            if PAPIER:
+                exchange = PapierExchange(PAPIER_KONTO, startkapital(SETTINGS, 100.0))
+            else:
+                exchange = Exchange(account)
             guarded_cycle(exchange, params, telegram_cfg, logger)
         except ccxt.AuthenticationError:
             logger.critical("Authentifizierungsfehler! API-Keys prüfen.")

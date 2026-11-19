@@ -26,7 +26,10 @@ from fibot.utils.execution_guard import (
     consumed, consume, entry_client_oid, filled_quantity, symbol_cycle_lock, CycleBusy,
 )
 
-TRACKER_DIR = os.path.join(PROJECT_ROOT, 'artifacts', 'tracker')
+# Papiermodus (FIBOT_PAPIER=1 vom master_runner): eigene Tracker, damit Papier- und Echtgeld-Zustand
+# sich beim Umschalten nie vermischen.
+TRACKER_DIR = os.path.join(PROJECT_ROOT, 'artifacts',
+                           'tracker_papier' if os.environ.get('FIBOT_PAPIER') == '1' else 'tracker')
 MIN_NOTIONAL_USDT = 5.0
 
 

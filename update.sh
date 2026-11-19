@@ -21,7 +21,10 @@ if [ -d "$CONFIGS_DIR" ]; then
 fi
 SAVED_STRATEGIES=""
 SAVED_MAX_POS=""
+SAVED_ECHTGELD=""
 if [ -f settings.json ]; then
+    # Papier/Echtgeld-Schalter gehoert dem Nutzer -> nie vom Repo-Stand ueberschreiben lassen
+    SAVED_ECHTGELD=$(python3 -c "import json; s=json.load(open('settings.json')); print(json.dumps(s['echtgeld']) if 'echtgeld' in s else '')" 2>/dev/null || true)
     SAVED_STRATEGIES=$(python3 -c "import json; s=json.load(open('settings.json')); print(json.dumps(s.get('live_trading_settings',{}).get('active_strategies',[])))" 2>/dev/null || true)
     SAVED_MAX_POS=$(python3 -c "import json; s=json.load(open('settings.json')); print(json.dumps(s.get('live_trading_settings',{}).get('max_open_positions')))" 2>/dev/null || true)
 fi
@@ -115,6 +118,15 @@ if max_pos is not None:
     lt['max_open_positions'] = max_pos
 json.dump(s, open('settings.json', 'w'), indent=2)
 " && echo "    active_strategies wiederhergestellt."
+fi
+
+if [ -n "$SAVED_ECHTGELD" ]; then
+    SAVED_ECHTGELD="$SAVED_ECHTGELD" python3 -c "
+import json, os
+s = json.load(open('settings.json'))
+s['echtgeld'] = json.loads(os.environ['SAVED_ECHTGELD'])
+json.dump(s, open('settings.json', 'w'), indent=2)
+" && echo "    Schalter echtgeld wiederhergestellt (aktiv=$(python3 -c "import json; print(json.load(open('settings.json'))['echtgeld'].get('aktiv', True))"))."
 fi
 
 echo ">>> Bereinige Python-Cache..."

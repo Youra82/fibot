@@ -6,7 +6,9 @@ from datetime import datetime, timezone
 import logging
 import time # Hinzugefügt für fetch_recent_ohlcv
 from typing import Optional, Dict, List, Any 
-import os 
+import os
+import json
+from contextlib import contextmanager
 import sys 
 
 # Pfad Setup für utils Import (ggf. anpassen)
@@ -687,3 +689,377 @@ class Exchange:
         except Exception as e:
             logger.error(f"Kritischer Fehler beim Aufruf der impliziten TSL-Methode: {e}", exc_info=True)
             raise e
+
+
+# ---------------------------------------------------------------------------
+# Papierhandel
+# ---------------------------------------------------------------------------
+class PapierExchange(Exchange):
+    """Papierhandel (settings.json "echtgeld": {"aktiv": false}) mit derselben Schnittstelle wie Exchange.
+
+    Kerzen und Kurse kommen oeffentlich von Bitget (kein Schluessel). Es geht nie eine Order an Bitget.
+    - Kasse, Positionen, geschlossene Trades: artifacts/papier/konto.json (utils/papier.py, gleiche Datei wie
+      jaegerbot/zockerbot -> das Cockpit liest sie).
+    - Wartende Limit-Orders mit angehaengtem SL/TP (wie Bitget presetStopLoss/-SurplusPrice):
+      artifacts/papier/orders.json. Fill, wenn eine abgeschlossene 1m-Kerze ab der naechsten vollen Minute nach
+      dem Legen den Limitpreis erreicht (zum Limit bzw. zur besseren Eroeffnung bei einer Luecke), Maker 0,02 %.
+      SL/TP gelten ab der Fill-Kerze (Stopp vor Ziel in derselben Kerze, wie PapierKonto.abrechnen).
+    - master_runner startet je Strategie einen eigenen Prozess; alle teilen ein Konto. Jeder Zugriff laeuft
+      deshalb unter einer Dateisperre und liest den Stand vorher frisch von der Platte.
+    """
+    papier = True
+    MAKER = 0.0002
+    ALLE_ABRECHNEN_MS = 60_000          # Abrechnung aller Symbole hoechstens einmal pro Minute (Kontostand)
+    AUFBEWAHREN_MS = 30 * 86_400_000    # erledigte Orders 30 Tage behalten
+
+    def __init__(self, konto_pfad, start):
+        super().__init__({})
+        from fibot.utils.papier import PapierKonto
+        self.ordner = os.path.dirname(os.path.abspath(konto_pfad))
+        os.makedirs(self.ordner, exist_ok=True)
+        self.orders_pfad = os.path.join(self.ordner, 'orders.json')
+        self.sperr_pfad = os.path.join(self.ordner, '.sperre')
+        self._tiefe = 0
+        self._lev = {}
+        self._orders = {'orders': []}
+        with self._tx():
+            self.konto = PapierKonto(konto_pfad, start, self.exchange)
+
+    # --- Sperre + Speicher ---
+    @staticmethod
+    def _sperren(fh):
+        try:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        except ImportError:                       # Windows (nur lokale Tests)
+            import msvcrt
+            fh.seek(0)
+            while True:
+                try:
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
+                    return
+                except OSError:
+                    time.sleep(0.05)
+
+    @staticmethod
+    def _entsperren(fh):
+        try:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+        except ImportError:
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+
+    @contextmanager
+    def _tx(self):
+        if self._tiefe:
+            self._tiefe += 1
+            try:
+                yield
+            finally:
+                self._tiefe -= 1
+            return
+        fh = open(self.sperr_pfad, 'a+')
+        self._sperren(fh)
+        try:
+            self._laden()
+            self._tiefe = 1
+            yield
+        finally:
+            self._tiefe = 0
+            self._entsperren(fh)
+            fh.close()
+
+    def _laden(self):
+        if getattr(self, 'konto', None) is not None and os.path.exists(self.konto.path):
+            with open(self.konto.path, encoding='utf-8') as f:
+                self.konto.s = json.load(f)
+        try:
+            with open(self.orders_pfad, encoding='utf-8') as f:
+                self._orders = json.load(f)
+        except (OSError, ValueError):
+            self._orders = {'orders': []}
+
+    def _save_orders(self):
+        tmp = self.orders_pfad + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(self._orders, f, indent=1)
+        os.replace(tmp, self.orders_pfad)
+
+    def _alle(self):
+        return self._orders.setdefault('orders', [])
+
+    @staticmethod
+    def _ccxt_order(o):
+        return {'id': o['id'], 'clientOrderId': o.get('clientOid'), 'symbol': o['symbol'], 'side': o['side'],
+                'type': 'limit', 'price': o['price'], 'amount': o['amount'], 'filled': o['filled'],
+                'remaining': o['amount'] - o['filled'], 'average': o.get('average'), 'status': o['status'],
+                'info': {'presetStopLossPrice': o.get('sl'), 'presetStopSurplusPrice': o.get('tp'),
+                         'papier_grund': o.get('grund')}}
+
+    def _offene_margin(self):
+        return sum(o['amount'] * o['price'] / o['lev'] * (1 + self.MAKER * o['lev'])
+                   for o in self._alle() if o['status'] == 'open')
+
+    # --- Abrechnung: erst Limit-Fills, dann SL/TP/Liquidation ---
+    def _abrechnen(self, symbol=None):
+        now = self.konto.now()
+        if symbol is None and now - int(self._orders.get('alle_abgerechnet_ms') or 0) < self.ALLE_ABRECHNEN_MS:
+            return
+        geaendert = False
+        for o in self._alle():
+            if o['status'] != 'open' or (symbol and o['symbol'] != symbol):
+                continue
+            try:
+                kerzen, step = self.konto._kerzen(o['symbol'], o['checked_ms'], now)
+            except Exception:
+                continue                       # Netz-Hickser: naechster Lauf prueft dieselben Kerzen
+            kauf = o['side'] == 'buy'
+            for t, op, h, l, c, *_ in kerzen:
+                if (l <= o['price']) if kauf else (h >= o['price']):
+                    self._fill(o, min(op, o['price']) if kauf else max(op, o['price']), t)
+                    break
+                o['checked_ms'] = int(t + step)
+            geaendert = True
+        for p in list(self.konto.positionen):
+            if symbol is None or p['symbol'] == symbol:
+                self._position_abrechnen(p, now)
+        if symbol is None:
+            self._orders['alle_abgerechnet_ms'] = now
+            geaendert = True
+        if geaendert:
+            self._save_orders()
+        self.konto.save()
+
+    def _position_abrechnen(self, p, now):
+        """Dieselben Regeln wie PapierKonto.abrechnen(), aber fuer eine Position (ein Symbol je Prozess)."""
+        try:
+            kerzen, step = self.konto._kerzen(p['symbol'], p['checked_ms'], now)
+        except Exception:
+            return
+        lng = p['side'] == 'long'
+        for t, o, h, l, c, *_ in kerzen:
+            stop = (max(p['sl'] or 0.0, p['liq']) if lng else min(p['sl'] or float('inf'), p['liq']))
+            if (l <= stop) if lng else (h >= stop):
+                if p['sl'] is None or (lng and p['liq'] >= p['sl']) or (not lng and p['liq'] <= p['sl']):
+                    self.konto.schliessen(p, p['liq'], 'Liquidation', t + step, liquidiert=True)
+                else:
+                    self.konto.schliessen(p, min(o, p['sl']) if lng else max(o, p['sl']), 'SL', t + step)
+                return
+            if p['tp'] is not None and ((h >= p['tp']) if lng else (l <= p['tp'])):
+                self.konto.schliessen(p, max(o, p['tp']) if lng else min(o, p['tp']), 'TP', t + step,
+                                      mit_spread=False)
+                return
+            p['checked_ms'] = int(t + step)
+
+    def _fill(self, o, px, t):
+        side = 'long' if o['side'] == 'buy' else 'short'
+        k = self.konto
+        if k.position(o['symbol'], side):
+            o.update(status='canceled', grund='Position schon offen')
+            return
+        lev = o['lev']
+        margin, fee = o['amount'] * px / lev, o['amount'] * px * self.MAKER
+        if margin + fee > k.s['cash'] + 1e-9:
+            o.update(status='canceled', grund='zu wenig Guthaben beim Fill')
+            return
+        k.s['cash'] -= margin + fee
+        k.positionen.append({'symbol': o['symbol'], 'side': side, 'qty': o['amount'], 'entry': px, 'lev': lev,
+                             'margin': margin, 'fee_in': fee, 'sl': o.get('sl'), 'tp': o.get('tp'),
+                             'liq': k.liq_preis(px, side, lev), 'opened_ms': int(t), 'checked_ms': int(t),
+                             'order_id': o['id']})
+        o.update(status='closed', filled=o['amount'], average=px, fill_ms=int(t))
+        logger.info(f"PAPIER Fill: {o['side'].upper()} {o['amount']} {o['symbol']} @ {px:.6g} "
+                    f"| SL {o.get('sl')} | TP {o.get('tp')}")
+
+    # --- Konto ---
+    def fetch_balance_usdt(self):
+        with self._tx():
+            self._abrechnen()
+            return max(0.0, self.konto.s['cash'] - self._offene_margin())
+
+    def fetch_equity_usdt(self):
+        with self._tx():
+            self._abrechnen()
+            kurse = {}
+            for p in self.konto.positionen:
+                try:
+                    kurse[p['symbol']] = self.konto.kurs(p['symbol'])
+                except Exception:
+                    pass
+            return self.konto.kontostand(kurse)
+
+    def set_margin_mode(self, symbol, margin_mode='isolated'):
+        return True
+
+    def set_leverage(self, symbol, leverage, margin_mode='isolated'):
+        self._lev[symbol] = int(leverage)
+        return True
+
+    # --- Positionen ---
+    def fetch_open_positions(self, symbol: str, strict: bool = False):
+        with self._tx():
+            self._abrechnen(symbol)
+            out = []
+            for p in self.konto.positionen:
+                if symbol and p['symbol'] != symbol:
+                    continue
+                try:
+                    upnl = self.konto.offen_pnl(p, self.konto.kurs(p['symbol']))
+                except Exception:
+                    upnl = 0.0
+                out.append({'symbol': p['symbol'], 'side': p['side'], 'contracts': p['qty'],
+                            'entryPrice': p['entry'], 'unrealizedPnl': upnl, 'initialMargin': p['margin'],
+                            'leverage': p['lev'], 'liquidationPrice': p['liq'],
+                            'stopLossPrice': p.get('sl'), 'takeProfitPrice': p.get('tp')})
+            return out
+
+    def close_position(self, symbol: str, side: Optional[str] = None):
+        with self._tx():
+            for p in list(self.konto.positionen):
+                if p['symbol'] == symbol and (side is None or p['side'] == side):
+                    return self.place_market_order(symbol, 'sell' if p['side'] == 'long' else 'buy',
+                                                   p['qty'], reduce=True)
+        return None
+
+    # --- Orders ---
+    def place_limit_order_with_tpsl(self, symbol: str, side: str, amount: float, price: float,
+                                    sl_price: float, tp_price: float, client_oid: str = None):
+        with self._tx():
+            self._abrechnen(symbol)
+            amt = float(self.amount_to_precision(symbol, amount))
+            px = float(self.price_to_precision(symbol, price))
+            sl = float(self.price_to_precision(symbol, sl_price))
+            tp = float(self.price_to_precision(symbol, tp_price))
+            if (side == 'buy' and not sl < px < tp) or (side == 'sell' and not tp < px < sl):
+                raise ccxt.InvalidOrder(f'Papier: SL/TP liegen falsch zum Limit ({sl} / {px} / {tp})')
+            if client_oid and any(o.get('clientOid') == client_oid for o in self._alle()):
+                raise ccxt.InvalidOrder(f'Papier: clientOid {client_oid} schon vergeben')
+            lev = self._lev.get(symbol, 1)
+            if amt * px / lev * (1 + self.MAKER * lev) > self.konto.s['cash'] - self._offene_margin() + 1e-9:
+                raise ccxt.InsufficientFunds('Papier: zu wenig freies Guthaben fuer die Limit-Order')
+            now = self.konto.now()
+            o = {'id': f'papier-{now}-{len(self._alle())}', 'clientOid': client_oid, 'symbol': symbol,
+                 'side': side, 'amount': amt, 'price': px, 'sl': sl, 'tp': tp, 'lev': lev, 'status': 'open',
+                 'filled': 0.0, 'average': None, 'created_ms': now,
+                 'checked_ms': (now // 60_000 + 1) * 60_000}
+            alt = now - self.AUFBEWAHREN_MS
+            self._orders['orders'] = [x for x in self._alle() if x['status'] == 'open' or x['created_ms'] >= alt]
+            self._alle().append(o)
+            self._save_orders()
+            logger.info(f"PAPIER Limit: {side.upper()} {amt} {symbol} @ {px} | SL {sl} | TP {tp}")
+            return self._ccxt_order(o)
+
+    def place_limit_order(self, symbol: str, side: str, amount: float, price: float, reduce: bool = False,
+                          params={}):
+        raise ccxt.NotSupported('Papier: nur Konfluenz-Orders mit SL/TP (place_limit_order_with_tpsl)')
+
+    def _finde(self, id=None, client_oid=None):
+        for o in self._alle():
+            if (id and o['id'] == str(id)) or (client_oid and o.get('clientOid') == client_oid):
+                return o
+        return None
+
+    def fetch_order(self, id: str, symbol: str):
+        with self._tx():
+            self._abrechnen(symbol)
+            o = self._finde(id=id)
+            return self._ccxt_order(o) if o else None
+
+    def fetch_order_by_client_oid(self, client_oid: str, symbol: str):
+        if not client_oid:
+            raise ValueError('clientOid fehlt')
+        with self._tx():
+            self._abrechnen(symbol)
+            o = self._finde(client_oid=client_oid)
+            return self._ccxt_order(o) if o else None
+
+    def fetch_open_orders(self, symbol: str, strict: bool = False):
+        with self._tx():
+            self._abrechnen(symbol)
+            return [self._ccxt_order(o) for o in self._alle() if o['status'] == 'open' and o['symbol'] == symbol]
+
+    def cancel_order(self, id: str, symbol: str):
+        with self._tx():
+            self._abrechnen(symbol)
+            o = self._finde(id=id)
+            if o is None:
+                raise ccxt.OrderNotFound(f'Papier: Order {id} unbekannt')
+            if o['status'] == 'open':
+                o['status'] = 'canceled'
+                self._save_orders()
+            return self._ccxt_order(o)
+
+    def cancel_all_orders_for_symbol(self, symbol, strict: bool = False):
+        """Storniert wartende Limit-Orders. SL/TP einer offenen Papierposition bleiben (sie haengen an ihr)."""
+        with self._tx():
+            self._abrechnen(symbol)
+            n = 0
+            for o in self._alle():
+                if o['status'] == 'open' and o['symbol'] == symbol:
+                    o['status'] = 'canceled'
+                    n += 1
+            if n:
+                self._save_orders()
+            return n
+
+    def cancel_stale_entry_orders(self, keep_symbols):
+        with self._tx():
+            out = []
+            for o in self._alle():
+                if o['status'] == 'open' and o['symbol'] not in keep_symbols:
+                    o['status'] = 'canceled'
+                    out.append((o['symbol'], o['id']))
+            if out:
+                self._save_orders()
+            return out
+
+    def fetch_open_trigger_orders(self, symbol: str, strict: bool = False):
+        return []
+
+    def fetch_closed_trigger_orders(self, symbol: str, limit: int = 20):
+        return []
+
+    def fetch_position_tpsl_orders(self, symbol: str, strict: bool = False):
+        """SL/TP der Papierposition im Format der Bitget-Position-TP/SL (fuer den Schutzorder-Check)."""
+        with self._tx():
+            out = []
+            for p in self.konto.positionen:
+                if p['symbol'] != symbol:
+                    continue
+                for art in ('sl', 'tp'):
+                    if p.get(art) is not None:
+                        out.append({'id': f"papier-{art}-{p['opened_ms']}", 'triggerPrice': p[art],
+                                    'info': {'triggerPrice': p[art],
+                                             'planType': 'loss_plan' if art == 'sl' else 'profit_plan'}})
+            return out
+
+    def place_trigger_market_order(self, symbol: str, side: str, amount: float, trigger_price: float,
+                                   reduce: bool = False, params={}):
+        """Selbstreparatur: setzt SL bzw. TP der Papierposition (je nach Lage zum Einstieg)."""
+        with self._tx():
+            side_pos = 'long' if side == 'sell' else 'short'
+            p = self.konto.position(symbol, side_pos)
+            if p is None:
+                raise ccxt.InvalidOrder('Papier: keine Position fuer die Trigger-Order')
+            px = float(self.price_to_precision(symbol, trigger_price))
+            ist_sl = px < p['entry'] if side_pos == 'long' else px > p['entry']
+            self.konto.setze(symbol, side_pos, sl=px if ist_sl else None, tp=None if ist_sl else px)
+            return {'id': f"papier-{'sl' if ist_sl else 'tp'}-{p['opened_ms']}", 'triggerPrice': px}
+
+    def place_market_order(self, symbol: str, side: str, amount: float, reduce: bool = False, params={}):
+        with self._tx():
+            kurs = self.konto.kurs(symbol)
+            if reduce:
+                p = self.konto.position(symbol, 'long' if side == 'sell' else 'short')
+                if p is None:
+                    return None
+                self.konto.schliessen(p, kurs, 'Market')
+                logger.info(f"PAPIER Market-Schliessung: {symbol} {p['side']} @ {kurs:.6g}")
+                return {'id': f'papier-close-{self.konto.now()}', 'average': kurs, 'filled': p['qty'],
+                        'status': 'closed'}
+            amt = float(self.amount_to_precision(symbol, amount))
+            p = self.konto.eroeffnen(symbol, 'long' if side == 'buy' else 'short', amt, kurs,
+                                     self._lev.get(symbol, 1))
+            return {'id': f"papier-{p['opened_ms']}", 'average': p['entry'], 'filled': amt, 'status': 'closed'}
